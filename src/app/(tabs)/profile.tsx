@@ -6,6 +6,7 @@ import {
   Card,
   Dialog,
   HelperText,
+  Icon,
   Portal,
   Text,
   TextInput,
@@ -13,11 +14,14 @@ import {
 } from 'react-native-paper';
 
 import { useTabBarSpace } from '@/components/floating-tab-bar';
+import { MonthCard } from '@/components/month-card';
 import { StatTile } from '@/components/stat-tile';
+import { TrophyCase } from '@/components/trophy-case';
 import { UserAvatar } from '@/components/user-avatar';
 import { WeekChart } from '@/components/week-chart';
+import { WeekdayChart } from '@/components/weekday-chart';
 import { useLoader } from '@/hooks/use-loader';
-import { getProfile, getStepHistory, summarize, updateProfile } from '@/lib/api';
+import { getProfile, getProfileStats, getStepHistory, summarize, updateProfile } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 import { useUserId } from '@/providers/auth-provider';
@@ -28,8 +32,12 @@ export default function ProfileScreen() {
   const userId = useUserId();
   const tabBarSpace = useTabBarSpace();
   const { data, reload } = useLoader(async () => {
-    const [profile, history] = await Promise.all([getProfile(userId), getStepHistory(userId, 30)]);
-    return { profile, history };
+    const [profile, history60, lifetime] = await Promise.all([
+      getProfile(userId),
+      getStepHistory(userId, 60),
+      getProfileStats(userId),
+    ]);
+    return { profile, history: history60.slice(-30), previous: history60.slice(0, 30), history60, lifetime };
   }, userId);
 
   const [editing, setEditing] = useState(false);
@@ -74,6 +82,9 @@ export default function ProfileScreen() {
   const daysHitGoal = data
     ? data.history.filter((d) => d.steps >= data.profile.daily_goal).length
     : 0;
+  const previousTotal = data ? summarize(data.previous).total : 0;
+  const trend = stats && previousTotal ? Math.round(((stats.total - previousTotal) / previousTotal) * 100) : null;
+  const lifetime = data?.lifetime;
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
@@ -91,6 +102,25 @@ export default function ProfileScreen() {
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                 @{data.profile.username} · Goal {formatSteps(data.profile.daily_goal)}/day
               </Text>
+              {lifetime && lifetime.current_streak > 0 ? (
+                <View style={[styles.streakPill, { backgroundColor: theme.colors.tertiaryContainer }]}>
+                  <Icon source="fire" size={16} color="#F4511E" />
+                  <Text
+                    variant="labelLarge"
+                    numberOfLines={1}
+                    style={[styles.streakText, { color: theme.colors.onTertiaryContainer }]}>
+                    {lifetime.current_streak}-day streak
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {lifetime ? <TrophyCase stats={lifetime} /> : null}
+
+            <Text variant="titleMedium">Streaks</Text>
+            <View style={styles.row}>
+              <StatTile label="Current" value={`🔥 ${lifetime?.current_streak ?? 0} days`} highlight />
+              <StatTile label="Longest" value={`${lifetime?.longest_streak ?? 0} days`} />
             </View>
 
             <Text variant="titleMedium">Last 30 days</Text>
@@ -99,8 +129,11 @@ export default function ProfileScreen() {
               <StatTile label="Daily avg" value={formatSteps(stats!.average)} />
             </View>
             <View style={styles.row}>
-              <StatTile label="Best day" value={formatSteps(stats!.best)} />
-              <StatTile label="Goal hit" value={`${daysHitGoal} days`} />
+              <StatTile label="Goal hit rate" value={`${Math.round((daysHitGoal / 30) * 100)}%`} />
+              <StatTile
+                label="vs previous 30"
+                value={trend === null ? '—' : `${trend > 0 ? '▲' : trend < 0 ? '▼' : ''} ${Math.abs(trend)}%`}
+              />
             </View>
 
             <Card mode="contained" style={tintedCard(theme)}>
@@ -112,6 +145,39 @@ export default function ProfileScreen() {
                 />
               </Card.Content>
             </Card>
+
+            <MonthCard userId={userId} goal={data.profile.daily_goal} />
+
+            <Card mode="contained" style={{ backgroundColor: theme.colors.elevation.level1 }}>
+              <Card.Title title="Your rhythm" subtitle="Average by weekday, last 60 days" />
+              <Card.Content>
+                <WeekdayChart history={data.history60} />
+              </Card.Content>
+            </Card>
+
+            {lifetime ? (
+              <>
+                <Text variant="titleMedium">All time</Text>
+                <View style={styles.row}>
+                  <StatTile label="Steps" value={formatSteps(lifetime.lifetime_steps)} highlight />
+                  <StatTile label="Distance" value={`${formatSteps(lifetime.lifetime_steps * 0.000762)} km`} />
+                </View>
+                <View style={styles.row}>
+                  <StatTile label="Calories" value={`~${formatSteps(lifetime.lifetime_steps * 0.04)}`} />
+                  <StatTile label="Active days" value={formatSteps(lifetime.days_tracked)} />
+                </View>
+                {lifetime.best_day ? (
+                  <StatTile
+                    label={`Best day · ${new Date(`${lifetime.best_day}T12:00:00`).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}`}
+                    value={`${formatSteps(lifetime.best_steps ?? 0)} steps`}
+                  />
+                ) : null}
+              </>
+            ) : null}
           </>
         ) : null}
 
@@ -175,6 +241,16 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { padding: 16, gap: 12 },
   header: { alignItems: 'center', gap: 6, marginBottom: 12 },
+  streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginTop: 4,
+  },
+  streakText: { letterSpacing: 0, flexShrink: 0 },
   row: { flexDirection: 'row', gap: 12 },
   signOut: { marginTop: 12 },
   dialogContent: { gap: 12 },

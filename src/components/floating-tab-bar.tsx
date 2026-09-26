@@ -3,13 +3,15 @@ import { BlurView } from 'expo-blur';
 import { usePathname } from 'expo-router';
 import type { TabTriggerSlotProps } from 'expo-router/ui';
 import type { ComponentProps, ReactNode, RefObject } from 'react';
+import { createContext, use, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const BUTTON_WIDTH = 60;
-const BUTTON_HEIGHT = 44;
+const BUTTON_WIDTH = 68;
+const BUTTON_HEIGHT = 52;
+const ICON_SIZE = 26;
 const GAP = 4;
 const PADDING = 6;
 const TAB_BAR_HEIGHT = BUTTON_HEIGHT + PADDING * 2;
@@ -23,10 +25,19 @@ export function useTabBarSpace(): number {
   return useSafeAreaInsets().bottom + TAB_BAR_OFFSET + 16;
 }
 
-// TabTrigger's isFocused is memoized without the nav state, so derive the active tab from the URL.
-function useActiveTab(): string {
-  return usePathname().split('/')[1] || 'index';
+/**
+ * Active tab from the URL. TabTrigger's own isFocused never updates, and while a non-tab screen
+ * (like a group, shown over the tabs) is open we keep the last tab so the indicator doesn't jump.
+ */
+function useActiveTab(tabs: string[]): string {
+  const segment = usePathname().split('/')[1] || 'index';
+  const isTab = tabs.includes(segment);
+  const [last, setLast] = useState(isTab ? segment : tabs[0]!);
+  if (isTab && segment !== last) setLast(segment);
+  return isTab ? segment : last;
 }
+
+const ActiveTabContext = createContext<string>('index');
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -35,7 +46,8 @@ type Props = { blurTarget: RefObject<View | null>; tabs: string[]; children: Rea
 export function FloatingTabBar({ blurTarget, tabs, children }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const activeIndex = Math.max(0, tabs.indexOf(useActiveTab()));
+  const activeTab = useActiveTab(tabs);
+  const activeIndex = Math.max(0, tabs.indexOf(activeTab));
   const targetX = activeIndex * (BUTTON_WIDTH + GAP);
 
   const indicatorStyle = useAnimatedStyle(() => ({
@@ -57,7 +69,9 @@ export function FloatingTabBar({ blurTarget, tabs, children }: Props) {
           <Animated.View
             style={[styles.indicator, { backgroundColor: theme.colors.primary }, indicatorStyle]}
           />
-          <View style={styles.row}>{children}</View>
+          <View style={styles.row}>
+            <ActiveTabContext value={activeTab}>{children}</ActiveTabContext>
+          </View>
         </View>
       </View>
     </View>
@@ -73,7 +87,7 @@ type TabButtonProps = TabTriggerSlotProps & {
 
 export function TabButton({ name, icon, activeIcon, label, isFocused: _stale, ...props }: TabButtonProps) {
   const theme = useTheme();
-  const isFocused = useActiveTab() === name;
+  const isFocused = use(ActiveTabContext) === name;
   return (
     <Pressable
       {...props}
@@ -83,7 +97,7 @@ export function TabButton({ name, icon, activeIcon, label, isFocused: _stale, ..
       style={styles.button}>
       <MaterialCommunityIcons
         name={isFocused ? activeIcon : icon}
-        size={24}
+        size={ICON_SIZE}
         color={isFocused ? theme.colors.onPrimary : theme.colors.onSurfaceVariant}
       />
     </Pressable>

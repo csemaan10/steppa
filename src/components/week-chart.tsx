@@ -1,8 +1,9 @@
-import { StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 
 import type { DaySteps } from '@/lib/api';
-import { shortWeekday } from '@/lib/dates';
+import { formatSteps, shortWeekday } from '@/lib/dates';
 
 type Series = { name: string; color: string; data: DaySteps[] };
 
@@ -12,9 +13,10 @@ export function WeekChart({ series, goal, height = 140 }: Props) {
   const theme = useTheme();
   const days = series[0]?.data ?? [];
   const max = Math.max(goal ?? 0, 1, ...series.flatMap((s) => s.data.map((d) => d.steps)));
+  const [selected, setSelected] = useState<number | null>(null);
 
   return (
-    <View>
+    <View style={{ paddingTop: series.length > 1 ? 52 : 36 }}>
       <View style={[styles.chart, { height }]}>
         {goal ? (
           <View
@@ -24,22 +26,45 @@ export function WeekChart({ series, goal, height = 140 }: Props) {
             ]}
           />
         ) : null}
-        {days.map((day, i) => (
-          <View key={day.day} style={styles.column}>
-            {series.map((s) => (
-              <View
-                key={s.name}
-                style={[
-                  styles.bar,
-                  {
-                    height: Math.max(4, (s.data[i]!.steps / max) * height),
-                    backgroundColor: s.color,
-                  },
-                ]}
-              />
-            ))}
-          </View>
-        ))}
+        {days.map((day, i) => {
+          const isSelected = selected === i;
+          const tallest = Math.max(...series.map((s) => Math.max(4, (s.data[i]!.steps / max) * height)));
+          return (
+            <Pressable
+              key={day.day}
+              style={styles.column}
+              onPress={() => setSelected(isSelected ? null : i)}
+              accessibilityLabel={`${shortWeekday(new Date(`${day.day}T12:00:00`))}: ${series
+                .map((s) => `${s.name} ${formatSteps(s.data[i]!.steps)}`)
+                .join(', ')}`}>
+              {series.map((s) => (
+                <View
+                  key={s.name}
+                  style={[
+                    styles.bar,
+                    {
+                      height: Math.max(4, (s.data[i]!.steps / max) * height),
+                      backgroundColor: s.color,
+                      opacity: selected === null || isSelected ? 1 : 0.35,
+                    },
+                  ]}
+                />
+              ))}
+              {isSelected ? (
+                <View pointerEvents="none" style={[styles.tooltipWrap, { bottom: tallest + 6 }]}>
+                  <View style={[styles.tooltip, { backgroundColor: theme.colors.inverseSurface }]}>
+                    {series.map((s) => (
+                      <Text key={s.name} variant="labelMedium" style={{ color: theme.colors.inverseOnSurface }}>
+                        {series.length > 1 ? `${s.name}: ` : ''}
+                        {formatSteps(s.data[i]!.steps)}
+                      </Text>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+            </Pressable>
+          );
+        })}
       </View>
       <View style={styles.labels}>
         {days.map((day) => (
@@ -66,6 +91,8 @@ export function WeekChart({ series, goal, height = 140 }: Props) {
 }
 
 const styles = StyleSheet.create({
+  tooltipWrap: { position: 'absolute', left: -40, right: -40, alignItems: 'center', zIndex: 1 },
+  tooltip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignItems: 'center' },
   chart: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   column: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 3 },
   bar: { flex: 1, maxWidth: 22, borderRadius: 8 },

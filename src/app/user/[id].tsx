@@ -2,10 +2,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Appbar, Card, Divider, Text, useTheme } from 'react-native-paper';
 
+import { TrophyCase } from '@/components/trophy-case';
 import { UserAvatar } from '@/components/user-avatar';
 import { WeekChart } from '@/components/week-chart';
 import { useLoader } from '@/hooks/use-loader';
-import { getProfile, getStepHistory, summarize } from '@/lib/api';
+import { getProfile, getProfileStats, getStepHistory, summarize } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, tintedCard, transparentHeader } from '@/theme';
@@ -16,13 +17,14 @@ export default function UserScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const { data, error } = useLoader(async () => {
-    const [me, them, myHistory, theirHistory] = await Promise.all([
+    const [me, them, myHistory, theirHistory, theirStats] = await Promise.all([
       getProfile(myId),
       getProfile(id),
       getStepHistory(myId, 30),
       getStepHistory(id, 30),
+      getProfileStats(id),
     ]);
-    return { me, them, myHistory, theirHistory };
+    return { me, them, myHistory, theirHistory, theirStats };
   }, `${myId}:${id}`);
 
   if (!data) {
@@ -38,7 +40,7 @@ export default function UserScreen() {
     );
   }
 
-  const { me, them, myHistory, theirHistory } = data;
+  const { me, them, myHistory, theirHistory, theirStats } = data;
   const mine7 = summarize(myHistory.slice(-7));
   const theirs7 = summarize(theirHistory.slice(-7));
   const mine30 = summarize(myHistory);
@@ -55,8 +57,13 @@ export default function UserScreen() {
       theirs: theirHistory.filter((d) => d.steps >= them.daily_goal).length,
     },
   ];
-  const wins = rows.filter((r) => r.mine > r.theirs).length;
-  const losses = rows.filter((r) => r.mine < r.theirs).length;
+  // Score = daily duels: each day in the last 30 where both of you have steps, the higher count wins.
+  const duels = myHistory.flatMap((d, i) => {
+    const theirs = theirHistory[i]?.steps ?? 0;
+    return d.steps > 0 && theirs > 0 && d.steps !== theirs ? [d.steps > theirs] : [];
+  });
+  const wins = duels.filter(Boolean).length;
+  const losses = duels.length - wins;
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
@@ -76,7 +83,16 @@ export default function UserScreen() {
               {wins} – {losses}
             </Text>
             <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              {wins > losses ? "You're ahead" : wins < losses ? `${them.display_name} leads` : 'Neck and neck'}
+              {duels.length === 0
+                ? 'No shared days yet'
+                : wins > losses
+                  ? "You're ahead"
+                  : wins < losses
+                    ? `${them.display_name} leads`
+                    : 'Neck and neck'}
+            </Text>
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              Daily wins · last 30 days
             </Text>
           </View>
           <View style={styles.person}>
@@ -86,6 +102,8 @@ export default function UserScreen() {
             </Text>
           </View>
         </View>
+
+        <TrophyCase stats={theirStats} />
 
         <Card mode="elevated">
           <Card.Content>

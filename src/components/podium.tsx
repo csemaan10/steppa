@@ -13,21 +13,23 @@ import Animated, {
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { UserAvatar } from '@/components/user-avatar';
 import { useCountUp } from '@/hooks/use-count-up';
-import type { LeaderboardRow } from '@/lib/api';
+import { activeAverage, type LeaderboardRow } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 
 const HEIGHTS = [112, 84, 64];
-// 3rd rises first, then 2nd, then 1st for a drumroll effect.
-const DELAYS = [400, 200, 0];
+// 3rd rises first, then 2nd, then 1st.
+const DELAYS = [120, 60, 0];
 
 type Props = {
   rows: LeaderboardRow[];
   userId: string;
+  /** Show the per-active-day average (off for a single day). */
+  showAverage: boolean;
   onPressUser: (userId: string) => void;
 };
 
 /** Animated top-3 podium. Remount (via `key`) to replay the animation. */
-export function Podium({ rows, userId, onPressUser }: Props) {
+export function Podium({ rows, userId, showAverage, onPressUser }: Props) {
   const top = rows.slice(0, 3);
   // Visual order: 2nd, 1st, 3rd.
   const order = [1, 0, 2].filter((i) => i < top.length);
@@ -39,6 +41,7 @@ export function Podium({ rows, userId, onPressUser }: Props) {
           key={top[place]!.user_id}
           row={top[place]!}
           place={place}
+          showAverage={showAverage}
           isMe={top[place]!.user_id === userId}
           onPress={() => onPressUser(top[place]!.user_id)}
         />
@@ -47,18 +50,18 @@ export function Podium({ rows, userId, onPressUser }: Props) {
   );
 }
 
-type SpotProps = { row: LeaderboardRow; place: number; isMe: boolean; onPress: () => void };
+type SpotProps = { row: LeaderboardRow; place: number; showAverage: boolean; isMe: boolean; onPress: () => void };
 
-function PodiumSpot({ row, place, isMe, onPress }: SpotProps) {
+function PodiumSpot({ row, place, showAverage, isMe, onPress }: SpotProps) {
   const theme = useTheme();
   const height = useSharedValue(0);
   const reveal = useSharedValue(0);
   const delay = DELAYS[place]!;
-  const steps = useCountUp(row.total_steps, 1000, delay);
+  const steps = useCountUp(row.total_steps, 450, delay);
 
   useEffect(() => {
-    height.set(withDelay(delay, withSpring(HEIGHTS[place]!, { damping: 14, stiffness: 120 })));
-    reveal.set(withDelay(delay + 150, withTiming(1, { duration: 350 })));
+    height.set(withDelay(delay, withSpring(HEIGHTS[place]!, { damping: 20, stiffness: 320 })));
+    reveal.set(withDelay(delay + 40, withTiming(1, { duration: 180 })));
   }, [height, reveal, delay, place]);
 
   const blockStyle = useAnimatedStyle(() => ({ height: height.value }));
@@ -90,6 +93,11 @@ function PodiumSpot({ row, place, isMe, onPress }: SpotProps) {
           <Text variant="titleSmall">{formatSteps(steps)}</Text>
           <RankDelta rank={row.rank} prevRank={row.prev_rank} />
         </View>
+        {showAverage ? (
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            avg {formatSteps(activeAverage(row.total_steps, row.active_days))}/day
+          </Text>
+        ) : null}
         <PlayerBadges row={row} center />
       </Animated.View>
       <Animated.View style={[styles.block, { backgroundColor: blockColors[0] }, blockStyle]}>

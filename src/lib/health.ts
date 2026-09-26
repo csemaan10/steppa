@@ -10,8 +10,8 @@ export async function requestHealthPermission(): Promise<boolean> {
   return false;
 }
 
-export async function readDailySteps(days: Date[]): Promise<number[]> {
-  return days.map(() => 0);
+export async function readDailySteps(days: Date[]): Promise<(number | null)[]> {
+  return days.map(() => null);
 }
 
 export function openHealthSettings(): void {}

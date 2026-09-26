@@ -28,6 +28,8 @@ export type LeaderboardRow = {
   display_name: string;
   avatar_color: string;
   total_steps: number;
+  /** Days in the period with steps > 0. */
+  active_days: number;
   rank: number;
   prev_rank: number;
   streak: number;
@@ -48,6 +50,11 @@ export type DaySteps = { day: string; steps: number };
 
 export type Period = 'today' | 'week' | 'month';
 
+/** Average over days with steps > 0, so unsynced or empty days don't drag it down. */
+export function activeAverage(total: number, activeDays: number): number {
+  return activeDays > 0 ? Math.round(total / activeDays) : 0;
+}
+
 type Result<T> = { data: T | null; error: { message: string } | null };
 
 function unwrap<T>({ data, error }: Result<T>): T {
@@ -57,20 +64,36 @@ function unwrap<T>({ data, error }: Result<T>): T {
 
 // ---------- Steps ----------
 
-/** Reads the last `days` days from the phone's health store and upserts them. */
+const BACKFILL_DAYS = 90;
+const backfillKey = (userId: string) => `steppa:backfilled:${userId}`;
+
+/**
+ * Reads recent days from the phone's health store and upserts them.
+ * The first sync on a device backfills 90 days; later syncs refresh the last week.
+ */
 export async function syncSteps(userId: string, days = 7): Promise<DaySteps[]> {
-  const dates = lastNDays(days);
+  const backfilled = localStorage.getItem(backfillKey(userId)) === '1';
+  const dates = lastNDays(backfilled ? days : BACKFILL_DAYS);
   const counts = await readDailySteps(dates);
   const now = new Date().toISOString();
-  const rows = dates.map((date, i) => ({
-    user_id: userId,
-    day: toDayKey(date),
-    steps: Math.min(Math.max(0, counts[i]), 200000),
-    source: healthSourceName,
-    updated_at: now,
-  }));
+  // Skip unreadable days so a failed read never overwrites real data with 0.
+  const rows = dates.flatMap((date, i) => {
+    const count = counts[i];
+    if (count === null || count === undefined) return [];
+    return [
+      {
+        user_id: userId,
+        day: toDayKey(date),
+        steps: Math.min(Math.max(0, count), 200000),
+        source: healthSourceName,
+        updated_at: now,
+      },
+    ];
+  });
+  if (!rows.length) throw new Error(`Couldn't read steps from ${healthSourceName}`);
   const { error } = await supabase.from('daily_steps').upsert(rows, { onConflict: 'user_id,day' });
   if (error) throw new Error(error.message);
+  if (!backfilled) localStorage.setItem(backfillKey(userId), '1');
   return rows.map(({ day, steps }) => ({ day, steps }));
 }
 
@@ -92,12 +115,32 @@ export async function getStepHistory(userId: string, days: number): Promise<DayS
   });
 }
 
+/** Steps for every day of a calendar month (month is 0-based), with missing days as 0. */
+export async function getMonthSteps(userId: string, year: number, month: number): Promise<DaySteps[]> {
+  const first = new Date(year, month, 1);
+  const count = new Date(year, month + 1, 0).getDate();
+  const dates = Array.from({ length: count }, (_, i) => addDays(first, i));
+  const rows = unwrap<DaySteps[]>(
+    await supabase
+      .from('daily_steps')
+      .select('day, steps')
+      .eq('user_id', userId)
+      .gte('day', toDayKey(dates[0]!))
+      .lte('day', toDayKey(dates[count - 1]!))
+  );
+  const byDay = new Map(rows.map((r) => [r.day, r.steps]));
+  return dates.map((d) => {
+    const day = toDayKey(d);
+    return { day, steps: byDay.get(day) ?? 0 };
+  });
+}
+
 export function summarize(history: DaySteps[]) {
   const total = history.reduce((sum, d) => sum + d.steps, 0);
   return {
     today: history[history.length - 1]?.steps ?? 0,
     total,
-    average: history.length ? Math.round(total / history.length) : 0,
+    average: activeAverage(total, history.filter((d) => d.steps > 0).length),
     best: history.reduce((max, d) => Math.max(max, d.steps), 0),
   };
 }
@@ -121,6 +164,34 @@ export async function updateProfile(
   return unwrap<Profile>(
     await supabase.from('profiles').update(patch).eq('id', id).select('*').single()
   );
+}
+
+/** Keeps the profile's IANA time zone in sync with the phone (used to decide when a day is final). */
+export async function syncTimezone(userId: string): Promise<void> {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const key = `steppa:tz:${userId}`;
+  if (!tz || localStorage.getItem(key) === tz) return;
+  const { error } = await supabase.from('profiles').update({ timezone: tz }).eq('id', userId);
+  if (!error) localStorage.setItem(key, tz);
+}
+
+export type ProfileStats = {
+  lifetime_steps: number;
+  days_tracked: number;
+  best_day: string | null;
+  best_steps: number | null;
+  current_streak: number;
+  longest_streak: number;
+  gold: number;
+  silver: number;
+  bronze: number;
+  groups_count: number;
+};
+
+export async function getProfileStats(id: string): Promise<ProfileStats> {
+  const rows = unwrap<ProfileStats[]>(await supabase.rpc('profile_stats', { uid: id }));
+  const row = rows[0]!;
+  return { ...row, lifetime_steps: Number(row.lifetime_steps) };
 }
 
 // ---------- Groups ----------

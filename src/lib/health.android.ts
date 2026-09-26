@@ -27,16 +27,22 @@ export async function isHealthAvailable(): Promise<boolean> {
 
 export async function requestHealthPermission(): Promise<boolean> {
   if (!(await ensureInitialized())) return false;
-  const granted = await requestPermission([{ accessType: 'read', recordType: 'Steps' }]);
+  // History permission lets us read data older than 30 days before the first grant.
+  const granted = await requestPermission([
+    { accessType: 'read', recordType: 'Steps' },
+    { accessType: 'read', recordType: 'ReadHealthDataHistory' },
+  ]);
   return granted.some(
     (p) => 'recordType' in p && p.recordType === 'Steps' && p.accessType === 'read'
   );
 }
 
-export async function readDailySteps(days: Date[]): Promise<number[]> {
-  if (!(await ensureInitialized())) return days.map(() => 0);
-  return Promise.all(
-    days.map(async (day) => {
+/** Steps per day; `null` for days that couldn't be read. Sequential to stay under Health Connect's rate limit. */
+export async function readDailySteps(days: Date[]): Promise<(number | null)[]> {
+  if (!(await ensureInitialized())) return days.map(() => null);
+  const results: (number | null)[] = [];
+  for (const day of days) {
+    try {
       const result = await aggregateRecord({
         recordType: 'Steps',
         timeRangeFilter: {
@@ -45,9 +51,12 @@ export async function readDailySteps(days: Date[]): Promise<number[]> {
           endTime: addDays(day, 1).toISOString(),
         },
       });
-      return result.COUNT_TOTAL ?? 0;
-    })
-  );
+      results.push(result.COUNT_TOTAL ?? 0);
+    } catch {
+      results.push(null);
+    }
+  }
+  return results;
 }
 
 export function openHealthSettings(): void {

@@ -6,25 +6,34 @@ import {
   Card,
   Chip,
   Menu,
-  SegmentedButtons,
   Text,
   useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated from 'react-native-reanimated';
 
+import { ButtonGroup } from '@/components/button-group';
 import { useExpandTransition } from '@/components/expand-transition';
 import { GroupChat } from '@/components/group-chat';
+import { GroupRace } from '@/components/group-race';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { Podium } from '@/components/podium';
+import { PrimaryTabs } from '@/components/primary-tabs';
 import { UserAvatar } from '@/components/user-avatar';
 import { useLoader } from '@/hooks/use-loader';
-import { deleteGroup, getGroup, getLeaderboard, leaveGroup, type Period } from '@/lib/api';
+import {
+  activeAverage,
+  deleteGroup,
+  getGroup,
+  getLeaderboard,
+  leaveGroup,
+  type Period,
+} from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader } from '@/theme';
 
-type GroupView = 'board' | 'chat';
+type GroupView = 'board' | 'chat' | 'race';
 
 export default function GroupScreen() {
   const theme = useTheme();
@@ -32,11 +41,12 @@ export default function GroupScreen() {
   const userId = useUserId();
   const { id, oy, oh } = useLocalSearchParams<{ id: string; oy?: string; oh?: string }>();
   const { backdropStyle, containerStyle, contentStyle, close } = useExpandTransition(oy, oh);
-  const [period, setPeriod] = useState<Period>('week');
+  const [period, setPeriod] = useState<Period>('today');
   const [view, setView] = useState<GroupView>('board');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const { data, loading, error, reload } = useLoader(async () => {
+  const { data, error, reload } = useLoader(async () => {
     const [group, leaderboard] = await Promise.all([getGroup(id), getLeaderboard(id, period)]);
     return { group, leaderboard };
   }, `${id}:${period}`);
@@ -46,6 +56,13 @@ export default function GroupScreen() {
 
   function openUser(memberId: string) {
     router.push({ pathname: '/user/[id]', params: { id: memberId } });
+  }
+
+  // Only pull-to-refresh shows the spinner; period switches reload quietly.
+  async function refresh() {
+    setRefreshing(true);
+    await reload();
+    setRefreshing(false);
   }
 
   function shareInvite() {
@@ -103,24 +120,27 @@ export default function GroupScreen() {
       </Appbar.Header>
 
       <View style={styles.viewSwitch}>
-        <SegmentedButtons
+        <PrimaryTabs
           value={view}
-          onValueChange={(v) => setView(v as GroupView)}
-          buttons={[
+          onChange={setView}
+          tabs={[
             { value: 'board', label: 'Leaderboard', icon: 'podium' },
-            { value: 'chat', label: 'Chat', icon: 'chat-outline' },
+            { value: 'chat', label: 'Chat', icon: 'chat-outline', activeIcon: 'chat' },
+            { value: 'race', label: 'Race', icon: 'flag-checkered' },
           ]}
         />
       </View>
 
-      {view === 'chat' ? (
+      {view === 'race' ? (
+        <GroupRace groupId={id} userId={userId} />
+      ) : view === 'chat' ? (
         <GroupChat groupId={id} userId={userId} members={members} />
       ) : (
         <FlatList
           data={data?.leaderboard.slice(3) ?? []}
           keyExtractor={(row) => row.user_id}
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
           ListHeaderComponent={
             <View style={styles.header}>
               {data?.group.description ? (
@@ -129,14 +149,17 @@ export default function GroupScreen() {
                 </Text>
               ) : null}
               {data ? (
-                <Chip icon="ticket-confirmation-outline" onPress={shareInvite} style={styles.chip}>
+                <Chip
+                  icon="ticket-confirmation-outline"
+                  onPress={() => Share.share({ message: data.group.invite_code })}
+                  style={styles.chip}>
                   Invite code: {data.group.invite_code}
                 </Chip>
               ) : null}
-              <SegmentedButtons
+              <ButtonGroup
                 value={period}
-                onValueChange={(v) => setPeriod(v as Period)}
-                buttons={[
+                onChange={setPeriod}
+                options={[
                   { value: 'today', label: 'Today' },
                   { value: 'week', label: '7 days' },
                   { value: 'month', label: '30 days' },
@@ -148,6 +171,7 @@ export default function GroupScreen() {
                   key={`${period}:${data.leaderboard.map((r) => r.user_id).join()}`}
                   rows={data.leaderboard}
                   userId={userId}
+                  showAverage={period !== 'today'}
                   onPressUser={openUser}
                 />
               ) : null}
@@ -175,6 +199,11 @@ export default function GroupScreen() {
                   </View>
                   <View style={styles.right}>
                     <Text variant="titleMedium">{formatSteps(item.total_steps)}</Text>
+                    {period !== 'today' ? (
+                      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        avg {formatSteps(activeAverage(item.total_steps, item.active_days))}/day
+                      </Text>
+                    ) : null}
                     <RankDelta rank={item.rank} prevRank={item.prev_rank} />
                   </View>
                 </View>
@@ -191,7 +220,7 @@ export default function GroupScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  viewSwitch: { paddingHorizontal: 16, paddingBottom: 8 },
+  viewSwitch: {},
   content: { padding: 16, paddingTop: 8, gap: 10 },
   header: { gap: 12, marginBottom: 12 },
   chip: { alignSelf: 'flex-start' },

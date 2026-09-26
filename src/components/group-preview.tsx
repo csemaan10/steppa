@@ -11,9 +11,9 @@ import { formatSteps } from '@/lib/dates';
 const MEDALS = ['#E3B341', '#A8B0B8', '#C3834C'];
 const TOP = 3;
 
-type Props = { group: GroupWithCount; rows: LeaderboardRow[]; userId: string };
+type Props = { group: GroupWithCount; rows: LeaderboardRow[]; userId: string; showOwner?: boolean };
 
-export function GroupPreview({ group, rows, userId }: Props) {
+export function GroupPreview({ group, rows, userId, showOwner }: Props) {
   const theme = useTheme();
   const myIndex = rows.findIndex((r) => r.user_id === userId);
   const showMe = myIndex >= TOP;
@@ -32,6 +32,13 @@ export function GroupPreview({ group, rows, userId }: Props) {
         subtitleStyle={{ color: theme.colors.onSurfaceVariant }}
         right={() => (
           <View style={styles.chevron}>
+            {showOwner && group.owner_id === userId ? (
+              <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
+                <Text variant="labelSmall" style={{ color: theme.colors.onSecondaryContainer }}>
+                  Owner
+                </Text>
+              </View>
+            ) : null}
             <Icon source="chevron-right" size={24} color={theme.colors.onSurfaceVariant} />
           </View>
         )}
@@ -87,7 +94,8 @@ function Row({ row, isMe }: { row: LeaderboardRow; isMe: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  chevron: { paddingRight: 12 },
+  chevron: { paddingRight: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   content: { gap: 4, paddingBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6, paddingHorizontal: 8 },
   rank: { width: 18, textAlign: 'center', fontWeight: '700' },

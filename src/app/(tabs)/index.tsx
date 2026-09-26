@@ -1,11 +1,11 @@
+import { BlurTargetView } from 'expo-blur';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Appbar,
   Button,
   Card,
-  ProgressBar,
   Snackbar,
   Text,
   useTheme,
@@ -13,7 +13,9 @@ import {
 
 import { StatTile } from '@/components/stat-tile';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
+import { GlassCard } from '@/components/glass-card';
 import { GroupPreview } from '@/components/group-preview';
+import { ProgressRing } from '@/components/progress-ring';
 import { WeekChart } from '@/components/week-chart';
 import { useLoader } from '@/hooks/use-loader';
 import {
@@ -23,6 +25,7 @@ import {
   getStepHistory,
   summarize,
   syncSteps,
+  syncTimezone,
 } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import {
@@ -51,11 +54,13 @@ export default function TodayScreen() {
   const theme = useTheme();
   const userId = useUserId();
   const tabBarSpace = useTabBarSpace();
+  const backgroundRef = useRef<View>(null);
   const [dismissedError, setDismissedError] = useState<string | null>(null);
 
   // Syncs from the phone's health store every time this tab is focused, then reads from Supabase.
   const { data, loading, reload } = useLoader(async () => {
     const { health, syncError } = await connectAndSync(userId);
+    await syncTimezone(userId);
     const [profile, history, groups] = await Promise.all([
       getProfile(userId),
       getStepHistory(userId, 7),
@@ -72,10 +77,13 @@ export default function TodayScreen() {
 
   const goal = data?.profile.daily_goal ?? 10000;
   const stats = data ? summarize(data.history) : null;
-  const progress = stats ? Math.min(stats.today / goal, 1) : 0;
+  const ratio = stats ? stats.today / goal : 0;
+  const over = ratio > 1;
 
   return (
-    <View style={[styles.flex, screenBackground(theme)]}>
+    <View style={styles.flex}>
+      {/* Background lives in its own blur target so the glass card can blur it on Android. */}
+      <BlurTargetView ref={backgroundRef} style={[StyleSheet.absoluteFill, screenBackground(theme)]} />
       <Appbar.Header style={transparentHeader}>
         <Appbar.Content title="Today" />
         <Appbar.Action
@@ -115,20 +123,29 @@ export default function TodayScreen() {
           </Card>
         ) : null}
 
-        <Card mode="elevated">
-          <Card.Content style={styles.hero}>
-            <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-              Steps today
-            </Text>
-            <Text variant="displayLarge" style={{ color: theme.colors.primary }}>
-              {formatSteps(stats?.today ?? 0)}
-            </Text>
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              {Math.round(progress * 100)}% of {formatSteps(goal)} goal
-            </Text>
-            <ProgressBar progress={progress} style={styles.progress} />
-          </Card.Content>
-        </Card>
+        <GlassCard blurTarget={backgroundRef}>
+          <View style={styles.hero}>
+            <ProgressRing
+              progress={ratio}
+              color={theme.colors.primary}
+              overflowColor={theme.dark ? '#8DFFCB' : '#00C98A'}
+              trackColor={theme.colors.surfaceVariant}>
+              <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+                Steps today
+              </Text>
+              <Text
+                variant="displayMedium"
+                style={{ color: over ? (theme.dark ? '#8DFFCB' : '#00A673') : theme.colors.primary, fontWeight: '700' }}>
+                {formatSteps(stats?.today ?? 0)}
+              </Text>
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                {over
+                  ? `+${formatSteps((stats?.today ?? 0) - goal)} over goal 🎉`
+                  : `${Math.round(ratio * 100)}% of ${formatSteps(goal)}`}
+              </Text>
+            </ProgressRing>
+          </View>
+        </GlassCard>
 
         <View style={styles.row}>
           <StatTile label="7-day avg" value={formatSteps(stats?.average ?? 0)} />
@@ -192,8 +209,7 @@ export default function TodayScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { padding: 16, gap: 16 },
-  hero: { alignItems: 'center', paddingVertical: 16, gap: 4 },
-  progress: { height: 8, borderRadius: 4, width: 240, marginTop: 12 },
+  hero: { alignItems: 'center', paddingVertical: 24 },
   row: { flexDirection: 'row', gap: 12 },
   section: { gap: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

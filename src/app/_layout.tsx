@@ -33,8 +33,8 @@ function RootNavigator() {
     if (!isLoading) SplashScreen.hideAsync();
   }, [isLoading]);
 
-  if (isLoading) return null;
-
+  // Keep the navigator mounted while auth loads (the splash screen covers it); returning null here
+  // makes Expo Router's linking update an unmounted tree.
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!!session}>

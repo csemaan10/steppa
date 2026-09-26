@@ -21,7 +21,8 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.steppa.app",
       "permissions": [
-        "android.permission.health.READ_STEPS"
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_HEALTH_DATA_HISTORY"
       ]
     },
     "web": {
