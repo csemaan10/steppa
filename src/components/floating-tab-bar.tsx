@@ -9,11 +9,11 @@ import { useTheme } from 'react-native-paper';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const BUTTON_WIDTH = 68;
-const BUTTON_HEIGHT = 52;
-const ICON_SIZE = 26;
+const BUTTON_WIDTH = 74;
+const BUTTON_HEIGHT = 56;
+const ICON_SIZE = 28;
 const GAP = 4;
-const PADDING = 6;
+const PADDING = 7;
 const TAB_BAR_HEIGHT = BUTTON_HEIGHT + PADDING * 2;
 const TAB_BAR_MARGIN = 12;
 

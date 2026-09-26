@@ -190,7 +190,7 @@ export default function GroupScreen() {
                   <Text variant="titleMedium" style={styles.rank}>
                     {item.rank}
                   </Text>
-                  <UserAvatar name={item.display_name} color={item.avatar_color} />
+                  <UserAvatar name={item.display_name} color={item.avatar_color} icon={item.avatar_icon} />
                   <View style={styles.nameColumn}>
                     <Text variant="titleSmall" numberOfLines={1}>
                       {isMe ? `${item.display_name} (you)` : item.display_name}

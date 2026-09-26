@@ -6,13 +6,23 @@ import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
-import { darkTheme, lightTheme, toNavigationTheme } from '@/theme';
+import { ThemeChoiceProvider, useThemeChoice } from '@/providers/theme-provider';
+import { buildTheme, toNavigationTheme } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  return (
+    <ThemeChoiceProvider>
+      <ThemedApp />
+    </ThemeChoiceProvider>
+  );
+}
+
+function ThemedApp() {
   const scheme = useColorScheme();
-  const theme = scheme === 'dark' ? darkTheme : lightTheme;
+  const { themeName } = useThemeChoice();
+  const theme = buildTheme(themeName, scheme === 'dark');
 
   return (
     <PaperProvider theme={theme}>

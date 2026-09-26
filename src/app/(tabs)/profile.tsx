@@ -14,10 +14,11 @@ import {
 } from 'react-native-paper';
 
 import { useTabBarSpace } from '@/components/floating-tab-bar';
+import { ThemePicker } from '@/components/theme-picker';
 import { MonthCard } from '@/components/month-card';
 import { StatTile } from '@/components/stat-tile';
 import { TrophyCase } from '@/components/trophy-case';
-import { UserAvatar } from '@/components/user-avatar';
+import { AVATAR_ICONS, UserAvatar } from '@/components/user-avatar';
 import { WeekChart } from '@/components/week-chart';
 import { WeekdayChart } from '@/components/weekday-chart';
 import { useLoader } from '@/hooks/use-loader';
@@ -44,6 +45,7 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState('');
   const [goal, setGoal] = useState('');
   const [color, setColor] = useState(avatarColors[0]!);
+  const [icon, setIcon] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -52,6 +54,7 @@ export default function ProfileScreen() {
     setDisplayName(data.profile.display_name);
     setGoal(String(data.profile.daily_goal));
     setColor(data.profile.avatar_color);
+    setIcon(data.profile.avatar_icon);
     setEditError(null);
     setEditing(true);
   }
@@ -68,6 +71,7 @@ export default function ProfileScreen() {
         display_name: displayName.trim(),
         daily_goal: goalNum,
         avatar_color: color,
+        avatar_icon: icon,
       });
       setEditing(false);
       await reload();
@@ -97,7 +101,12 @@ export default function ProfileScreen() {
         {data ? (
           <>
             <View style={styles.header}>
-              <UserAvatar name={data.profile.display_name} color={data.profile.avatar_color} size={88} />
+              <UserAvatar
+                name={data.profile.display_name}
+                color={data.profile.avatar_color}
+                icon={data.profile.avatar_icon}
+                size={88}
+              />
               <Text variant="headlineSmall">{data.profile.display_name}</Text>
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                 @{data.profile.username} · Goal {formatSteps(data.profile.daily_goal)}/day
@@ -181,6 +190,8 @@ export default function ProfileScreen() {
           </>
         ) : null}
 
+        <ThemePicker />
+
         <Button mode="outlined" icon="logout" onPress={() => supabase.auth.signOut()} style={styles.signOut}>
           Sign out
         </Button>
@@ -219,6 +230,25 @@ export default function ProfileScreen() {
                 />
               ))}
             </View>
+            <Text variant="labelLarge">Avatar</Text>
+            <View style={styles.icons}>
+              {[null, ...AVATAR_ICONS].map((option) => {
+                const selected = option === icon;
+                return (
+                  <Pressable
+                    key={option ?? 'initials'}
+                    onPress={() => setIcon(option)}
+                    accessibilityLabel={option ? `${option} avatar` : 'Initials avatar'}
+                    accessibilityState={{ selected }}
+                    style={[
+                      styles.iconRing,
+                      { borderColor: selected ? theme.colors.onSurface : 'transparent' },
+                    ]}>
+                    <UserAvatar name={displayName || '?'} color={color} icon={option} size={40} />
+                  </Pressable>
+                );
+              })}
+            </View>
             {editError ? (
               <HelperText type="error" visible>
                 {editError}
@@ -256,4 +286,6 @@ const styles = StyleSheet.create({
   dialogContent: { gap: 12 },
   colors: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
   swatch: { width: 36, height: 36, borderRadius: 18 },
+  icons: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  iconRing: { borderWidth: 2, borderRadius: 999, padding: 2 },
 });

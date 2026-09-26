@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UserAvatar } from '@/components/user-avatar';
 import { getMessages, sendMessage, subscribeToMessages, type ChatMessage } from '@/lib/api';
 
-type Member = { display_name: string; avatar_color: string };
+type Member = { display_name: string; avatar_color: string; avatar_icon: string | null };
 
 type Props = { groupId: string; userId: string; members: Map<string, Member> };
 
@@ -93,6 +93,7 @@ export function GroupChat({ groupId, userId, members }: Props) {
                     <UserAvatar
                       name={member?.display_name ?? '?'}
                       color={member?.avatar_color ?? theme.colors.outline}
+                      icon={member?.avatar_icon}
                       size={28}
                     />
                   ) : null}

@@ -18,7 +18,7 @@ import { formatSteps } from '@/lib/dates';
 
 const HEIGHTS = [112, 84, 64];
 // 3rd rises first, then 2nd, then 1st.
-const DELAYS = [120, 60, 0];
+const DELAYS = [50, 25, 0];
 
 type Props = {
   rows: LeaderboardRow[];
@@ -57,11 +57,11 @@ function PodiumSpot({ row, place, showAverage, isMe, onPress }: SpotProps) {
   const height = useSharedValue(0);
   const reveal = useSharedValue(0);
   const delay = DELAYS[place]!;
-  const steps = useCountUp(row.total_steps, 450, delay);
+  const steps = useCountUp(row.total_steps, 280, delay);
 
   useEffect(() => {
-    height.set(withDelay(delay, withSpring(HEIGHTS[place]!, { damping: 20, stiffness: 320 })));
-    reveal.set(withDelay(delay + 40, withTiming(1, { duration: 180 })));
+    height.set(withDelay(delay, withSpring(HEIGHTS[place]!, { damping: 26, stiffness: 600 })));
+    reveal.set(withDelay(delay, withTiming(1, { duration: 120 })));
   }, [height, reveal, delay, place]);
 
   const blockStyle = useAnimatedStyle(() => ({ height: height.value }));
@@ -84,7 +84,12 @@ function PodiumSpot({ row, place, showAverage, isMe, onPress }: SpotProps) {
       <Animated.View style={[styles.head, headStyle]}>
         {place === 0 ? <MaterialCommunityIcons name="crown" size={28} color="#E3B341" /> : null}
         <View style={[styles.avatarRing, isMe && { borderColor: theme.colors.primary }]}>
-          <UserAvatar name={row.display_name} color={row.avatar_color} size={place === 0 ? 56 : 44} />
+          <UserAvatar
+            name={row.display_name}
+            color={row.avatar_color}
+            icon={row.avatar_icon}
+            size={place === 0 ? 56 : 44}
+          />
         </View>
         <Text variant="labelLarge" numberOfLines={1} style={styles.name}>
           {isMe ? 'You' : row.display_name}

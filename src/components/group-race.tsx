@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
@@ -8,7 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getLeaderboard, type LeaderboardRow } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 
-const TRACK_H = 420;
+const MIN_TRACK_H = 420;
+const MAX_TRACK_H = 1600;
+/** Track grows by 1px for this many steps between first and last place. */
+const STEPS_PER_PX = 25;
 const MAX_CAR_W = 22;
 const CAR_RATIO = 2.1;
 const TRAIL_W_RATIO = 0.35;
@@ -45,23 +48,52 @@ export function GroupRace({ groupId, userId }: Props) {
   }
 
   const racers = rows ?? [];
-  const leader = Math.max(1, racers[0]?.total_steps ?? 0);
   const carW = MAX_CAR_W;
   const carH = carW * CAR_RATIO;
-  const positions = placeCars(racers, leader, trackWidth, carW, carH);
+  const leader = racers[0]?.total_steps ?? 0;
+  const last = racers[racers.length - 1]?.total_steps ?? 0;
+  const range = leader - last;
+  // Bottom of the track sits a bit below last place, so close races spread over the full height.
+  const floor = Math.max(0, last - Math.max(range * 0.3, 500));
+  const trackH = Math.min(MAX_TRACK_H, Math.max(MIN_TRACK_H, 300 + range / STEPS_PER_PX));
+  const travel = trackH - carH - TAG_H - 12;
+  const fractionOf = (steps: number) => (leader > floor ? (steps - floor) / (leader - floor) : 1);
+  const positions = placeCars(racers.map((r) => fractionOf(r.total_steps)), trackWidth, carW, carH, travel);
+
+  // Scroll so your car is in view once the race is laid out.
+  const scrollRef = useRef<ScrollView>(null);
+  const [viewportH, setViewportH] = useState(0);
+  const [trackTop, setTrackTop] = useState(0);
+  const myRow = racers.find((r) => r.user_id === userId);
+  const myCarY = myRow ? trackTop + trackH - 6 - fractionOf(myRow.total_steps) * travel - (carH + TAG_H) / 2 : null;
+  useEffect(() => {
+    if (myCarY === null || !viewportH || !trackWidth) return;
+    const id = setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, myCarY - viewportH / 2), animated: true }), 250);
+    return () => clearTimeout(id);
+  }, [myCarY, viewportH, trackWidth, lap]);
 
   return (
     <ScrollView
+      ref={scrollRef}
+      onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}>
       <View style={styles.header}>
         <MaterialCommunityIcons name="flag-checkered" size={20} color={theme.colors.onSurface} />
         <Text variant="titleMedium">Today&apos;s race</Text>
+        {range > 0 ? (
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginLeft: 'auto' }}>
+            Gap {formatSteps(range)} steps
+          </Text>
+        ) : null}
       </View>
 
       <View
-        style={[styles.track, { backgroundColor: theme.dark ? '#1E2321' : '#2B302E' }]}
-        onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}>
+        style={[styles.track, { height: trackH, backgroundColor: theme.dark ? '#1E2321' : '#2B302E' }]}
+        onLayout={(e) => {
+          setTrackWidth(e.nativeEvent.layout.width);
+          setTrackTop(e.nativeEvent.layout.y);
+        }}>
         {trackWidth > 0
           ? racers.map((row, i) => (
               <RaceCar
@@ -69,10 +101,12 @@ export function GroupRace({ groupId, userId }: Props) {
                 row={row}
                 index={i}
                 x={positions[i]!}
-                fraction={row.total_steps / leader}
+                fraction={fractionOf(row.total_steps)}
+                travel={travel}
                 carW={carW}
                 carH={carH}
                 isMe={row.user_id === userId}
+                numberOnLeft={positions[i]! > trackWidth - 80}
               />
             ))
           : null}
@@ -99,19 +133,22 @@ type CarProps = {
   /** Horizontal centre of the car within the track. */
   x: number;
   fraction: number;
+  /** Vertical distance a car travels from the bottom to the top of the track. */
+  travel: number;
   carW: number;
   carH: number;
   isMe: boolean;
+  /** Put the step count on the left when the car is near the right edge. */
+  numberOnLeft: boolean;
 };
 
-function RaceCar({ row, index, x, fraction, carW, carH, isMe }: CarProps) {
+function RaceCar({ row, index, x, fraction, travel, carW, carH, isMe, numberOnLeft }: CarProps) {
   const progress = useSharedValue(0);
 
   useEffect(() => {
     progress.set(withDelay(150 + index * 100, withSpring(fraction, { damping: 18, stiffness: 60 })));
   }, [progress, fraction, index]);
 
-  const travel = TRACK_H - carH - TAG_H - 12;
   const trailStyle = useAnimatedStyle(() => ({ height: progress.value * travel + carH / 2 }));
   const carStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -progress.value * travel }] }));
   const trailW = Math.max(3, carW * TRAIL_W_RATIO);
@@ -137,7 +174,18 @@ function RaceCar({ row, index, x, fraction, carW, carH, isMe }: CarProps) {
             {isMe ? 'You' : row.display_name}
           </Text>
         </View>
-        <F1Car color={row.avatar_color} w={carW} h={carH} highlight={isMe} />
+        <View>
+          <F1Car color={row.avatar_color} w={carW} h={carH} highlight={isMe} />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.stepsGlow,
+              { textShadowColor: row.avatar_color, top: carH / 2 - 8 },
+              numberOnLeft ? { right: carW + 6, textAlign: 'right' } : { left: carW + 6 },
+            ]}>
+            {formatSteps(row.total_steps)}
+          </Text>
+        </View>
       </Animated.View>
     </>
   );
@@ -147,19 +195,18 @@ function RaceCar({ row, index, x, fraction, carW, carH, isMe }: CarProps) {
  * Picks an x for each car (leader first): the column whose nearest car at a similar height is furthest
  * away, preferring the centre. Keeps cars from overlapping without fixed lanes.
  */
-function placeCars(rows: LeaderboardRow[], leader: number, width: number, carW: number, carH: number): number[] {
-  if (width <= 0) return rows.map(() => 0);
+function placeCars(fractions: number[], width: number, carW: number, carH: number, travel: number): number[] {
+  if (width <= 0) return fractions.map(() => 0);
   const slotW = Math.max(carW + 12, TAG_W * 0.8);
   const columns = Math.max(1, Math.floor((width - 16) / slotW));
   const colX = Array.from({ length: columns }, (_, c) => 8 + slotW / 2 + c * ((width - 16 - slotW) / Math.max(1, columns - 1)));
   if (columns === 1) colX[0] = width / 2;
   const center = (columns - 1) / 2;
-  const travel = TRACK_H - carH - TAG_H - 12;
 
   // Room for everyone: give each car its own evenly spaced spot, leader in the middle, then
   // alternating left/right outward so neighbours in the standings are far apart.
-  if (rows.length <= columns) {
-    const n = rows.length;
+  if (fractions.length <= columns) {
+    const n = fractions.length;
     const spots = Array.from({ length: n }, (_, i) =>
       n === 1 ? width / 2 : 8 + slotW / 2 + (i * (width - 16 - slotW)) / (n - 1)
     );
@@ -167,13 +214,13 @@ function placeCars(rows: LeaderboardRow[], leader: number, width: number, carW: 
     const order = spots
       .map((x, i) => ({ x, d: Math.abs(i - mid), side: i < mid ? 0 : 1 }))
       .sort((a, b) => a.d - b.d || a.side - b.side);
-    return rows.map((_, i) => order[i]!.x);
+    return fractions.map((_, i) => order[i]!.x);
   }
 
   const placed: { col: number; y: number }[] = [];
 
-  return rows.map((row) => {
-    const y = (row.total_steps / leader) * travel;
+  return fractions.map((fraction) => {
+    const y = fraction * travel;
     let best = 0;
     let bestScore = -1;
     for (let c = 0; c < columns; c++) {
@@ -243,7 +290,7 @@ function F1Car({ color, w, h, highlight }: { color: string; w: number; h: number
 const styles = StyleSheet.create({
   content: { padding: 16, gap: 12 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  track: { height: TRACK_H, borderRadius: 16, overflow: 'hidden' },
+  track: { borderRadius: 16, overflow: 'hidden' },
   trail: { position: 'absolute', bottom: 6 },
   car: { position: 'absolute', bottom: 6, alignItems: 'center', gap: 2 },
   tag: {
@@ -255,6 +302,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   tagText: { color: '#FFFFFF', fontSize: 10, fontWeight: '600' },
+  stepsGlow: {
+    position: 'absolute',
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+    width: 64,
+  },
   abs: { position: 'absolute' },
   wheel: { backgroundColor: '#0B0B0B', borderRadius: 2 },
   legend: { gap: 8, marginTop: 4 },

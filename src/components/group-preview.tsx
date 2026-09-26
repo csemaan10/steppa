@@ -73,7 +73,7 @@ function Row({ row, isMe }: { row: LeaderboardRow; isMe: boolean }) {
         style={[styles.rank, { color: MEDALS[rank - 1] ?? theme.colors.onSurfaceVariant }]}>
         {rank}
       </Text>
-      <UserAvatar name={row.display_name} color={row.avatar_color} size={32} />
+      <UserAvatar name={row.display_name} color={row.avatar_color} icon={row.avatar_icon} size={32} />
       <View style={styles.name}>
         <Text
           variant="bodyLarge"

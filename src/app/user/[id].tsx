@@ -75,7 +75,7 @@ export default function UserScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.versus}>
           <View style={styles.person}>
-            <UserAvatar name={me.display_name} color={me.avatar_color} size={64} />
+            <UserAvatar name={me.display_name} color={me.avatar_color} icon={me.avatar_icon} size={64} />
             <Text variant="titleSmall">You</Text>
           </View>
           <View style={styles.score}>
@@ -96,7 +96,7 @@ export default function UserScreen() {
             </Text>
           </View>
           <View style={styles.person}>
-            <UserAvatar name={them.display_name} color={them.avatar_color} size={64} />
+            <UserAvatar name={them.display_name} color={them.avatar_color} icon={them.avatar_icon} size={64} />
             <Text variant="titleSmall" numberOfLines={1}>
               @{them.username}
             </Text>

@@ -7,6 +7,7 @@ export type Profile = {
   username: string;
   display_name: string;
   avatar_color: string;
+  avatar_icon: string | null;
   daily_goal: number;
   created_at: string;
 };
@@ -27,6 +28,7 @@ export type LeaderboardRow = {
   username: string;
   display_name: string;
   avatar_color: string;
+  avatar_icon: string | null;
   total_steps: number;
   /** Days in the period with steps > 0. */
   active_days: number;
@@ -159,7 +161,7 @@ export async function getProfile(id: string): Promise<Profile> {
 
 export async function updateProfile(
   id: string,
-  patch: Partial<Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color'>>
+  patch: Partial<Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon'>>
 ): Promise<Profile> {
   return unwrap<Profile>(
     await supabase.from('profiles').update(patch).eq('id', id).select('*').single()
