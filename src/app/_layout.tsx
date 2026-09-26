@@ -37,18 +37,16 @@ function ThemedApp() {
 }
 
 function RootNavigator() {
-  const { session, isLoading } = useAuth();
+  const { session } = useAuth();
 
   useEffect(() => {
-    if (!isLoading) SplashScreen.hideAsync();
-  }, [isLoading]);
+    SplashScreen.hideAsync();
+  }, []);
 
-  // Keep the navigator mounted while auth loads (the splash screen covers it); returning null here
-  // makes Expo Router's linking update an unmounted tree.
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={!!session}>
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
         <Stack.Screen
           name="group/[id]"
           options={{ presentation: 'transparentModal', animation: 'none', gestureEnabled: false }}
@@ -56,7 +54,7 @@ function RootNavigator() {
         <Stack.Screen name="user/[id]" />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
-        <Stack.Screen name="sign-in" />
+        <Stack.Screen name="sign-in" options={{ animation: 'none' }} />
       </Stack.Protected>
     </Stack>
   );

@@ -1,6 +1,5 @@
-import { BlurTargetView } from 'expo-blur';
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Appbar,
@@ -11,7 +10,6 @@ import {
 } from 'react-native-paper';
 
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
-import { GlassCard } from '@/components/glass-card';
 import { GroupPreview } from '@/components/group-preview';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
 import { ProgressRing } from '@/components/progress-ring';
@@ -53,7 +51,6 @@ export default function TodayScreen() {
   const theme = useAppTheme();
   const userId = useUserId();
   const tabBarSpace = useTabBarSpace();
-  const backgroundRef = useRef<View>(null);
   const [dismissedError, setDismissedError] = useState<string | null>(null);
 
   // Syncs from the phone's health store every time this tab is focused, then reads from Supabase.
@@ -85,12 +82,7 @@ export default function TodayScreen() {
   const goalHits = data?.history.map((d) => d.steps >= goal) ?? [];
 
   return (
-    <View style={styles.flex}>
-      {/* Background lives in its own blur target so the glass card can blur it on Android. */}
-      <BlurTargetView ref={backgroundRef} style={StyleSheet.absoluteFill}>
-        {/* The native blur target ignores CSS gradients, so draw the background in a normal view. */}
-        <View style={[StyleSheet.absoluteFill, screenBackground(theme)]} />
-      </BlurTargetView>
+    <View style={[styles.flex, screenBackground(theme)]}>
       <Appbar.Header style={transparentHeader}>
         <Appbar.Content title="Today" />
         <Appbar.Action
@@ -130,8 +122,7 @@ export default function TodayScreen() {
           </Card>
         ) : null}
 
-        <GlassCard blurTarget={backgroundRef}>
-          <View style={styles.hero}>
+        <View style={styles.hero}>
             <ProgressRing
               progress={ratio}
               color={theme.colors.primary}
@@ -151,8 +142,7 @@ export default function TodayScreen() {
                   : `${Math.round(ratio * 100)}% of ${formatSteps(goal)}`}
               </Text>
             </ProgressRing>
-          </View>
-        </GlassCard>
+        </View>
 
         {data && stats ? (
           <View style={styles.grid}>
