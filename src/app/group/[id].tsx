@@ -6,6 +6,7 @@ import {
   Card,
   Chip,
   Menu,
+  Portal,
   Text,
   useTheme,
 } from 'react-native-paper';
@@ -14,6 +15,7 @@ import Animated from 'react-native-reanimated';
 
 import { ButtonGroup } from '@/components/button-group';
 import { useExpandTransition } from '@/components/expand-transition';
+import { GroupAvatar } from '@/components/group-avatar';
 import { GroupChat } from '@/components/group-chat';
 import { GroupRace } from '@/components/group-race';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
@@ -48,8 +50,10 @@ export default function GroupScreen() {
 
   const { data, error, reload } = useLoader(async () => {
     const [group, leaderboard] = await Promise.all([getGroup(id), getLeaderboard(id, period)]);
-    return { group, leaderboard };
+    return { group, leaderboard, period };
   }, `${id}:${period}`);
+  // The period the shown data is for; `period` flips on tap, before the new data arrives.
+  const shownPeriod = data?.period ?? period;
 
   const isOwner = data?.group.owner_id === userId;
   const members = new Map((data?.leaderboard ?? []).map((r) => [r.user_id, r]));
@@ -96,6 +100,9 @@ export default function GroupScreen() {
   }
 
   return (
+    // Own portal host: on iOS this screen is a native modal above the root portal,
+    // so the ⋮ menu would otherwise open behind the screen.
+    <Portal.Host>
     <View style={styles.flex}>
       <Animated.View
         pointerEvents="none"
@@ -105,12 +112,35 @@ export default function GroupScreen() {
         <Animated.View style={contentStyle}>
       <Appbar.Header style={transparentHeader}>
         <Appbar.BackAction onPress={close} />
-        <Appbar.Content title={data?.group.name ?? 'Group'} />
+        <Appbar.Content
+          title={
+            data ? (
+              <View style={styles.title}>
+                <GroupAvatar name={data.group.name} color={data.group.color} icon={data.group.icon} size={34} />
+                <Text variant="titleLarge" numberOfLines={1} style={styles.titleText}>
+                  {data.group.name}
+                </Text>
+              </View>
+            ) : (
+              'Group'
+            )
+          }
+        />
         <Appbar.Action icon="share-variant" onPress={shareInvite} disabled={!data} accessibilityLabel="Share invite" />
         <Menu
           visible={menuOpen}
           onDismiss={() => setMenuOpen(false)}
           anchor={<Appbar.Action icon="dots-vertical" onPress={() => setMenuOpen(true)} accessibilityLabel="More" />}>
+          {isOwner ? (
+            <Menu.Item
+              leadingIcon="cog-outline"
+              title="Group settings"
+              onPress={() => {
+                setMenuOpen(false);
+                router.push({ pathname: '/group-settings/[id]', params: { id } });
+              }}
+            />
+          ) : null}
           <Menu.Item
             leadingIcon={isOwner ? 'delete-outline' : 'exit-to-app'}
             title={isOwner ? 'Delete group' : 'Leave group'}
@@ -168,10 +198,10 @@ export default function GroupScreen() {
               {error ? <Text style={{ color: theme.colors.error }}>{error}</Text> : null}
               {data?.leaderboard.length ? (
                 <Podium
-                  key={`${period}:${data.leaderboard.map((r) => r.user_id).join()}`}
+                  key={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
                   rows={data.leaderboard}
                   userId={userId}
-                  showAverage={period !== 'today'}
+                  showAverage={shownPeriod !== 'today'}
                   onPressUser={openUser}
                 />
               ) : null}
@@ -199,7 +229,7 @@ export default function GroupScreen() {
                   </View>
                   <View style={styles.right}>
                     <Text variant="titleMedium">{formatSteps(item.total_steps)}</Text>
-                    {period !== 'today' ? (
+                    {shownPeriod !== 'today' ? (
                       <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
                         avg {formatSteps(activeAverage(item.total_steps, item.active_days))}/day
                       </Text>
@@ -215,12 +245,15 @@ export default function GroupScreen() {
         </Animated.View>
       </Animated.View>
     </View>
+    </Portal.Host>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   viewSwitch: {},
+  title: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  titleText: { flexShrink: 1 },
   content: { padding: 16, paddingTop: 8, gap: 10 },
   header: { gap: 12, marginBottom: 12 },
   chip: { alignSelf: 'flex-start' },

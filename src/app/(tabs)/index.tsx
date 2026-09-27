@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
-import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { AppState, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Appbar,
   Button,
@@ -12,13 +12,15 @@ import {
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GroupPreview } from '@/components/group-preview';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
+import { StreakCard } from '@/components/profile-stats';
 import { ProgressRing } from '@/components/progress-ring';
-import { WeekChart } from '@/components/week-chart';
 import { useLoader } from '@/hooks/use-loader';
+import { registerBackgroundSync } from '@/lib/background-sync';
 import {
   getLeaderboard,
   getMyGroups,
   getProfile,
+  getProfileStats,
   getStepHistory,
   summarize,
   syncSteps,
@@ -32,7 +34,10 @@ import {
   requestHealthPermission,
 } from '@/lib/health';
 import { useUserId } from '@/providers/auth-provider';
-import { screenBackground, tintedCard, transparentHeader, useAppTheme } from '@/theme';
+import { screenBackground, surfaceCard, transparentHeader, useAppTheme } from '@/theme';
+
+/** How often the Today tab re-reads the health store while it's on screen. */
+const RESYNC_MS = 60_000;
 
 type HealthState = 'unavailable' | 'denied' | 'ready';
 
@@ -41,6 +46,7 @@ async function connectAndSync(userId: string): Promise<{ health: HealthState; sy
     if (!(await isHealthAvailable())) return { health: 'unavailable', syncError: null };
     if (!(await requestHealthPermission())) return { health: 'denied', syncError: null };
     await syncSteps(userId, 7);
+    registerBackgroundSync();
     return { health: 'ready', syncError: null };
   } catch (e) {
     return { health: 'ready', syncError: e instanceof Error ? e.message : 'Sync failed' };
@@ -53,20 +59,46 @@ export default function TodayScreen() {
   const tabBarSpace = useTabBarSpace();
   const [dismissedError, setDismissedError] = useState<string | null>(null);
 
-  // Syncs from the phone's health store every time this tab is focused, then reads from Supabase.
+  // Syncs from the phone's health store on focus and on app resume, then reads from Supabase.
   const { data, loading, reload } = useLoader(async () => {
     const { health, syncError } = await connectAndSync(userId);
     await syncTimezone(userId);
-    const [profile, history, groups] = await Promise.all([
+    const [profile, history, groups, lifetime] = await Promise.all([
       getProfile(userId),
       getStepHistory(userId, 7),
       getMyGroups(),
+      getProfileStats(userId),
     ]);
     const previews = await Promise.all(
       groups.slice(0, 3).map(async (group) => ({ group, rows: await getLeaderboard(group.id, 'today') }))
     );
-    return { profile, history, previews, health, syncError };
+    return { profile, history, previews, lifetime, health, syncError };
   }, userId);
+
+  // Keep today's count live while this tab is on screen: re-sync on app resume (focus doesn't
+  // change then) and every minute in the foreground, so we don't fall behind the health app.
+  useFocusEffect(
+    useCallback(() => {
+      const timer = setInterval(() => {
+        if (AppState.currentState === 'active') reload();
+      }, RESYNC_MS);
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') reload();
+      });
+      return () => {
+        clearInterval(timer);
+        sub.remove();
+      };
+    }, [reload])
+  );
+
+  // Only a pull shows the spinner; background re-syncs update quietly.
+  const [refreshing, setRefreshing] = useState(false);
+  async function pullToRefresh() {
+    setRefreshing(true);
+    await reload();
+    setRefreshing(false);
+  }
 
   const health = data?.health;
   const snack = data?.syncError && data.syncError !== dismissedError ? data.syncError : null;
@@ -95,7 +127,7 @@ export default function TodayScreen() {
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: tabBarSpace }]}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} />}>
         {health === 'unavailable' || health === 'denied' ? (
           <Card mode="contained" style={{ backgroundColor: theme.colors.errorContainer }}>
             <Card.Title
@@ -184,6 +216,8 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
+        {data ? <StreakCard current={data.lifetime.current_streak} longest={data.lifetime.longest_streak} /> : null}
+
         {data ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -199,7 +233,7 @@ export default function TodayScreen() {
                 <GroupPreview key={group.id} group={group} rows={rows} userId={userId} />
               ))
             ) : (
-              <Card mode="contained" style={{ backgroundColor: theme.colors.elevation.level1 }}>
+              <Card mode="contained" style={surfaceCard(theme)}>
                 <Card.Content style={styles.emptyGroups}>
                   <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                     Compete with friends by creating or joining a group.
@@ -213,17 +247,6 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
-        <Card mode="contained" style={tintedCard(theme)}>
-          <Card.Title title="Last 7 days" />
-          <Card.Content>
-            {data ? (
-              <WeekChart
-                series={[{ name: 'You', color: theme.colors.primary, data: data.history }]}
-                goal={goal}
-              />
-            ) : null}
-          </Card.Content>
-        </Card>
       </ScrollView>
 
       <Snackbar

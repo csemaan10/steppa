@@ -18,6 +18,9 @@ export type Group = {
   description: string | null;
   invite_code: string;
   owner_id: string;
+  /** Material Community Icons name; null shows the name's first letter. */
+  icon: string | null;
+  color: string;
   created_at: string;
 };
 
@@ -75,7 +78,18 @@ const backfillKey = (userId: string) => `steppa:backfilled:${userId}`;
  */
 export async function syncSteps(userId: string, days = 7): Promise<DaySteps[]> {
   const backfilled = localStorage.getItem(backfillKey(userId)) === '1';
-  const dates = lastNDays(backfilled ? days : BACKFILL_DAYS);
+  const rows = await uploadDays(userId, lastNDays(backfilled ? days : BACKFILL_DAYS));
+  if (!backfilled) localStorage.setItem(backfillKey(userId), '1');
+  return rows;
+}
+
+/** Re-imports up to `days` of history from the health store. Returns the number of days with steps. */
+export async function importStepHistory(userId: string, days = 365): Promise<number> {
+  const rows = await uploadDays(userId, lastNDays(days));
+  return rows.filter((r) => r.steps > 0).length;
+}
+
+async function uploadDays(userId: string, dates: Date[]): Promise<DaySteps[]> {
   const counts = await readDailySteps(dates);
   const now = new Date().toISOString();
   // Skip unreadable days so a failed read never overwrites real data with 0.
@@ -95,7 +109,6 @@ export async function syncSteps(userId: string, days = 7): Promise<DaySteps[]> {
   if (!rows.length) throw new Error(`Couldn't read steps from ${healthSourceName}`);
   const { error } = await supabase.from('daily_steps').upsert(rows, { onConflict: 'user_id,day' });
   if (error) throw new Error(error.message);
-  if (!backfilled) localStorage.setItem(backfillKey(userId), '1');
   return rows.map(({ day, steps }) => ({ day, steps }));
 }
 
@@ -241,6 +254,22 @@ export async function leaveGroup(groupId: string, userId: string): Promise<void>
     .eq('group_id', groupId)
     .eq('user_id', userId);
   if (error) throw new Error(error.message);
+}
+
+export async function updateGroup(
+  groupId: string,
+  patch: Partial<Pick<Group, 'name' | 'description' | 'icon' | 'color' | 'invite_code'>>
+): Promise<Group> {
+  return unwrap<Group>(
+    await supabase.from('groups').update(patch).eq('id', groupId).select('*').single()
+  );
+}
+
+/** Replaces the invite code so old codes stop working. */
+export async function regenerateInviteCode(groupId: string): Promise<Group> {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const code = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+  return updateGroup(groupId, { invite_code: code });
 }
 
 export async function deleteGroup(groupId: string): Promise<void> {

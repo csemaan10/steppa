@@ -1,4 +1,6 @@
 import {
+  AuthorizationRequestStatus,
+  getRequestStatusForAuthorization,
   isHealthDataAvailable,
   queryStatisticsForQuantity,
   requestAuthorization,
@@ -38,4 +40,10 @@ export async function readDailySteps(days: Date[]): Promise<(number | null)[]> {
 
 export function openHealthSettings(): void {
   Linking.openURL('x-apple-health://');
+}
+
+/** True once the user has answered the Health prompt. Never shows UI, so it's safe in the background. */
+export async function hasHealthPermission(): Promise<boolean> {
+  const status = await getRequestStatusForAuthorization({ toRead: [STEP_COUNT] });
+  return status === AuthorizationRequestStatus.unnecessary;
 }

@@ -8,12 +8,15 @@
     "scheme": "steppa",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.steppa.app"
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.cs.steppa",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F1EBE0",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -22,7 +25,10 @@
       "package": "com.steppa.app",
       "permissions": [
         "android.permission.health.READ_STEPS",
-        "android.permission.health.READ_HEALTH_DATA_HISTORY"
+        "android.permission.health.READ_HEALTH_DATA_HISTORY",
+        "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "web": {
@@ -34,9 +40,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#006C4C",
+          "backgroundColor": "#F1EBE0",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 220
         }
       ],
       "expo-sqlite",
@@ -50,13 +56,20 @@
       ],
       "react-native-health-connect",
       [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Steppa uses Face ID to unlock the app."
+        }
+      ],
+      [
         "@kingstinct/react-native-healthkit",
         {
           "NSHealthShareUsageDescription": "Steppa reads your step count to show your progress and compare it with your groups.",
           "NSHealthUpdateUsageDescription": "Steppa does not write health data.",
           "background": false
         }
-      ]
+      ],
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -5,7 +5,7 @@ import Animated, { Easing, useAnimatedStyle, withTiming } from 'react-native-rea
 
 import { activeAverage, getMonthSteps, type DaySteps } from '@/lib/api';
 import { addDays, formatSteps, toDayKey } from '@/lib/dates';
-import { tintedCard } from '@/theme';
+import { surfaceCard } from '@/theme';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const EASE = Easing.bezier(0.2, 0, 0, 1);
@@ -102,7 +102,7 @@ export function MonthCard({ userId, goal }: Props) {
   }
 
   return (
-    <Card mode="contained" style={tintedCard(theme)}>
+    <Card mode="contained" style={surfaceCard(theme)}>
       <Pressable onPress={() => setExpanded((e) => !e)} accessibilityRole="button" accessibilityState={{ expanded }}>
         <View style={styles.header}>
           <IconButton icon="chevron-left" size={20} onPress={() => shift(-1)} accessibilityLabel="Previous month" />

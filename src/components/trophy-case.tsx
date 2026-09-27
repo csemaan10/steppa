@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
 
 import type { ProfileStats } from '@/lib/api';
-import { tintedCard } from '@/theme';
+import { surfaceCard } from '@/theme';
 
 const MEDALS = [
   { key: 'gold', emoji: '🥇', label: 'Gold' },
@@ -14,7 +14,7 @@ export function TrophyCase({ stats }: { stats: ProfileStats }) {
   const theme = useTheme();
 
   return (
-    <Card mode="contained" style={tintedCard(theme)}>
+    <Card mode="contained" style={surfaceCard(theme)}>
       <Card.Title title="Trophy case" titleVariant="titleMedium" style={styles.title} />
       <Card.Content style={styles.row}>
         {MEDALS.map((m) => (

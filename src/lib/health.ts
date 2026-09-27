@@ -15,3 +15,7 @@ export async function readDailySteps(days: Date[]): Promise<(number | null)[]> {
 }
 
 export function openHealthSettings(): void {}
+
+export async function hasHealthPermission(): Promise<boolean> {
+  return false;
+}

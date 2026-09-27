@@ -9,7 +9,7 @@ import { useLoader } from '@/hooks/use-loader';
 import { getProfile, getProfileStats, getStepHistory, summarize } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
-import { screenBackground, tintedCard, transparentHeader } from '@/theme';
+import { screenBackground, surfaceCard, transparentHeader } from '@/theme';
 
 export default function UserScreen() {
   const theme = useTheme();
@@ -134,7 +134,7 @@ export default function UserScreen() {
           </Card.Content>
         </Card>
 
-        <Card mode="contained" style={tintedCard(theme)}>
+        <Card mode="contained" style={surfaceCard(theme)}>
           <Card.Title title="Last 7 days" />
           <Card.Content>
             <WeekChart

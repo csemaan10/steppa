@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
+import '@/lib/background-sync';
+import { AppLockProvider, useAppLock } from '@/providers/app-lock-provider';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
 import { ThemeChoiceProvider, useThemeChoice } from '@/providers/theme-provider';
 import { buildTheme, toNavigationTheme } from '@/theme';
@@ -29,7 +31,9 @@ function ThemedApp() {
       <ThemeProvider value={toNavigationTheme(theme)}>
         <AuthProvider>
           <StatusBar style={theme.dark ? 'light' : 'dark'} />
-          <RootNavigator />
+          <AppLockProvider>
+            <RootNavigator />
+          </AppLockProvider>
         </AuthProvider>
       </ThemeProvider>
     </PaperProvider>
@@ -38,6 +42,8 @@ function ThemedApp() {
 
 function RootNavigator() {
   const { session } = useAuth();
+  const { locked } = useAppLock();
+  const signedIn = !!session && !locked;
 
   useEffect(() => {
     SplashScreen.hideAsync();
@@ -45,15 +51,16 @@ function RootNavigator() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={!!session}>
+      <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
         <Stack.Screen
           name="group/[id]"
           options={{ presentation: 'transparentModal', animation: 'none', gestureEnabled: false }}
         />
         <Stack.Screen name="user/[id]" />
+        <Stack.Screen name="group-settings/[id]" />
       </Stack.Protected>
-      <Stack.Protected guard={!session}>
+      <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" options={{ animation: 'none' }} />
       </Stack.Protected>
     </Stack>

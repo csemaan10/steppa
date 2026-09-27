@@ -18,7 +18,7 @@ import { formatSteps } from '@/lib/dates';
 
 const HEIGHTS = [112, 84, 64];
 // 3rd rises first, then 2nd, then 1st.
-const DELAYS = [50, 25, 0];
+const DELAYS = [30, 15, 0];
 
 type Props = {
   rows: LeaderboardRow[];
@@ -57,11 +57,11 @@ function PodiumSpot({ row, place, showAverage, isMe, onPress }: SpotProps) {
   const height = useSharedValue(0);
   const reveal = useSharedValue(0);
   const delay = DELAYS[place]!;
-  const steps = useCountUp(row.total_steps, 280, delay);
+  const steps = useCountUp(row.total_steps, 180, delay);
 
   useEffect(() => {
-    height.set(withDelay(delay, withSpring(HEIGHTS[place]!, { damping: 26, stiffness: 600 })));
-    reveal.set(withDelay(delay, withTiming(1, { duration: 120 })));
+    height.set(withDelay(delay, withSpring(HEIGHTS[place]!, { damping: 30, stiffness: 1000 })));
+    reveal.set(withDelay(delay, withTiming(1, { duration: 80 })));
   }, [height, reveal, delay, place]);
 
   const blockStyle = useAnimatedStyle(() => ({ height: height.value }));

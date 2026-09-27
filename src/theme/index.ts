@@ -66,10 +66,7 @@ export function screenBackground(theme: MD3Theme): ViewStyle {
 
 export const transparentHeader: ViewStyle = { backgroundColor: 'transparent' };
 
-/** Chart card: secondary-container tint glowing in from the top-left. */
-export function tintedCard(theme: MD3Theme): ViewStyle {
-  return {
-    backgroundColor: theme.colors.elevation.level1,
-    experimental_backgroundImage: `linear-gradient(160deg, ${theme.colors.secondaryContainer} 0%, ${theme.colors.elevation.level1} 75%)`,
-  };
+/** Material 3 filled card surface, shared by every card so they read as one system. */
+export function surfaceCard(theme: MD3Theme): ViewStyle {
+  return { backgroundColor: theme.colors.elevation.level1 };
 }
