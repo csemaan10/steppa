@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Appbar,
   Button,
@@ -14,6 +14,7 @@ import {
 } from 'react-native-paper';
 
 import { AppLockCard } from '@/components/app-lock-card';
+import { BlockedUsersCard } from '@/components/blocked-users-card';
 import { useTabBarSpace } from '@/components/floating-tab-bar';
 import { ThemePicker } from '@/components/theme-picker';
 import { MonthCard } from '@/components/month-card';
@@ -24,6 +25,7 @@ import { WeekChart } from '@/components/week-chart';
 import { WeekdayChart } from '@/components/weekday-chart';
 import { useLoader } from '@/hooks/use-loader';
 import {
+  deleteMyAccount,
   getProfile,
   getProfileStats,
   getStepHistory,
@@ -39,7 +41,7 @@ import { avatarColors, screenBackground, surfaceCard, transparentHeader } from '
 export default function ProfileScreen() {
   const theme = useTheme();
   const userId = useUserId();
-  const { signOut } = useAppLock();
+  const { signOut, forget, setEnabled } = useAppLock();
   const tabBarSpace = useTabBarSpace();
   const { data, reload } = useLoader(async () => {
     const [profile, history60, lifetime] = await Promise.all([
@@ -76,6 +78,30 @@ export default function ProfileScreen() {
     } finally {
       setImporting(false);
     }
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your profile, step history, and messages. Groups you own are deleted for everyone. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteMyAccount();
+              // The login no longer exists: drop biometric sign-in and the local session.
+              await setEnabled(false);
+              await forget();
+            } catch (e) {
+              Alert.alert('Could not delete account', e instanceof Error ? e.message : String(e));
+            }
+          },
+        },
+      ]
+    );
   }
 
   function startEdit() {
@@ -169,6 +195,8 @@ export default function ProfileScreen() {
 
         <AppLockCard />
 
+        <BlockedUsersCard userId={userId} />
+
         <Button
           mode="contained-tonal"
           icon="history"
@@ -181,6 +209,10 @@ export default function ProfileScreen() {
 
         <Button mode="outlined" icon="logout" onPress={signOut}>
           Sign out
+        </Button>
+
+        <Button icon="account-remove-outline" textColor={theme.colors.error} onPress={confirmDeleteAccount}>
+          Delete account
         </Button>
       </ScrollView>
 

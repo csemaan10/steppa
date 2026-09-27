@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
-import { BackHandler, useWindowDimensions, type View } from 'react-native';
+import { BackHandler, Platform, useWindowDimensions, type View } from 'react-native';
 import {
   Easing,
   interpolate,
@@ -13,9 +13,15 @@ const INSET = 16;
 const RADIUS = 16;
 const CLOSE_MS = 260;
 
+/**
+ * Android only. iOS opens the group as a normal native push instead (see the root layout),
+ * so it gets the system slide-in and edge swipe-back rather than this Material transition.
+ */
+const EXPAND = Platform.OS !== 'ios';
+
 /** Navigates to a group, passing the tapped card's on-screen position so the screen can expand from it. */
 export function openGroupFrom(card: View | null, id: string) {
-  if (!card) {
+  if (!card || !EXPAND) {
     router.push({ pathname: '/group/[id]', params: { id } });
     return;
   }
@@ -30,21 +36,27 @@ export function openGroupFrom(card: View | null, id: string) {
 /**
  * Material "container transform": the screen grows from the source card's rect to full screen,
  * and shrinks back into it on close. Content stays full-size and is clipped, so it never re-lays out.
+ * On iOS it's a no-op: the screen starts full size and closing is a plain `router.back()`.
  */
 export function useExpandTransition(originY?: string, originHeight?: string) {
   const { width, height } = useWindowDimensions();
   const h = Number(originHeight) || 80;
   const y = Number.isFinite(Number(originY)) && originY ? Number(originY) : height / 2 - h / 2;
-  const progress = useSharedValue(0);
+  const progress = useSharedValue(EXPAND ? 0 : 1);
   const closing = useRef(false);
 
   useEffect(() => {
+    if (!EXPAND) return;
     progress.set(withTiming(1, { duration: 340, easing: Easing.bezier(0.2, 0, 0, 1) }));
   }, [progress]);
 
   // Navigate on a JS timer: the worklet's finished callback can be lost if the app was paused
   // (e.g. by the system share sheet), which left the screen stuck open.
   const close = useCallback(() => {
+    if (!EXPAND) {
+      router.back();
+      return;
+    }
     if (closing.current) return;
     closing.current = true;
     progress.set(withTiming(0, { duration: CLOSE_MS, easing: Easing.bezier(0.3, 0, 0.8, 0.15) }));
@@ -62,7 +74,7 @@ export function useExpandTransition(originY?: string, originHeight?: string) {
     }, [close])
   );
 
-  const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value * 0.32 }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: EXPAND ? progress.value * 0.32 : 0 }));
 
   const containerStyle = useAnimatedStyle(() => {
     const p = progress.value;

@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
-import { FlatList, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { IconButton, Text, useTheme } from 'react-native-paper';
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { UserAvatar } from '@/components/user-avatar';
-import { getMessages, sendMessage, subscribeToMessages, type ChatMessage } from '@/lib/api';
+import {
+  blockUser,
+  getMessages,
+  reportMessage,
+  sendMessage,
+  subscribeToMessages,
+  type ChatMessage,
+} from '@/lib/api';
 
 type Member = { display_name: string; avatar_color: string; avatar_icon: string | null };
 
@@ -51,6 +58,42 @@ export function GroupChat({ groupId, userId, members }: Props) {
       unsubscribe();
     };
   }, [groupId]);
+
+  // Long-press on someone else's message. Both actions hide content immediately; the database
+  // (RLS) keeps it hidden on reload and in live updates.
+  function moderate(message: ChatMessage) {
+    const name = members.get(message.user_id)?.display_name ?? 'this member';
+    const fail = (e: unknown) => Alert.alert('Error', e instanceof Error ? e.message : String(e));
+    Alert.alert(name, message.body, [
+      {
+        text: 'Report message',
+        onPress: () =>
+          reportMessage(message.id, userId)
+            .then(() => {
+              setMessages((list) => list.filter((m) => m.id !== message.id));
+              Alert.alert('Reported', "Thanks. We'll review it, and you won't see it again.");
+            })
+            .catch(fail),
+      },
+      {
+        text: `Block ${name}`,
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert(`Block ${name}?`, "You won't see their messages. You can unblock them from your profile.", [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: () =>
+                blockUser(userId, message.user_id)
+                  .then(() => setMessages((list) => list.filter((m) => m.user_id !== message.user_id)))
+                  .catch(fail),
+            },
+          ]),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
 
   async function send() {
     const body = draft.trim();
@@ -105,7 +148,9 @@ export function GroupChat({ groupId, userId, members }: Props) {
                     {member?.display_name ?? 'Member'}
                   </Text>
                 ) : null}
-                <View
+                <Pressable
+                  onLongPress={mine ? undefined : () => moderate(item)}
+                  accessibilityHint={mine ? undefined : 'Long press to report or block'}
                   style={[
                     styles.bubble,
                     mine
@@ -125,7 +170,7 @@ export function GroupChat({ groupId, userId, members }: Props) {
                     ]}>
                     {formatTime(item.created_at)}
                   </Text>
-                </View>
+                </Pressable>
               </View>
             </View>
           );

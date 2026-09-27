@@ -2,7 +2,7 @@ import { Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import '@/lib/background-sync';
@@ -53,9 +53,15 @@ function RootNavigator() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+        {/* iOS: a normal push, so it gets the native slide-in and edge swipe-back.
+            Android: a transparent modal that animates itself out of the tapped card (expand-transition). */}
         <Stack.Screen
           name="group/[id]"
-          options={{ presentation: 'transparentModal', animation: 'none', gestureEnabled: false }}
+          options={
+            Platform.OS === 'ios'
+              ? { gestureEnabled: true }
+              : { presentation: 'transparentModal', animation: 'none', gestureEnabled: false }
+          }
         />
         <Stack.Screen name="user/[id]" />
         <Stack.Screen name="group-settings/[id]" />

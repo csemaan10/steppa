@@ -6,7 +6,6 @@ import {
   Card,
   Chip,
   Menu,
-  Portal,
   Text,
   useTheme,
 } from 'react-native-paper';
@@ -100,9 +99,6 @@ export default function GroupScreen() {
   }
 
   return (
-    // Own portal host: on iOS this screen is a native modal above the root portal,
-    // so the ⋮ menu would otherwise open behind the screen.
-    <Portal.Host>
     <View style={styles.flex}>
       <Animated.View
         pointerEvents="none"
@@ -245,7 +241,6 @@ export default function GroupScreen() {
         </Animated.View>
       </Animated.View>
     </View>
-    </Portal.Host>
   );
 }
 

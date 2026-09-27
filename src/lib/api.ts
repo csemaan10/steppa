@@ -309,6 +309,61 @@ export async function sendMessage(groupId: string, userId: string, body: string)
   );
 }
 
+// ---------- Moderation ----------
+
+/** Reports a message for review; it's hidden for the reporter right away (by RLS). */
+export async function reportMessage(messageId: number, reporterId: string): Promise<void> {
+  const { error } = await supabase
+    .from('message_reports')
+    .insert({ message_id: messageId, reporter_id: reporterId });
+  // Already reported by this user: treat as done.
+  if (error && error.code !== '23505') throw new Error(error.message);
+}
+
+/** Hides everything this user posts in chat, for the blocker only. */
+export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  const { error } = await supabase
+    .from('blocked_users')
+    .upsert({ blocker_id: blockerId, blocked_id: blockedId }, { onConflict: 'blocker_id,blocked_id' });
+  if (error) throw new Error(error.message);
+}
+
+export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
+  const { error } = await supabase
+    .from('blocked_users')
+    .delete()
+    .eq('blocker_id', blockerId)
+    .eq('blocked_id', blockedId);
+  if (error) throw new Error(error.message);
+}
+
+export type BlockedUser = Pick<Profile, 'id' | 'display_name' | 'avatar_color' | 'avatar_icon'>;
+
+export async function getBlockedUsers(blockerId: string): Promise<BlockedUser[]> {
+  const blocks = unwrap<{ blocked_id: string }[]>(
+    await supabase.from('blocked_users').select('blocked_id').eq('blocker_id', blockerId)
+  );
+  if (!blocks.length) return [];
+  return unwrap<BlockedUser[]>(
+    await supabase
+      .from('profiles')
+      .select('id, display_name, avatar_color, avatar_icon')
+      .in(
+        'id',
+        blocks.map((b) => b.blocked_id)
+      )
+      .order('display_name')
+  );
+}
+
+// ---------- Account ----------
+
+/** Permanently deletes the signed-in user and all their data (see migration 009). */
+export async function deleteMyAccount(): Promise<void> {
+  const { error } = await supabase.rpc('delete_my_account');
+  if (error) throw new Error(error.message);
+}
+
 /** Calls `onInsert` for every new message in the group; returns an unsubscribe function. */
 export function subscribeToMessages(groupId: string, onInsert: (m: ChatMessage) => void): () => void {
   const channel = supabase

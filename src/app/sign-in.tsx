@@ -189,6 +189,13 @@ export default function SignInScreen() {
               <Button mode="contained" onPress={submit} loading={busy} disabled={busy}>
                 {mode === 'sign-in' ? 'Sign in' : 'Create account'}
               </Button>
+              {mode === 'sign-up' ? (
+                // App Store guideline 1.2: users agree to content rules before they can post in chat.
+                <Text variant="bodySmall" style={[styles.center, { color: theme.colors.onSurfaceVariant }]}>
+                  By creating an account you agree not to post abusive, hateful, or explicit content. Such
+                  content is removed and accounts that post it may be banned.
+                </Text>
+              ) : null}
               {locked ? (
                 <Button mode="outlined" icon="fingerprint" onPress={switchToBiometric} disabled={busy}>
                   Use biometrics instead
