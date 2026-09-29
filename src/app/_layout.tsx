@@ -5,7 +5,6 @@ import { useEffect } from 'react';
 import { Platform, useColorScheme } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
-import '@/lib/background-sync';
 import { AppLockProvider, useAppLock } from '@/providers/app-lock-provider';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
 import { ThemeChoiceProvider, useThemeChoice } from '@/providers/theme-provider';
@@ -65,6 +64,7 @@ function RootNavigator() {
         />
         <Stack.Screen name="user/[id]" />
         <Stack.Screen name="group-settings/[id]" />
+        <Stack.Screen name="settings" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" options={{ animation: 'none' }} />
