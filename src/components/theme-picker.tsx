@@ -46,8 +46,9 @@ export function ThemePicker() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 16 },
-  option: { alignItems: 'center', gap: 6 },
+  // Four per row: seven themes don't fit across a phone in one line.
+  row: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 16, paddingBottom: 16 },
+  option: { width: '25%', alignItems: 'center', gap: 6 },
   ring: { borderWidth: 2, borderRadius: 999, padding: 3 },
   swatch: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
 });

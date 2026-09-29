@@ -43,7 +43,22 @@ export function toNavigationTheme(theme: MD3Theme): Theme {
   };
 }
 
-export const avatarColors = ['#006C4C', '#3D6373', '#8B5000', '#7D5260', '#4355B9', '#984061'];
+export const avatarColors = [
+  '#006C4C',
+  '#3D6373',
+  '#8B5000',
+  '#7D5260',
+  '#4355B9',
+  '#984061',
+  '#0061A4',
+  '#6750A4',
+  '#BB1614',
+  '#006A6A',
+  '#4C6200',
+  '#A04100',
+  '#455A64',
+  '#C2185B',
+];
 
 /** Applies an alpha (0–1) to a `#RRGGBB` or `rgb(a)(...)` colour. Paper's baseline purple uses rgba. */
 export function withAlpha(color: string, alpha: number): string {
