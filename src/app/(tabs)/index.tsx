@@ -45,8 +45,9 @@ async function connectAndSync(userId: string): Promise<{ health: HealthState; sy
   try {
     if (!(await isHealthAvailable())) return { health: 'unavailable', syncError: null };
     if (!(await requestHealthPermission())) return { health: 'denied', syncError: null };
-    await syncSteps(userId, 7);
+    // Before the sync, so a failed foreground sync doesn't also leave the background task unscheduled.
     registerBackgroundSync();
+    await syncSteps(userId, 7);
     return { health: 'ready', syncError: null };
   } catch (e) {
     return { health: 'ready', syncError: e instanceof Error ? e.message : 'Sync failed' };

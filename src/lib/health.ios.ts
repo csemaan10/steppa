@@ -1,9 +1,12 @@
 import {
   AuthorizationRequestStatus,
+  configureBackgroundTypes,
   getRequestStatusForAuthorization,
   isHealthDataAvailable,
   queryStatisticsForQuantity,
   requestAuthorization,
+  subscribeToChanges,
+  UpdateFrequency,
 } from '@kingstinct/react-native-healthkit';
 import { Linking } from 'react-native';
 
@@ -47,3 +50,23 @@ export async function hasHealthPermission(): Promise<boolean> {
   const status = await getRequestStatusForAuthorization({ toRead: [STEP_COUNT] });
   return status === AuthorizationRequestStatus.unnecessary;
 }
+
+/**
+ * Asks iOS to wake the app when new steps land in Apple Health (hourly at most for steps).
+ * The library persists this and registers the observer natively on every later launch.
+ * Call only after the Health prompt has been answered.
+ */
+export async function enableStepChangeDelivery(): Promise<void> {
+  await configureBackgroundTypes([STEP_COUNT], UpdateFrequency.hourly);
+}
+
+/**
+ * Calls `onChange` when Apple Health gets new steps, including when iOS launched the app for it.
+ * Events that arrive before this is called are queued natively and delivered once it is.
+ */
+export function onStepsChanged(onChange: () => void): void {
+  subscribeToChanges(STEP_COUNT, onChange);
+}
+
+// HealthKit has no separate history permission; read access covers past data.
+export async function requestHistoryPermission(): Promise<void> {}

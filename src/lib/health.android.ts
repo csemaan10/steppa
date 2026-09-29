@@ -72,7 +72,17 @@ export async function hasHealthPermission(): Promise<boolean> {
 }
 
 /**
- * Steps per day; `null` for days that couldn't be read.
+ * Asks for access to steps from before the first grant. `getGrantedPermissions` never reports this
+ * one, so it can't be checked; Health Connect only shows its dialog if it isn't granted yet.
+ * Without it, reads can't reach more than 30 days before the first grant.
+ */
+export async function requestHistoryPermission(): Promise<void> {
+  if (!(await ensureInitialized())) return;
+  await requestPermission([{ accessType: 'read', recordType: 'ReadHealthDataHistory' }]);
+}
+
+/**
+ * Steps per day, for consecutive days oldest first; `null` for days that couldn't be read.
  * Uses one daily-bucketed aggregate per chunk instead of a call per day, which ran into
  * Health Connect's rate limit on backfills and imports (and then silently dropped the newest days).
  * Buckets are local-time days, matching `toDayKey`.
@@ -81,33 +91,61 @@ export async function readDailySteps(days: Date[]): Promise<(number | null)[]> {
   if (!days.length || !(await ensureInitialized())) return days.map(() => null);
   const byDay = new Map<string, number | null>();
 
-  for (let i = 0; i < days.length; i += CHUNK_DAYS) {
-    const chunk = days.slice(i, i + CHUNK_DAYS);
-    try {
-      const buckets = await aggregateGroupByPeriod({
-        recordType: 'Steps',
-        timeRangeFilter: {
-          operator: 'between',
-          startTime: chunk[0]!.toISOString(),
-          endTime: addDays(chunk[chunk.length - 1]!, 1).toISOString(),
-        },
-        timeRangeSlicer: { period: 'DAYS', length: 1 },
-      });
-      // Days with no data may have no bucket; the read succeeded, so they're 0.
-      for (const day of chunk) byDay.set(toDayKey(day), 0);
-      for (const bucket of buckets) {
-        // startTime is a local date-time like "2026-09-26T00:00".
-        byDay.set(bucket.startTime.slice(0, 10), bucket.result.COUNT_TOTAL ?? 0);
-      }
-    } catch (e) {
-      console.warn('Health Connect read failed', e);
-      for (const day of chunk) byDay.set(toDayKey(day), null);
-    }
+  // Newest chunk first. Without the history permission, Health Connect rejects any read that
+  // reaches too far back, so the first chunk that fails is where readable history ends: keep its
+  // readable part and stop, since every older chunk would fail too.
+  for (let end = days.length; end > 0; end -= CHUNK_DAYS) {
+    const chunk = days.slice(Math.max(0, end - CHUNK_DAYS), end);
+    if (await readRange(chunk, byDay)) continue;
+    await readNewestReadable(chunk, byDay);
+    break;
   }
 
   return days.map((day) => byDay.get(toDayKey(day)) ?? null);
 }
 
+/** One aggregate read of consecutive days into `byDay`. Returns false if Health Connect rejected it. */
+async function readRange(range: Date[], byDay: Map<string, number | null>): Promise<boolean> {
+  try {
+    const buckets = await aggregateGroupByPeriod({
+      recordType: 'Steps',
+      timeRangeFilter: {
+        operator: 'between',
+        startTime: range[0]!.toISOString(),
+        endTime: addDays(range[range.length - 1]!, 1).toISOString(),
+      },
+      timeRangeSlicer: { period: 'DAYS', length: 1 },
+    });
+    // Days with no data may have no bucket; the read succeeded, so they're 0.
+    for (const day of range) byDay.set(toDayKey(day), 0);
+    for (const bucket of buckets) {
+      // startTime is a local date-time like "2026-09-26T00:00".
+      byDay.set(bucket.startTime.slice(0, 10), bucket.result.COUNT_TOTAL ?? 0);
+    }
+    return true;
+  } catch (e) {
+    console.warn('Health Connect read failed', e);
+    return false;
+  }
+}
+
+/** Binary-searches a chunk whose full read failed for its oldest readable day, reading from there on. */
+async function readNewestReadable(chunk: Date[], byDay: Map<string, number | null>): Promise<void> {
+  // chunk[hi..] has been read; chunk[..lo) is known to be unreadable.
+  let lo = 0;
+  let hi = chunk.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (await readRange(chunk.slice(mid, hi), byDay)) hi = mid;
+    else lo = mid + 1;
+  }
+}
+
 export function openHealthSettings(): void {
   openHealthConnectSettings();
 }
+
+// Health Connect has no change delivery; Android relies on the periodic background task alone.
+export async function enableStepChangeDelivery(): Promise<void> {}
+
+export function onStepsChanged(_onChange: () => void): void {}
