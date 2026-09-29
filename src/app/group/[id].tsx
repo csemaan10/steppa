@@ -41,7 +41,7 @@ export default function GroupScreen() {
   const insets = useSafeAreaInsets();
   const userId = useUserId();
   const { id, oy, oh } = useLocalSearchParams<{ id: string; oy?: string; oh?: string }>();
-  const { backdropStyle, containerStyle, contentStyle, close } = useExpandTransition(oy, oh);
+  const { backdropStyle, containerStyle, contentStyle, pointerEvents, close } = useExpandTransition(oy, oh);
   const [period, setPeriod] = useState<Period>('today');
   const [view, setView] = useState<GroupView>('board');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -99,7 +99,7 @@ export default function GroupScreen() {
   }
 
   return (
-    <View style={styles.flex}>
+    <View style={styles.flex} pointerEvents={pointerEvents}>
       <Animated.View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.scrim }, backdropStyle]}
