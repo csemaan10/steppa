@@ -6,7 +6,14 @@ import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-export type PrimaryTab<T extends string> = { value: T; label: string; icon: IconName; activeIcon?: IconName };
+export type PrimaryTab<T extends string> = {
+  value: T;
+  label: string;
+  icon: IconName;
+  activeIcon?: IconName;
+  /** Small red dot on the icon (Material 3 small badge), e.g. for unread messages. */
+  badge?: boolean;
+};
 
 type Props<T extends string> = { value: T; onChange: (value: T) => void; tabs: PrimaryTab<T>[] };
 
@@ -44,14 +51,17 @@ export function PrimaryTabs<T extends string>({ value, onChange, tabs }: Props<T
             }}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            accessibilityLabel={t.label}>
+            accessibilityLabel={t.badge ? `${t.label}, new activity` : t.label}>
             <View
               style={styles.content}
               onLayout={(e) => {
                 const { x: cx, width: cw } = e.nativeEvent.layout;
                 setContentBoxes((b) => ({ ...b, [t.value]: { x: cx, width: cw } }));
               }}>
-              <MaterialCommunityIcons name={active ? (t.activeIcon ?? t.icon) : t.icon} size={24} color={color} />
+              <View>
+                <MaterialCommunityIcons name={active ? (t.activeIcon ?? t.icon) : t.icon} size={24} color={color} />
+                {t.badge ? <View style={[styles.badge, { backgroundColor: theme.colors.error }]} /> : null}
+              </View>
               <Text variant="titleSmall" style={{ color }}>
                 {t.label}
               </Text>
@@ -70,6 +80,7 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 64 },
   content: { alignItems: 'center', gap: 2, paddingHorizontal: 4 },
+  badge: { position: 'absolute', top: 0, right: -2, width: 8, height: 8, borderRadius: 4 },
   indicator: {
     position: 'absolute',
     left: 0,

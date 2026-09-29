@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
 import {
   Appbar,
@@ -14,22 +14,25 @@ import Animated from 'react-native-reanimated';
 
 import { ButtonGroup } from '@/components/button-group';
 import { useExpandTransition } from '@/components/expand-transition';
+import { FlairAvatar, FlairBadge } from '@/components/flair';
 import { GroupAvatar } from '@/components/group-avatar';
 import { GroupChat } from '@/components/group-chat';
 import { GroupRace } from '@/components/group-race';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { Podium } from '@/components/podium';
 import { PrimaryTabs } from '@/components/primary-tabs';
-import { UserAvatar } from '@/components/user-avatar';
 import { useLoader } from '@/hooks/use-loader';
 import {
   activeAverage,
   deleteGroup,
   getGroup,
+  getLatestMessageId,
   getLeaderboard,
   leaveGroup,
+  subscribeToMessages,
   type Period,
 } from '@/lib/api';
+import { getLastRead } from '@/lib/chat-read';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader } from '@/theme';
@@ -48,9 +51,27 @@ export default function GroupScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const { data, error, reload } = useLoader(async () => {
-    const [group, leaderboard] = await Promise.all([getGroup(id), getLeaderboard(id, period)]);
-    return { group, leaderboard, period };
+    const [group, leaderboard, latestMessageId] = await Promise.all([
+      getGroup(id),
+      getLeaderboard(id, period),
+      getLatestMessageId(id, userId),
+    ]);
+    return { group, leaderboard, period, latestMessageId };
   }, `${id}:${period}`);
+
+  // Unread dot on the Chat tab: someone else posted after the newest message seen on this device.
+  const [lastRead, setLastRead] = useState(() => getLastRead(id));
+  const [liveLatest, setLiveLatest] = useState(0);
+  useEffect(
+    () =>
+      subscribeToMessages(id, (m) => {
+        if (m.user_id !== userId) setLiveLatest((n) => Math.max(n, m.id));
+      }),
+    [id, userId]
+  );
+  const onChatRead = useCallback((messageId: number) => setLastRead((n) => Math.max(n, messageId)), []);
+  const latestOther = Math.max(data?.latestMessageId ?? 0, liveLatest);
+  const unreadChat = view !== 'chat' && latestOther > lastRead;
   // The period the shown data is for; `period` flips on tap, before the new data arrives.
   const shownPeriod = data?.period ?? period;
 
@@ -151,7 +172,7 @@ export default function GroupScreen() {
           onChange={setView}
           tabs={[
             { value: 'board', label: 'Leaderboard', icon: 'podium' },
-            { value: 'chat', label: 'Chat', icon: 'chat-outline', activeIcon: 'chat' },
+            { value: 'chat', label: 'Chat', icon: 'chat-outline', activeIcon: 'chat', badge: unreadChat },
             { value: 'race', label: 'Race', icon: 'flag-checkered' },
           ]}
         />
@@ -160,7 +181,7 @@ export default function GroupScreen() {
       {view === 'race' ? (
         <GroupRace groupId={id} userId={userId} />
       ) : view === 'chat' ? (
-        <GroupChat groupId={id} userId={userId} members={members} />
+        <GroupChat groupId={id} userId={userId} members={members} onRead={onChatRead} />
       ) : (
         <FlatList
           data={data?.leaderboard.slice(3) ?? []}
@@ -210,17 +231,32 @@ export default function GroupScreen() {
                 mode="contained"
                 style={{
                   backgroundColor: isMe ? theme.colors.primaryContainer : theme.colors.elevation.level1,
+                  // Player's accent as a thin outline around their card.
+                  ...(item.flair_color ? { borderWidth: 1.5, borderColor: item.flair_color } : null),
                 }}
                 onPress={isMe ? undefined : () => openUser(item.user_id)}>
                 <View style={styles.row}>
                   <Text variant="titleMedium" style={styles.rank}>
                     {item.rank}
                   </Text>
-                  <UserAvatar name={item.display_name} color={item.avatar_color} icon={item.avatar_icon} />
+                  <FlairAvatar
+                    name={item.display_name}
+                    color={item.avatar_color}
+                    icon={item.avatar_icon}
+                    flair_color={item.flair_color}
+                    flair_glow={item.flair_glow}
+                  />
                   <View style={styles.nameColumn}>
-                    <Text variant="titleSmall" numberOfLines={1}>
-                      {isMe ? `${item.display_name} (you)` : item.display_name}
-                    </Text>
+                    <View style={styles.nameLine}>
+                      <Text variant="titleSmall" numberOfLines={1} style={styles.nameText}>
+                        {isMe ? `${item.display_name} (you)` : item.display_name}
+                      </Text>
+                      <FlairBadge
+                        flair_icon={item.flair_icon}
+                        flair_color={item.flair_color}
+                        fallbackColor={theme.colors.onSurfaceVariant}
+                      />
+                    </View>
                     <PlayerBadges row={item} />
                   </View>
                   <View style={styles.right}>
@@ -255,5 +291,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
   rank: { width: 24, textAlign: 'center', fontWeight: '700' },
   nameColumn: { flex: 1, gap: 2 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  nameText: { flexShrink: 1 },
   right: { alignItems: 'flex-end', gap: 2 },
 });

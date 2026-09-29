@@ -2,7 +2,16 @@ import { addDays, lastNDays, startOfDay, toDayKey } from '@/lib/dates';
 import { healthSourceName, readDailySteps } from '@/lib/health';
 import { supabase } from '@/lib/supabase';
 
-export type Profile = {
+/** Leaderboard style chosen on the profile; shown around the name and avatar in every group. */
+export type Flair = {
+  /** Material Community Icons name shown next to the name. */
+  flair_icon: string | null;
+  /** Accent for the avatar ring, glow and badge. */
+  flair_color: string | null;
+  flair_glow: boolean;
+};
+
+export type Profile = Flair & {
   id: string;
   username: string;
   display_name: string;
@@ -26,7 +35,7 @@ export type Group = {
 
 export type GroupWithCount = Group & { member_count: number };
 
-export type LeaderboardRow = {
+export type LeaderboardRow = Partial<Flair> & {
   user_id: string;
   username: string;
   display_name: string;
@@ -174,7 +183,9 @@ export async function getProfile(id: string): Promise<Profile> {
 
 export async function updateProfile(
   id: string,
-  patch: Partial<Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon'>>
+  patch: Partial<
+    Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon' | keyof Flair>
+  >
 ): Promise<Profile> {
   return unwrap<Profile>(
     await supabase.from('profiles').update(patch).eq('id', id).select('*').single()
@@ -279,6 +290,15 @@ export async function deleteGroup(groupId: string): Promise<void> {
 
 export async function getLeaderboard(groupId: string, period: Period): Promise<LeaderboardRow[]> {
   const { from, to } = periodRange(period);
+  return leaderboardBetween(groupId, from, to);
+}
+
+/** Leaderboard for a single day (`YYYY-MM-DD`), e.g. yesterday's podium. */
+export async function getDayLeaderboard(groupId: string, day: string): Promise<LeaderboardRow[]> {
+  return leaderboardBetween(groupId, day, day);
+}
+
+async function leaderboardBetween(groupId: string, from: string, to: string): Promise<LeaderboardRow[]> {
   const rows = unwrap<LeaderboardRow[]>(
     await supabase.rpc('group_leaderboard', { gid: groupId, from_day: from, to_day: to })
   );
@@ -297,6 +317,21 @@ export async function getMessages(groupId: string, limit = 50): Promise<ChatMess
       .order('created_at', { ascending: false })
       .limit(limit)
   );
+}
+
+/** Id of the newest message someone else posted in the group, or null if there are none. */
+export async function getLatestMessageId(groupId: string, excludeUserId: string): Promise<number | null> {
+  const row = unwrap<{ id: number } | null>(
+    await supabase
+      .from('group_messages')
+      .select('id')
+      .eq('group_id', groupId)
+      .neq('user_id', excludeUserId)
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  return row?.id ?? null;
 }
 
 export async function sendMessage(groupId: string, userId: string, body: string): Promise<ChatMessage> {
@@ -364,10 +399,13 @@ export async function deleteMyAccount(): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+let channelCount = 0;
+
 /** Calls `onInsert` for every new message in the group; returns an unsubscribe function. */
 export function subscribeToMessages(groupId: string, onInsert: (m: ChatMessage) => void): () => void {
+  // Unique name per subscription: the chat and the unread dot can listen to the same group at once.
   const channel = supabase
-    .channel(`group-chat:${groupId}`)
+    .channel(`group-chat:${groupId}:${++channelCount}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` },

@@ -4,19 +4,33 @@ import { IconButton, Text, useTheme } from 'react-native-paper';
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChatPodiumCard } from '@/components/chat-podium-card';
 import { UserAvatar } from '@/components/user-avatar';
 import {
   blockUser,
+  getDayLeaderboard,
   getMessages,
   reportMessage,
   sendMessage,
   subscribeToMessages,
   type ChatMessage,
+  type LeaderboardRow,
 } from '@/lib/api';
+import { markRead } from '@/lib/chat-read';
+import { addDays, startOfDay, toDayKey } from '@/lib/dates';
 
 type Member = { display_name: string; avatar_color: string; avatar_icon: string | null };
 
-type Props = { groupId: string; userId: string; members: Map<string, Member> };
+type Props = {
+  groupId: string;
+  userId: string;
+  members: Map<string, Member>;
+  /** Called with the newest message id each time the visible messages change (for the unread dot). */
+  onRead?: (messageId: number) => void;
+};
+
+/** Chat rows: messages plus yesterday's podium card, which sits where today begins. */
+type Item = { kind: 'message'; message: ChatMessage } | { kind: 'podium' };
 
 function addMessage(list: ChatMessage[], message: ChatMessage): ChatMessage[] {
   return list.some((m) => m.id === message.id) ? list : [message, ...list];
@@ -26,7 +40,7 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-export function GroupChat({ groupId, userId, members }: Props) {
+export function GroupChat({ groupId, userId, members, onRead }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   // Newest first, rendered in an inverted list.
@@ -34,6 +48,9 @@ export function GroupChat({ groupId, userId, members }: Props) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [podium, setPodium] = useState<LeaderboardRow[]>([]);
+  const today = startOfDay(new Date());
+  const yesterday = toDayKey(addDays(today, -1));
   const keyboard = useAnimatedKeyboard();
   // Keyboard height already covers the nav-bar inset, so use whichever is larger.
   const keyboardPadding = useAnimatedStyle(() => ({
@@ -95,6 +112,35 @@ export function GroupChat({ groupId, userId, members }: Props) {
     ]);
   }
 
+  // Yesterday's top three (people with steps only), shown as a card at the start of today.
+  useEffect(() => {
+    let active = true;
+    getDayLeaderboard(groupId, yesterday)
+      .then((rows) => active && setPodium(rows.filter((r) => r.total_steps > 0 && r.rank <= 3).slice(0, 3)))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [groupId, yesterday]);
+
+  // Everything loaded here has been seen.
+  const newestId = messages[0]?.id;
+  useEffect(() => {
+    if (newestId === undefined) return;
+    markRead(groupId, newestId);
+    onRead?.(newestId);
+  }, [groupId, newestId, onRead]);
+
+  // Newest first (inverted list), with the podium card placed after today's messages.
+  const todayMs = today.getTime();
+  const firstOlder = messages.findIndex((m) => new Date(m.created_at).getTime() < todayMs);
+  const split = firstOlder === -1 ? messages.length : firstOlder;
+  const items: Item[] = [
+    ...messages.slice(0, split).map((message) => ({ kind: 'message' as const, message })),
+    ...(podium.length ? [{ kind: 'podium' as const }] : []),
+    ...messages.slice(split).map((message) => ({ kind: 'message' as const, message })),
+  ];
+
   async function send() {
     const body = draft.trim();
     if (!body) return;
@@ -113,21 +159,24 @@ export function GroupChat({ groupId, userId, members }: Props) {
 
   return (
     <Animated.View style={[styles.flex, keyboardPadding]}>
-      {messages.length === 0 ? (
+      {messages.length === 0 && !podium.length ? (
         <Text variant="bodyMedium" style={[styles.empty, { color: theme.colors.onSurfaceVariant }]}>
           No messages yet. Say hi 👋
         </Text>
       ) : null}
       <FlatList
         inverted
-        data={messages}
-        keyExtractor={(m) => String(m.id)}
+        data={items}
+        keyExtractor={(i) => (i.kind === 'podium' ? 'podium' : String(i.message.id))}
         contentContainerStyle={styles.list}
-        renderItem={({ item, index }) => {
+        renderItem={({ item: row, index }) => {
+          if (row.kind === 'podium') return <ChatPodiumCard rows={podium} day={yesterday} userId={userId} />;
+          const item = row.message;
           const mine = item.user_id === userId;
           const member = members.get(item.user_id);
-          // Inverted: the "previous" message visually above is the next item in the array.
-          const firstOfRun = messages[index + 1]?.user_id !== item.user_id;
+          // Inverted: the item visually above is the next one in the array; the podium card breaks a run.
+          const above = items[index + 1];
+          const firstOfRun = above?.kind !== 'message' || above.message.user_id !== item.user_id;
           return (
             <View style={[styles.messageRow, mine && styles.mineRow, !firstOfRun && styles.tight]}>
               {!mine ? (

@@ -5,7 +5,7 @@ import { Card, Icon, Text, useTheme } from 'react-native-paper';
 import { openGroupFrom } from '@/components/expand-transition';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { GroupAvatar } from '@/components/group-avatar';
-import { UserAvatar } from '@/components/user-avatar';
+import { FlairAvatar, FlairBadge } from '@/components/flair';
 import type { GroupWithCount, LeaderboardRow } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { surfaceCard, withAlpha } from '@/theme';
@@ -100,12 +100,25 @@ function Row({ row, leader, isMe }: { row: LeaderboardRow; leader: number; isMe:
           {row.rank}
         </Text>
       </View>
-      <UserAvatar name={row.display_name} color={row.avatar_color} icon={row.avatar_icon} size={34} />
+      <FlairAvatar
+        name={row.display_name}
+        color={row.avatar_color}
+        icon={row.avatar_icon}
+        size={34}
+        flair_color={row.flair_color}
+        flair_glow={row.flair_glow}
+      />
       <View style={styles.name}>
         <View style={styles.nameLine}>
           <Text variant="bodyLarge" numberOfLines={1} style={[styles.nameText, isMe && { fontWeight: '700' }]}>
             {isMe ? 'You' : row.display_name}
           </Text>
+          <FlairBadge
+            flair_icon={row.flair_icon}
+            flair_color={row.flair_color}
+            size={14}
+            fallbackColor={theme.colors.onSurfaceVariant}
+          />
           <PlayerBadges row={row} />
         </View>
         <View style={[styles.track, { backgroundColor: withAlpha(theme.colors.onSurfaceVariant, 0.12) }]}>

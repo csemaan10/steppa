@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
-import { UserAvatar } from '@/components/user-avatar';
+import { FlairAvatar, FlairBadge } from '@/components/flair';
 import { useCountUp } from '@/hooks/use-count-up';
 import { activeAverage, type LeaderboardRow } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
@@ -83,17 +83,27 @@ function PodiumSpot({ row, place, showAverage, isMe, onPress }: SpotProps) {
       accessibilityLabel={`${place + 1}: ${row.display_name}, ${formatSteps(row.total_steps)} steps`}>
       <Animated.View style={[styles.head, headStyle]}>
         {place === 0 ? <MaterialCommunityIcons name="crown" size={28} color="#E3B341" /> : null}
-        <View style={[styles.avatarRing, isMe && { borderColor: theme.colors.primary }]}>
-          <UserAvatar
-            name={row.display_name}
-            color={row.avatar_color}
-            icon={row.avatar_icon}
-            size={place === 0 ? 56 : 44}
+        {/* Transparent fallback ring keeps every spot the same size, flair or not. */}
+        <FlairAvatar
+          name={row.display_name}
+          color={row.avatar_color}
+          icon={row.avatar_icon}
+          size={place === 0 ? 56 : 44}
+          flair_color={row.flair_color}
+          flair_glow={row.flair_glow}
+          fallbackRing={isMe ? theme.colors.primary : 'transparent'}
+        />
+        <View style={styles.nameRow}>
+          <Text variant="labelLarge" numberOfLines={1} style={styles.name}>
+            {isMe ? 'You' : row.display_name}
+          </Text>
+          <FlairBadge
+            flair_icon={row.flair_icon}
+            flair_color={row.flair_color}
+            size={14}
+            fallbackColor={theme.colors.onSurfaceVariant}
           />
         </View>
-        <Text variant="labelLarge" numberOfLines={1} style={styles.name}>
-          {isMe ? 'You' : row.display_name}
-        </Text>
         <View style={styles.stepsRow}>
           <Text variant="titleSmall">{formatSteps(steps)}</Text>
           <RankDelta rank={row.rank} prevRank={row.prev_rank} />
@@ -105,7 +115,14 @@ function PodiumSpot({ row, place, showAverage, isMe, onPress }: SpotProps) {
         ) : null}
         <PlayerBadges row={row} center />
       </Animated.View>
-      <Animated.View style={[styles.block, { backgroundColor: blockColors[0] }, blockStyle]}>
+      <Animated.View
+        style={[
+          styles.block,
+          { backgroundColor: blockColors[0] },
+          // Accent edge along the top of the player's podium block.
+          row.flair_color ? { borderTopWidth: 3, borderColor: row.flair_color } : null,
+          blockStyle,
+        ]}>
         <Text variant="headlineMedium" style={[styles.place, { color: blockColors[1] }]}>
           {place + 1}
         </Text>
@@ -118,8 +135,8 @@ const styles = StyleSheet.create({
   podium: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingTop: 8 },
   spot: { flex: 1, alignItems: 'center' },
   head: { alignItems: 'center', gap: 4, marginBottom: 8, width: '100%' },
-  avatarRing: { borderWidth: 2, borderColor: 'transparent', borderRadius: 999, padding: 2 },
-  name: { maxWidth: '100%' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%' },
+  name: { flexShrink: 1 },
   stepsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   block: {
     width: '100%',

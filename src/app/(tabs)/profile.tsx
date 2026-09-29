@@ -15,6 +15,8 @@ import {
 
 import { AppLockCard } from '@/components/app-lock-card';
 import { BlockedUsersCard } from '@/components/blocked-users-card';
+import { FlairAvatar } from '@/components/flair';
+import { FlairEditorCard } from '@/components/flair-editor-card';
 import { useTabBarSpace } from '@/components/floating-tab-bar';
 import { ThemePicker } from '@/components/theme-picker';
 import { MonthCard } from '@/components/month-card';
@@ -150,11 +152,13 @@ export default function ProfileScreen() {
         {data ? (
           <>
             <View style={styles.header}>
-              <UserAvatar
+              <FlairAvatar
                 name={data.profile.display_name}
                 color={data.profile.avatar_color}
                 icon={data.profile.avatar_icon}
                 size={88}
+                flair_color={data.profile.flair_color}
+                flair_glow={data.profile.flair_glow}
               />
               <Text variant="headlineSmall">{data.profile.display_name}</Text>
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -188,6 +192,8 @@ export default function ProfileScreen() {
             </Card>
 
             {lifetime ? <LifetimeCard stats={lifetime} /> : null}
+
+            <FlairEditorCard key={data.profile.id} profile={data.profile} />
           </>
         ) : null}
 
