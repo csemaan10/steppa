@@ -3,14 +3,11 @@ import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Button, Card, Snackbar, Text, useTheme } from 'react-native-paper';
 
-import { BlockedUsersCard } from '@/components/blocked-users-card';
 import { FlairAvatar } from '@/components/flair';
-import { FlairEditorCard } from '@/components/flair-editor-card';
 import { useTabBarSpace } from '@/components/floating-tab-bar';
 import { MonthCard } from '@/components/month-card';
 import { LifetimeCard, StepsOverviewCard, StreakCard } from '@/components/profile-stats';
 import { TrophyCase } from '@/components/trophy-case';
-import { UserAvatar } from '@/components/user-avatar';
 import { WeekChart } from '@/components/week-chart';
 import { WeekdayChart } from '@/components/weekday-chart';
 import { useLoader } from '@/hooks/use-loader';
@@ -135,12 +132,8 @@ export default function ProfileScreen() {
             </Card>
 
             {lifetime ? <LifetimeCard stats={lifetime} /> : null}
-
-            <FlairEditorCard key={data.profile.id} profile={data.profile} />
           </>
         ) : null}
-
-        <BlockedUsersCard userId={userId} />
 
         <Button
           mode="contained-tonal"

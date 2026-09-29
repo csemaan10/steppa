@@ -5,6 +5,8 @@ import { ActivityIndicator, Appbar, Card, HelperText, Text, TextInput, useTheme 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppLockCard } from '@/components/app-lock-card';
+import { BlockedUsersCard } from '@/components/blocked-users-card';
+import { FlairEditorCard } from '@/components/flair-editor-card';
 import { ThemePicker } from '@/components/theme-picker';
 import { AVATAR_ICONS, UserAvatar } from '@/components/user-avatar';
 import { useLoader } from '@/hooks/use-loader';
@@ -151,9 +153,13 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
           </Card.Content>
         </Card>
 
+        <FlairEditorCard profile={profile} />
+
         <ThemePicker />
 
         <AppLockCard />
+
+        <BlockedUsersCard userId={userId} />
       </ScrollView>
     </View>
   );
