@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 import { Card, Icon, Text, useTheme } from 'react-native-paper';
 
-import { FlairAvatar, FlairBadge } from '@/components/flair';
+import { UserAvatar } from '@/components/user-avatar';
 import type { LeaderboardRow } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 
@@ -50,13 +50,11 @@ export function ChatPodiumCard({ rows, day, userId }: Props) {
                   {row.rank}
                 </Text>
               </View>
-              <FlairAvatar
+              <UserAvatar
                 name={row.display_name}
                 color={row.avatar_color}
                 icon={row.avatar_icon}
                 size={24}
-                flair_color={row.flair_color}
-                flair_glow={row.flair_glow}
               />
               <View style={styles.nameLine}>
                 <Text
@@ -65,12 +63,6 @@ export function ChatPodiumCard({ rows, day, userId }: Props) {
                   style={[styles.name, me && { fontWeight: '700', color: theme.colors.primary }]}>
                   {me ? 'You' : row.display_name}
                 </Text>
-                <FlairBadge
-                  flair_icon={row.flair_icon}
-                  flair_color={row.flair_color}
-                  size={14}
-                  fallbackColor={theme.colors.onSurfaceVariant}
-                />
               </View>
               <Text variant="bodyMedium" style={styles.steps}>
                 {formatSteps(row.total_steps)}

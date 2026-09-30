@@ -46,7 +46,7 @@ export function ThemePicker() {
 }
 
 const styles = StyleSheet.create({
-  // Four per row: seven themes don't fit across a phone in one line.
+  // Four per row: eight themes make two even rows on a phone.
   row: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 16, paddingBottom: 16 },
   option: { width: '25%', alignItems: 'center', gap: 6 },
   ring: { borderWidth: 2, borderRadius: 999, padding: 3 },

@@ -2,16 +2,7 @@ import { addDays, lastNDays, startOfDay, toDayKey } from '@/lib/dates';
 import { healthSourceName, readDailySteps } from '@/lib/health';
 import { supabase } from '@/lib/supabase';
 
-/** Leaderboard style chosen on the profile; shown around the name and avatar in every group. */
-export type Flair = {
-  /** Material Community Icons name shown next to the name. */
-  flair_icon: string | null;
-  /** Accent for the avatar ring, glow and badge. */
-  flair_color: string | null;
-  flair_glow: boolean;
-};
-
-export type Profile = Flair & {
+export type Profile = {
   id: string;
   username: string;
   display_name: string;
@@ -35,7 +26,7 @@ export type Group = {
 
 export type GroupWithCount = Group & { member_count: number };
 
-export type LeaderboardRow = Partial<Flair> & {
+export type LeaderboardRow = {
   user_id: string;
   username: string;
   display_name: string;
@@ -62,7 +53,7 @@ export type ChatMessage = {
 
 export type DaySteps = { day: string; steps: number };
 
-export type Period = 'today' | 'week' | 'month';
+export type Period = 'today' | 'yesterday' | 'week' | 'month';
 
 /** Average over days with steps > 0, so unsynced or empty days don't drag it down. */
 export function activeAverage(total: number, activeDays: number): number {
@@ -98,7 +89,24 @@ export async function importStepHistory(userId: string, days = 365): Promise<num
   return rows.filter((r) => r.steps > 0).length;
 }
 
-async function uploadDays(userId: string, dates: Date[]): Promise<DaySteps[]> {
+/**
+ * One sync at a time. The Today screen, the background task and Apple Health's change wake-up can
+ * all start a sync; run in parallel, an older (lower) reading could reach Supabase after a newer one
+ * and overwrite it. Chaining them keeps "read order" and "saved order" the same.
+ */
+let syncQueue: Promise<unknown> = Promise.resolve();
+/** How long a sync waits for the one ahead of it; a hung request mustn't block syncing forever. */
+const SYNC_WAIT_MS = 30_000;
+
+function uploadDays(userId: string, dates: Date[]): Promise<DaySteps[]> {
+  const ahead = Promise.race([syncQueue, new Promise((resolve) => setTimeout(resolve, SYNC_WAIT_MS))]);
+  const run = ahead.then(() => readAndUpload(userId, dates));
+  // A failed sync mustn't block the ones after it.
+  syncQueue = run.catch(() => {});
+  return run;
+}
+
+async function readAndUpload(userId: string, dates: Date[]): Promise<DaySteps[]> {
   const counts = await readDailySteps(dates);
   const now = new Date().toISOString();
   // Skip unreadable days so a failed read never overwrites real data with 0.
@@ -171,6 +179,10 @@ export function summarize(history: DaySteps[]) {
 
 export function periodRange(period: Period): { from: string; to: string } {
   const today = startOfDay(new Date());
+  if (period === 'yesterday') {
+    const day = toDayKey(addDays(today, -1));
+    return { from: day, to: day };
+  }
   const offset = period === 'today' ? 0 : period === 'week' ? 6 : 29;
   return { from: toDayKey(addDays(today, -offset)), to: toDayKey(today) };
 }
@@ -183,9 +195,7 @@ export async function getProfile(id: string): Promise<Profile> {
 
 export async function updateProfile(
   id: string,
-  patch: Partial<
-    Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon' | keyof Flair>
-  >
+  patch: Partial<Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon'>>
 ): Promise<Profile> {
   return unwrap<Profile>(
     await supabase.from('profiles').update(patch).eq('id', id).select('*').single()

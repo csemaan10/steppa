@@ -17,6 +17,7 @@ import { ProgressRing } from '@/components/progress-ring';
 import { useLoader } from '@/hooks/use-loader';
 import { registerBackgroundSync } from '@/lib/background-sync';
 import {
+  getLatestMessageId,
   getLeaderboard,
   getMyGroups,
   getProfile,
@@ -71,7 +72,13 @@ export default function TodayScreen() {
       getProfileStats(userId),
     ]);
     const previews = await Promise.all(
-      groups.slice(0, 3).map(async (group) => ({ group, rows: await getLeaderboard(group.id, 'today') }))
+      groups.slice(0, 3).map(async (group) => {
+        const [rows, latestMessageId] = await Promise.all([
+          getLeaderboard(group.id, 'today'),
+          getLatestMessageId(group.id, userId),
+        ]);
+        return { group, rows, latestMessageId };
+      })
     );
     return { profile, history, previews, lifetime, health, syncError };
   }, userId);
@@ -156,8 +163,11 @@ export default function TodayScreen() {
         ) : null}
 
         <View style={styles.hero}>
+            {/* Sized so the streak card still fits on screen below the insight tiles. */}
             <ProgressRing
               progress={ratio}
+              size={176}
+              stroke={14}
               color={theme.colors.primary}
               overflowColor={theme.colors.accent}
               trackColor={theme.colors.surfaceVariant}>
@@ -165,7 +175,9 @@ export default function TodayScreen() {
                 Steps today
               </Text>
               <Text
-                variant="displayMedium"
+                variant="displaySmall"
+                numberOfLines={1}
+                adjustsFontSizeToFit
                 style={{ color: over ? theme.colors.accentText : theme.colors.primary, fontWeight: '700' }}>
                 {formatSteps(stats?.today ?? 0)}
               </Text>
@@ -179,6 +191,8 @@ export default function TodayScreen() {
 
         {data && stats ? (
           <View style={styles.grid}>
+            {/* Every tile below covers the same window: today and the 6 days before it. */}
+            <Text variant="titleMedium">Last 7 days</Text>
             <View style={styles.row}>
               <InsightTile
                 label="Daily average"
@@ -187,7 +201,7 @@ export default function TodayScreen() {
                 supporting={`${Math.round((stats.average / goal) * 100)}% of goal`}
               />
               <InsightTile
-                label="This week"
+                label="Total"
                 value={formatSteps(stats.total)}
                 progress={stats.total / (goal * 7)}
                 supporting={`of ${formatSteps(goal * 7)}`}
@@ -207,7 +221,7 @@ export default function TodayScreen() {
               <InsightTile
                 label="Goal met"
                 value={`${goalHits.filter(Boolean).length} of 7 days`}
-                supporting="Last 7 days">
+                supporting={`Goal: ${formatSteps(goal)} steps`}>
                 <GoalSegments
                   hits={goalHits}
                   labels={data.history.map((d) => shortWeekday(new Date(`${d.day}T12:00:00`)))}
@@ -230,8 +244,14 @@ export default function TodayScreen() {
               ) : null}
             </View>
             {data.previews.length ? (
-              data.previews.map(({ group, rows }) => (
-                <GroupPreview key={group.id} group={group} rows={rows} userId={userId} />
+              data.previews.map(({ group, rows, latestMessageId }) => (
+                <GroupPreview
+                  key={group.id}
+                  group={group}
+                  rows={rows}
+                  userId={userId}
+                  latestMessageId={latestMessageId}
+                />
               ))
             ) : (
               <Card mode="contained" style={surfaceCard(theme)}>
@@ -264,7 +284,7 @@ export default function TodayScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { padding: 16, gap: 16 },
-  hero: { alignItems: 'center', paddingVertical: 24 },
+  hero: { alignItems: 'center', paddingVertical: 8 },
   row: { flexDirection: 'row', gap: 12 },
   grid: { gap: 12 },
   section: { gap: 8 },

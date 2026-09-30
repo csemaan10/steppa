@@ -1,6 +1,7 @@
 import 'expo-sqlite/localStorage/install';
 import {
   aggregateGroupByPeriod,
+  aggregateRecord,
   getGrantedPermissions,
   getSdkStatus,
   initialize,
@@ -9,7 +10,8 @@ import {
   SdkAvailabilityStatus,
 } from 'react-native-health-connect';
 
-import { addDays, toDayKey } from '@/lib/dates';
+import { addDays, startOfDay, toDayKey } from '@/lib/dates';
+import type { DiagnosticLine } from '@/lib/health';
 
 export const healthSourceName = 'Health Connect';
 
@@ -149,3 +151,32 @@ export function openHealthSettings(): void {
 export async function enableStepChangeDelivery(): Promise<void> {}
 
 export function onStepsChanged(_onChange: () => void): void {}
+
+/** Health Connect can always be read while the app runs; only iOS locks its store. */
+export function canReadHealthNow(): boolean {
+  return true;
+}
+
+/** Today's steps from Health Connect, for the Step check in Settings. Never uploads anything. */
+export async function diagnoseToday(): Promise<DiagnosticLine[]> {
+  const now = new Date();
+  const start = startOfDay(now);
+  const end = addDays(start, 1);
+  const lines: DiagnosticLine[] = [
+    { label: 'Checked at', value: now.toString() },
+    { label: 'Time zone', value: `${Intl.DateTimeFormat().resolvedOptions().timeZone} (UTC${-now.getTimezoneOffset() / 60 >= 0 ? '+' : ''}${-now.getTimezoneOffset() / 60})` },
+    { label: 'Day window', value: `${start.toString()} → ${end.toString()}` },
+  ];
+  try {
+    if (!(await ensureInitialized())) throw new Error('Health Connect not available');
+    const result = await aggregateRecord({
+      recordType: 'Steps',
+      timeRangeFilter: { operator: 'between', startTime: start.toISOString(), endTime: end.toISOString() },
+    });
+    lines.push({ label: 'Day total', value: String(result.COUNT_TOTAL ?? 0) });
+    lines.push({ label: 'Sources', value: result.dataOrigins.join(', ') || 'none' });
+  } catch (e) {
+    lines.push({ label: 'Day total', value: `error: ${e instanceof Error ? e.message : String(e)}` });
+  }
+  return lines;
+}

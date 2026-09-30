@@ -14,8 +14,8 @@ import Animated from 'react-native-reanimated';
 
 import { ButtonGroup } from '@/components/button-group';
 import { useExpandTransition } from '@/components/expand-transition';
-import { FlairAvatar, FlairBadge } from '@/components/flair';
 import { GroupAvatar } from '@/components/group-avatar';
+import { UserAvatar } from '@/components/user-avatar';
 import { GroupChat } from '@/components/group-chat';
 import { GroupRace } from '@/components/group-race';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
@@ -74,6 +74,8 @@ export default function GroupScreen() {
   const unreadChat = view !== 'chat' && latestOther > lastRead;
   // The period the shown data is for; `period` flips on tap, before the new data arrives.
   const shownPeriod = data?.period ?? period;
+  // Per-day averages only make sense for multi-day periods.
+  const singleDay = shownPeriod === 'today' || shownPeriod === 'yesterday';
 
   const isOwner = data?.group.owner_id === userId;
   const members = new Map((data?.leaderboard ?? []).map((r) => [r.user_id, r]));
@@ -208,6 +210,7 @@ export default function GroupScreen() {
                 onChange={setPeriod}
                 options={[
                   { value: 'today', label: 'Today' },
+                  { value: 'yesterday', label: 'Yesterday' },
                   { value: 'week', label: '7 days' },
                   { value: 'month', label: '30 days' },
                 ]}
@@ -218,7 +221,7 @@ export default function GroupScreen() {
                   key={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
                   rows={data.leaderboard}
                   userId={userId}
-                  showAverage={shownPeriod !== 'today'}
+                  showAverage={!singleDay}
                   onPressUser={openUser}
                 />
               ) : null}
@@ -231,37 +234,28 @@ export default function GroupScreen() {
                 mode="contained"
                 style={{
                   backgroundColor: isMe ? theme.colors.primaryContainer : theme.colors.elevation.level1,
-                  // Player's accent as a thin outline around their card.
-                  ...(item.flair_color ? { borderWidth: 1.5, borderColor: item.flair_color } : null),
                 }}
                 onPress={isMe ? undefined : () => openUser(item.user_id)}>
                 <View style={styles.row}>
                   <Text variant="titleMedium" style={styles.rank}>
                     {item.rank}
                   </Text>
-                  <FlairAvatar
+                  <UserAvatar
                     name={item.display_name}
                     color={item.avatar_color}
                     icon={item.avatar_icon}
-                    flair_color={item.flair_color}
-                    flair_glow={item.flair_glow}
                   />
                   <View style={styles.nameColumn}>
                     <View style={styles.nameLine}>
                       <Text variant="titleSmall" numberOfLines={1} style={styles.nameText}>
                         {isMe ? `${item.display_name} (you)` : item.display_name}
                       </Text>
-                      <FlairBadge
-                        flair_icon={item.flair_icon}
-                        flair_color={item.flair_color}
-                        fallbackColor={theme.colors.onSurfaceVariant}
-                      />
                     </View>
                     <PlayerBadges row={item} />
                   </View>
                   <View style={styles.right}>
                     <Text variant="titleMedium">{formatSteps(item.total_steps)}</Text>
-                    {shownPeriod !== 'today' ? (
+                    {!singleDay ? (
                       <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
                         avg {formatSteps(activeAverage(item.total_steps, item.active_days))}/day
                       </Text>

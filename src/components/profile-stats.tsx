@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { Card, Divider, Icon, ProgressBar, Text } from 'react-native-paper';
 
 import { ProgressRing } from '@/components/progress-ring';
+import { StreakFlame, flameTier } from '@/components/streak-flame';
 import { summarize, type DaySteps, type ProfileStats } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { surfaceCard, useAppTheme } from '@/theme';
@@ -166,9 +167,10 @@ function Metric({
   );
 }
 
-/** Current streak against the personal record. */
+/** Current streak against the personal record, with a flame that grows as the streak does. */
 export function StreakCard({ current, longest }: { current: number; longest: number }) {
   const theme = useAppTheme();
+  const tier = flameTier(current);
   const isRecord = current > 0 && current >= longest;
   const supporting =
     current === 0
@@ -181,9 +183,7 @@ export function StreakCard({ current, longest }: { current: number; longest: num
     <Card mode="contained" style={surfaceCard(theme)}>
       <Card.Content style={styles.content}>
         <View style={styles.streakRow}>
-          <View style={[styles.leading, { backgroundColor: theme.colors.tertiaryContainer }]}>
-            <Icon source="fire" size={22} color={current > 0 ? '#F4511E' : theme.colors.onTertiaryContainer} />
-          </View>
+          <StreakFlame streak={current} />
           <View style={styles.flex}>
             <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
               Current streak
@@ -201,7 +201,7 @@ export function StreakCard({ current, longest }: { current: number; longest: num
         </View>
         <ProgressBar
           progress={longest ? Math.min(current / longest, 1) : 0}
-          color={theme.colors.tertiary}
+          color={current > 0 ? tier.outer[0] : theme.colors.tertiary}
           style={[styles.progress, { backgroundColor: theme.colors.surfaceVariant }]}
         />
         <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>

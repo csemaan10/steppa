@@ -18,7 +18,7 @@ import { FabMenu } from '@/components/fab-menu';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GroupPreview } from '@/components/group-preview';
 import { useLoader } from '@/hooks/use-loader';
-import { createGroup, getLeaderboard, getMyGroups, joinGroup } from '@/lib/api';
+import { createGroup, getLatestMessageId, getLeaderboard, getMyGroups, joinGroup } from '@/lib/api';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader } from '@/theme';
 
@@ -32,7 +32,13 @@ export default function GroupsScreen() {
   const { data: groups, loading, error, reload } = useLoader(async () => {
     const list = await getMyGroups();
     return Promise.all(
-      list.map(async (group) => ({ group, rows: await getLeaderboard(group.id, 'today') }))
+      list.map(async (group) => {
+        const [rows, latestMessageId] = await Promise.all([
+          getLeaderboard(group.id, 'today'),
+          getLatestMessageId(group.id, userId),
+        ]);
+        return { group, rows, latestMessageId };
+      })
     );
   }, userId);
   const [dialog, setDialog] = useState<DialogKind>(null);
@@ -92,7 +98,13 @@ export default function GroupsScreen() {
           ) : null
         }
         renderItem={({ item }) => (
-          <GroupPreview group={item.group} rows={item.rows} userId={userId} showOwner />
+          <GroupPreview
+            group={item.group}
+            rows={item.rows}
+            userId={userId}
+            latestMessageId={item.latestMessageId}
+            showOwner
+          />
         )}
       />
 

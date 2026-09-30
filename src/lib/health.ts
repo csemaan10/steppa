@@ -25,3 +25,13 @@ export async function enableStepChangeDelivery(): Promise<void> {}
 export function onStepsChanged(_onChange: () => void): void {}
 
 export async function requestHistoryPermission(): Promise<void> {}
+
+export function canReadHealthNow(): boolean {
+  return true;
+}
+
+export type DiagnosticLine = { label: string; value: string };
+
+export async function diagnoseToday(): Promise<DiagnosticLine[]> {
+  return [{ label: 'Step check', value: 'Only available in the iOS and Android apps.' }];
+}

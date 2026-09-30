@@ -70,7 +70,13 @@ function GroupButton<T extends string>({ option, selected, first, last, onPress 
       accessibilityLabel={option.label}>
       <Animated.View style={[styles.button, animated]}>
         {icon ? <MaterialCommunityIcons name={icon} size={18} color={foreground} /> : null}
-        <Text variant="labelLarge" numberOfLines={1} style={{ color: foreground }}>
+        {/* Shrink slightly rather than truncate when four or more options share the width. */}
+        <Text
+          variant="labelLarge"
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+          style={{ color: foreground, flexShrink: 1 }}>
           {option.label}
         </Text>
       </Animated.View>
@@ -87,6 +93,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
 });

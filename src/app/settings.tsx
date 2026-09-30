@@ -1,18 +1,21 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Appbar, Card, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Button, Card, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppLockCard } from '@/components/app-lock-card';
 import { BlockedUsersCard } from '@/components/blocked-users-card';
-import { FlairEditorCard } from '@/components/flair-editor-card';
+import { StepCheckCard } from '@/components/step-check-card';
 import { ThemePicker } from '@/components/theme-picker';
 import { AVATAR_ICONS, UserAvatar } from '@/components/user-avatar';
 import { useLoader } from '@/hooks/use-loader';
 import { getProfile, updateProfile, type Profile } from '@/lib/api';
 import { useUserId } from '@/providers/auth-provider';
 import { avatarColors, screenBackground, surfaceCard, transparentHeader } from '@/theme';
+
+/** Avatar icons shown before "Show all": about two rows on a phone. */
+const COLLAPSED_ICONS = 12;
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -44,8 +47,18 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
   const [goal, setGoal] = useState(String(profile.daily_goal));
   const [color, setColor] = useState(profile.avatar_color);
   const [icon, setIcon] = useState(profile.avatar_icon);
+  const [allIcons, setAllIcons] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Collapsed: the first two rows, always including the current pick so it stays visible.
+  const iconOptions: (string | null)[] = [null, ...AVATAR_ICONS];
+  const shownIcons = allIcons
+    ? iconOptions
+    : [...(icon && iconOptions.indexOf(icon) >= COLLAPSED_ICONS ? [icon] : []), ...iconOptions].slice(
+        0,
+        COLLAPSED_ICONS
+      );
 
   const dirty =
     displayName.trim() !== profile.display_name ||
@@ -136,7 +149,7 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
             </View>
             <Text variant="titleSmall">Avatar</Text>
             <View style={styles.wrap}>
-              {[null, ...AVATAR_ICONS].map((option) => {
+              {shownIcons.map((option) => {
                 const selected = option === icon;
                 return (
                   <Pressable
@@ -150,16 +163,23 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
                 );
               })}
             </View>
+            <Button
+              compact
+              icon={allIcons ? 'chevron-up' : 'chevron-down'}
+              onPress={() => setAllIcons((v) => !v)}
+              style={styles.more}>
+              {allIcons ? 'Show less' : `Show all ${iconOptions.length}`}
+            </Button>
           </Card.Content>
         </Card>
-
-        <FlairEditorCard profile={profile} />
 
         <ThemePicker />
 
         <AppLockCard />
 
         <BlockedUsersCard userId={userId} />
+
+        <StepCheckCard />
       </ScrollView>
     </View>
   );
@@ -174,4 +194,5 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   swatch: { width: 36, height: 36, borderRadius: 18 },
   iconRing: { borderWidth: 2, borderRadius: 999, padding: 2 },
+  more: { alignSelf: 'flex-start' },
 });

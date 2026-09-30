@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Button, Card, Snackbar, Text, useTheme } from 'react-native-paper';
 
-import { FlairAvatar } from '@/components/flair';
+import { UserAvatar } from '@/components/user-avatar';
 import { useTabBarSpace } from '@/components/floating-tab-bar';
 import { MonthCard } from '@/components/month-card';
 import { LifetimeCard, StepsOverviewCard, StreakCard } from '@/components/profile-stats';
@@ -92,13 +92,11 @@ export default function ProfileScreen() {
         {data ? (
           <>
             <View style={styles.header}>
-              <FlairAvatar
+              <UserAvatar
                 name={data.profile.display_name}
                 color={data.profile.avatar_color}
                 icon={data.profile.avatar_icon}
                 size={88}
-                flair_color={data.profile.flair_color}
-                flair_glow={data.profile.flair_glow}
               />
               <Text variant="headlineSmall">{data.profile.display_name}</Text>
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>

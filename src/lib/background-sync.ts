@@ -3,7 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 
 import { syncSteps } from '@/lib/api';
-import { enableStepChangeDelivery, hasHealthPermission, onStepsChanged } from '@/lib/health';
+import { canReadHealthNow, enableStepChangeDelivery, hasHealthPermission, onStepsChanged } from '@/lib/health';
 import { supabase } from '@/lib/supabase';
 
 const TASK_NAME = 'steppa-step-sync';
@@ -23,6 +23,9 @@ function syncRecentSteps(): Promise<boolean> {
       const userId = data.session?.user.id;
       // Signed out, or no step access: nothing to do, and never prompt from the background.
       if (!userId || !(await hasHealthPermission())) return true;
+      // iPhone locked: Apple Health would only report steps since it locked. Skip; the next
+      // sync with the phone unlocked picks up everything.
+      if (!canReadHealthNow()) return true;
       await syncSteps(userId, DAYS);
       return true;
     } catch (e) {

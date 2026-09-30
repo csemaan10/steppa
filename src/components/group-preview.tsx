@@ -5,22 +5,32 @@ import { Card, Icon, Text, useTheme } from 'react-native-paper';
 import { openGroupFrom } from '@/components/expand-transition';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { GroupAvatar } from '@/components/group-avatar';
-import { FlairAvatar, FlairBadge } from '@/components/flair';
+import { UserAvatar } from '@/components/user-avatar';
 import type { GroupWithCount, LeaderboardRow } from '@/lib/api';
+import { getLastRead } from '@/lib/chat-read';
 import { formatSteps } from '@/lib/dates';
 import { surfaceCard, withAlpha } from '@/theme';
 
 const MEDALS = ['#E3B341', '#A8B0B8', '#C3834C'];
 const TOP = 3;
 
-type Props = { group: GroupWithCount; rows: LeaderboardRow[]; userId: string; showOwner?: boolean };
+type Props = {
+  group: GroupWithCount;
+  rows: LeaderboardRow[];
+  userId: string;
+  /** Newest message someone else posted, for the unread dot on the chat icon. */
+  latestMessageId?: number | null;
+  showOwner?: boolean;
+};
 
-export function GroupPreview({ group, rows, userId, showOwner }: Props) {
+export function GroupPreview({ group, rows, userId, latestMessageId, showOwner }: Props) {
   const theme = useTheme();
   const myIndex = rows.findIndex((r) => r.user_id === userId);
   const showMe = myIndex >= TOP;
   const leader = Math.max(rows[0]?.total_steps ?? 0, 1);
   const cardRef = useRef<View>(null);
+  // Same "last read" marker as the Chat tab's dot, so opening the chat clears both.
+  const unreadChat = !!latestMessageId && latestMessageId > getLastRead(group.id);
 
   return (
     <View ref={cardRef} collapsable={false}>
@@ -45,6 +55,12 @@ export function GroupPreview({ group, rows, userId, showOwner }: Props) {
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                 {group.member_count} · Today
               </Text>
+              <View
+                style={styles.chat}
+                accessibilityLabel={unreadChat ? 'Unread chat messages' : 'Chat'}>
+                <Icon source="chat-outline" size={14} color={theme.colors.onSurfaceVariant} />
+                {unreadChat ? <View style={[styles.chatDot, { backgroundColor: theme.colors.error }]} /> : null}
+              </View>
             </View>
           </View>
           <Icon source="chevron-right" size={24} color={theme.colors.onSurfaceVariant} />
@@ -100,25 +116,17 @@ function Row({ row, leader, isMe }: { row: LeaderboardRow; leader: number; isMe:
           {row.rank}
         </Text>
       </View>
-      <FlairAvatar
+      <UserAvatar
         name={row.display_name}
         color={row.avatar_color}
         icon={row.avatar_icon}
         size={34}
-        flair_color={row.flair_color}
-        flair_glow={row.flair_glow}
       />
       <View style={styles.name}>
         <View style={styles.nameLine}>
           <Text variant="bodyLarge" numberOfLines={1} style={[styles.nameText, isMe && { fontWeight: '700' }]}>
             {isMe ? 'You' : row.display_name}
           </Text>
-          <FlairBadge
-            flair_icon={row.flair_icon}
-            flair_color={row.flair_color}
-            size={14}
-            fallbackColor={theme.colors.onSurfaceVariant}
-          />
           <PlayerBadges row={row} />
         </View>
         <View style={[styles.track, { backgroundColor: withAlpha(theme.colors.onSurfaceVariant, 0.12) }]}>
@@ -145,6 +153,8 @@ const styles = StyleSheet.create({
   headerText: { flex: 1, gap: 2 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flexShrink: 1 },
+  chat: { marginLeft: 6 },
+  chatDot: { position: 'absolute', top: -2, right: -3, width: 7, height: 7, borderRadius: 4 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   content: { gap: 4, paddingHorizontal: 8, paddingBottom: 12 },

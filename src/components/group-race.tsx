@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useEffect, useRef, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +31,7 @@ export function GroupRace({ groupId, userId }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [trackWidth, setTrackWidth] = useState(0);
   const [lap, setLap] = useState(0);
+  const { width: screenW } = useWindowDimensions();
 
   useEffect(() => {
     let active = true;
@@ -55,17 +56,28 @@ export function GroupRace({ groupId, userId }: Props) {
   const range = leader - last;
   // Bottom of the track sits a bit below last place, so close races spread over the full height.
   const floor = Math.max(0, last - Math.max(range * 0.3, 500));
-  const trackH = Math.min(MAX_TRACK_H, Math.max(MIN_TRACK_H, 300 + range / STEPS_PER_PX));
-  const travel = trackH - carH - TAG_H - 12;
   const fractionOf = (steps: number) => (leader > floor ? (steps - floor) / (leader - floor) : 1);
-  const positions = placeCars(racers.map((r) => fractionOf(r.total_steps)), trackWidth, carW, carH, travel);
+  // Before the track is measured, lay out for the screen width so the height is right first time.
+  const width = trackWidth || screenW - 32;
+  const layout = layoutRace(
+    racers.map((r) => fractionOf(r.total_steps)),
+    width,
+    carW,
+    carH,
+    Math.min(MAX_TRACK_H, Math.max(MIN_TRACK_H, 300 + range / STEPS_PER_PX))
+  );
+  const { trackH, travel } = layout;
+  const positions = layout.xs;
+  /** Where each car is drawn, 0 (bottom) to 1 (top): the step fraction, spaced out if cars are close. */
+  const shown = layout.ys.map((y) => (travel > 0 ? y / travel : 1));
 
   // Scroll so your car is in view once the race is laid out.
   const scrollRef = useRef<ScrollView>(null);
   const [viewportH, setViewportH] = useState(0);
   const [trackTop, setTrackTop] = useState(0);
   const myRow = racers.find((r) => r.user_id === userId);
-  const myCarY = myRow ? trackTop + trackH - 6 - fractionOf(myRow.total_steps) * travel - (carH + TAG_H) / 2 : null;
+  const myIndex = myRow ? racers.indexOf(myRow) : -1;
+  const myCarY = myIndex >= 0 ? trackTop + trackH - 6 - layout.ys[myIndex]! - (carH + TAG_H) / 2 : null;
   useEffect(() => {
     if (myCarY === null || !viewportH || !trackWidth) return;
     const id = setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, myCarY - viewportH / 2), animated: true }), 250);
@@ -101,7 +113,7 @@ export function GroupRace({ groupId, userId }: Props) {
                 row={row}
                 index={i}
                 x={positions[i]!}
-                fraction={fractionOf(row.total_steps)}
+                fraction={shown[i]!}
                 travel={travel}
                 carW={carW}
                 carH={carH}
@@ -191,52 +203,56 @@ function RaceCar({ row, index, x, fraction, travel, carW, carH, isMe, numberOnLe
   );
 }
 
+/** Vertical room one car needs: its name tag, the car, and a little air. */
+const CAR_SLOT_H = (MAX_CAR_W * CAR_RATIO) + TAG_H + 14;
+
+type RaceLayout = { xs: number[]; ys: number[]; travel: number; trackH: number };
+
 /**
- * Picks an x for each car (leader first): the column whose nearest car at a similar height is furthest
- * away, preferring the centre. Keeps cars from overlapping without fixed lanes.
+ * Places the cars (leader first). Height follows steps, but consecutive cars in the standings are
+ * kept at least `minGap` apart so a close race never piles cars on top of each other; the track
+ * grows to fit. Columns go centre-out by rank, so cars sharing a column are a full slot apart.
  */
-function placeCars(fractions: number[], width: number, carW: number, carH: number, travel: number): number[] {
-  if (width <= 0) return fractions.map(() => 0);
+function layoutRace(fractions: number[], width: number, carW: number, carH: number, baseTrackH: number): RaceLayout {
+  const n = fractions.length;
   const slotW = Math.max(carW + 12, TAG_W * 0.8);
   const columns = Math.max(1, Math.floor((width - 16) / slotW));
-  const colX = Array.from({ length: columns }, (_, c) => 8 + slotW / 2 + c * ((width - 16 - slotW) / Math.max(1, columns - 1)));
-  if (columns === 1) colX[0] = width / 2;
-  const center = (columns - 1) / 2;
+  const extra = carH + TAG_H + 12;
 
-  // Room for everyone: give each car its own evenly spaced spot, leader in the middle, then
-  // alternating left/right outward so neighbours in the standings are far apart.
-  if (fractions.length <= columns) {
-    const n = fractions.length;
+  // Few enough cars for one each: spread evenly across, leader in the middle, alternating outward.
+  if (n <= columns) {
+    const travel = baseTrackH - extra;
     const spots = Array.from({ length: n }, (_, i) =>
       n === 1 ? width / 2 : 8 + slotW / 2 + (i * (width - 16 - slotW)) / (n - 1)
     );
     const mid = (n - 1) / 2;
     const order = spots
       .map((x, i) => ({ x, d: Math.abs(i - mid), side: i < mid ? 0 : 1 }))
-      .sort((a, b) => a.d - b.d || a.side - b.side);
-    return fractions.map((_, i) => order[i]!.x);
+      .sort((p, q) => p.d - q.d || p.side - q.side);
+    return { xs: fractions.map((_, i) => order[i]!.x), ys: fractions.map((f) => f * travel), travel, trackH: baseTrackH };
   }
 
-  const placed: { col: number; y: number }[] = [];
+  // Neighbours in the standings sit in different columns, so they only need part of a slot between
+  // them; any two cars `columns` apart share a column and end up a whole slot or more apart.
+  const minGap = CAR_SLOT_H / Math.max(1, Math.floor(columns / 2));
+  const travel = Math.max(baseTrackH - extra, (n - 1) * minGap);
+  const trackH = travel + extra;
 
-  return fractions.map((fraction) => {
-    const y = fraction * travel;
-    let best = 0;
-    let bestScore = -1;
-    for (let c = 0; c < columns; c++) {
-      const nearest = placed
-        .filter((p) => p.col === c)
-        .reduce((min, p) => Math.min(min, Math.abs(p.y - y)), Number.POSITIVE_INFINITY);
-      // Cap the gap so empty columns tie, then break ties towards the centre.
-      const score = Math.min(nearest, carH + TAG_H + 20) * 100 - Math.abs(c - center);
-      if (score > bestScore) {
-        bestScore = score;
-        best = c;
-      }
-    }
-    placed.push({ col: best, y });
-    return colX[best]!;
-  });
+  // Keep each car within reach of its place (room above for everyone ahead, below for everyone
+  // behind), then push down any car that's too close to the one ahead.
+  const ys = fractions.map((f, i) => Math.min(Math.max(f * travel, (n - 1 - i) * minGap), travel - i * minGap));
+  for (let i = 1; i < n; i++) ys[i] = Math.min(ys[i]!, ys[i - 1]! - minGap);
+
+  const colX = Array.from(
+    { length: columns },
+    (_, c) => 8 + slotW / 2 + (c * (width - 16 - slotW)) / Math.max(1, columns - 1)
+  );
+  const center = (columns - 1) / 2;
+  const centreOut = colX
+    .map((x, c) => ({ x, d: Math.abs(c - center), side: c < center ? 0 : 1 }))
+    .sort((p, q) => p.d - q.d || p.side - q.side)
+    .map((c) => c.x);
+  return { xs: fractions.map((_, i) => centreOut[i % columns]!), ys, travel, trackH };
 }
 
 /** Top-down F1 car pointing up, scaled from its width. */

@@ -58,6 +58,13 @@ export const avatarColors = [
   '#A04100',
   '#455A64',
   '#C2185B',
+  '#283593',
+  '#8E24AA',
+  '#00838F',
+  '#2E7D32',
+  '#5D4037',
+  '#D84315',
+  '#212121',
 ];
 
 /** Applies an alpha (0–1) to a `#RRGGBB` or `rgb(a)(...)` colour. Paper's baseline purple uses rgba. */
