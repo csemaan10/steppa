@@ -180,3 +180,19 @@ export async function diagnoseToday(): Promise<DiagnosticLine[]> {
   }
   return lines;
 }
+
+/** Whether Health Connect lets Steppa read steps while closed. */
+export async function backgroundAccess(): Promise<'granted' | 'denied' | 'unavailable'> {
+  if (!(await isHealthAvailable()) || !(await ensureInitialized())) return 'unavailable';
+  return hasBackgroundRead(await getGrantedPermissions()) ? 'granted' : 'denied';
+}
+
+/** Asks for background access again (e.g. after it was declined). Resolves whether it's granted now. */
+export async function requestBackgroundAccess(): Promise<boolean> {
+  if (!(await ensureInitialized())) return false;
+  await requestPermission([{ accessType: 'read', recordType: 'BackgroundAccessPermission' }]);
+  return hasBackgroundRead(await getGrantedPermissions());
+}
+
+/** iOS-only concept; Android background sync is the periodic task alone. */
+export async function disableStepChangeDelivery(): Promise<void> {}

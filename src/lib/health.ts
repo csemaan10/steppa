@@ -35,3 +35,13 @@ export type DiagnosticLine = { label: string; value: string };
 export async function diagnoseToday(): Promise<DiagnosticLine[]> {
   return [{ label: 'Step check', value: 'Only available in the iOS and Android apps.' }];
 }
+
+export async function backgroundAccess(): Promise<'granted' | 'denied' | 'unavailable'> {
+  return 'unavailable';
+}
+
+export async function requestBackgroundAccess(): Promise<boolean> {
+  return false;
+}
+
+export async function disableStepChangeDelivery(): Promise<void> {}

@@ -27,10 +27,27 @@ type Props = {
   members: Map<string, Member>;
   /** Called with the newest message id each time the visible messages change (for the unread dot). */
   onRead?: (messageId: number) => void;
+  /** False while the Chat tab is hidden but kept alive: new messages stay unread. */
+  active?: boolean;
 };
 
-/** Chat rows: messages plus yesterday's podium card, which sits where today begins. */
-type Item = { kind: 'message'; message: ChatMessage } | { kind: 'podium' };
+/** Chat rows: messages, a separator above each day, and yesterday's podium card where today begins. */
+type Item = { kind: 'message'; message: ChatMessage } | { kind: 'podium' } | { kind: 'day'; day: string };
+
+/** "Today", "Yesterday", a weekday within the last week, else the date (with the year if not this one). */
+function dayLabel(day: string, today: Date): string {
+  const date = new Date(`${day}T12:00:00`);
+  const daysAgo = Math.round((today.getTime() - startOfDay(date).getTime()) / 86_400_000);
+  if (daysAgo === 0) return 'Today';
+  if (daysAgo === 1) return 'Yesterday';
+  if (daysAgo < 7) return date.toLocaleDateString(undefined, { weekday: 'long' });
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+  });
+}
 
 function addMessage(list: ChatMessage[], message: ChatMessage): ChatMessage[] {
   return list.some((m) => m.id === message.id) ? list : [message, ...list];
@@ -40,7 +57,7 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-export function GroupChat({ groupId, userId, members, onRead }: Props) {
+export function GroupChat({ groupId, userId, members, onRead, active = true }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   // Newest first, rendered in an inverted list.
@@ -127,19 +144,28 @@ export function GroupChat({ groupId, userId, members, onRead }: Props) {
   const newestId = messages[0]?.id;
   useEffect(() => {
     if (newestId === undefined) return;
+    if (!active) return;
     markRead(groupId, newestId);
     onRead?.(newestId);
-  }, [groupId, newestId, onRead]);
+  }, [groupId, newestId, onRead, active]);
 
-  // Newest first (inverted list), with the podium card placed after today's messages.
-  const todayMs = today.getTime();
-  const firstOlder = messages.findIndex((m) => new Date(m.created_at).getTime() < todayMs);
-  const split = firstOlder === -1 ? messages.length : firstOlder;
-  const items: Item[] = [
-    ...messages.slice(0, split).map((message) => ({ kind: 'message' as const, message })),
-    ...(podium.length ? [{ kind: 'podium' as const }] : []),
-    ...messages.slice(split).map((message) => ({ kind: 'message' as const, message })),
-  ];
+  // Newest first (inverted list, so later items show above): each day's messages, then its
+  // separator. Today's podium card goes between today's messages and the "Today" separator.
+  const todayKey = toDayKey(today);
+  const items: Item[] = [];
+  const closeDay = (day: string) => {
+    if (day === todayKey && podium.length) items.push({ kind: 'podium' });
+    items.push({ kind: 'day', day });
+  };
+  let currentDay: string | null = null;
+  for (const message of messages) {
+    const day = toDayKey(new Date(message.created_at));
+    if (currentDay !== null && day !== currentDay) closeDay(currentDay);
+    else if (currentDay === null && day !== todayKey && podium.length) closeDay(todayKey);
+    currentDay = day;
+    items.push({ kind: 'message', message });
+  }
+  if (currentDay !== null || podium.length) closeDay(currentDay ?? todayKey);
 
   async function send() {
     const body = draft.trim();
@@ -167,10 +193,21 @@ export function GroupChat({ groupId, userId, members, onRead }: Props) {
       <FlatList
         inverted
         data={items}
-        keyExtractor={(i) => (i.kind === 'podium' ? 'podium' : String(i.message.id))}
+        keyExtractor={(i) => (i.kind === 'podium' ? 'podium' : i.kind === 'day' ? `day:${i.day}` : String(i.message.id))}
         contentContainerStyle={styles.list}
         renderItem={({ item: row, index }) => {
           if (row.kind === 'podium') return <ChatPodiumCard rows={podium} day={yesterday} userId={userId} />;
+          if (row.kind === 'day') {
+            return (
+              <View style={styles.daySeparator} accessibilityRole="header">
+                <View style={[styles.dayPill, { backgroundColor: theme.colors.surfaceVariant }]}>
+                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {dayLabel(row.day, today)}
+                  </Text>
+                </View>
+              </View>
+            );
+          }
           const item = row.message;
           const mine = item.user_id === userId;
           const member = members.get(item.user_id);
@@ -264,6 +301,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   list: { padding: 16, gap: 8, flexGrow: 1 },
   empty: { textAlign: 'center', marginTop: 32 },
+  daySeparator: { alignItems: 'center', marginTop: 12, marginBottom: 4 },
+  dayPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
   messageRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 8 },
   mineRow: { justifyContent: 'flex-end' },
   tight: { marginTop: 0 },

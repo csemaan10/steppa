@@ -1,3 +1,4 @@
+import type { CharacterLook } from '@/lib/character';
 import { addDays, lastNDays, startOfDay, toDayKey } from '@/lib/dates';
 import { healthSourceName, readDailySteps } from '@/lib/health';
 import { supabase } from '@/lib/supabase';
@@ -8,6 +9,8 @@ export type Profile = {
   display_name: string;
   avatar_color: string;
   avatar_icon: string | null;
+  /** Podium character as stored; read it through normalizeLook (src/lib/character.ts). */
+  podium_character?: CharacterLook | null;
   daily_goal: number;
   created_at: string;
 };
@@ -27,6 +30,8 @@ export type Group = {
 export type GroupWithCount = Group & { member_count: number };
 
 export type LeaderboardRow = {
+  /** Podium character as stored (null until the player makes one); see normalizeLook. */
+  podium_character?: CharacterLook | null;
   user_id: string;
   username: string;
   display_name: string;
@@ -195,7 +200,7 @@ export async function getProfile(id: string): Promise<Profile> {
 
 export async function updateProfile(
   id: string,
-  patch: Partial<Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon'>>
+  patch: Partial<Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon' | 'podium_character'>>
 ): Promise<Profile> {
   return unwrap<Profile>(
     await supabase.from('profiles').update(patch).eq('id', id).select('*').single()

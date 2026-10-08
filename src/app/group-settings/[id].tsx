@@ -43,7 +43,7 @@ export default function GroupSettingsScreen() {
   if (!data) {
     return (
       <View style={[styles.flex, screenBackground(theme)]}>
-        <Appbar.Header style={transparentHeader}>
+        <Appbar.Header mode="small" style={transparentHeader}>
           <Appbar.BackAction onPress={() => router.back()} />
           <Appbar.Content title="Group settings" />
         </Appbar.Header>
@@ -57,7 +57,7 @@ export default function GroupSettingsScreen() {
   if (data.group.owner_id !== userId) {
     return (
       <View style={[styles.flex, screenBackground(theme)]}>
-        <Appbar.Header style={transparentHeader}>
+        <Appbar.Header mode="small" style={transparentHeader}>
           <Appbar.BackAction onPress={() => router.back()} />
           <Appbar.Content title="Group settings" />
         </Appbar.Header>
@@ -127,7 +127,7 @@ function SettingsForm({ group, members, userId, reload }: FormProps) {
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
-      <Appbar.Header style={transparentHeader}>
+      <Appbar.Header mode="small" style={transparentHeader}>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="Group settings" />
         <Appbar.Action

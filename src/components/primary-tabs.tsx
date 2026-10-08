@@ -62,7 +62,7 @@ export function PrimaryTabs<T extends string>({ value, onChange, tabs }: Props<T
                 <MaterialCommunityIcons name={active ? (t.activeIcon ?? t.icon) : t.icon} size={24} color={color} />
                 {t.badge ? <View style={[styles.badge, { backgroundColor: theme.colors.error }]} /> : null}
               </View>
-              <Text variant="titleSmall" style={{ color }}>
+              <Text variant="titleSmall" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ color }}>
                 {t.label}
               </Text>
             </View>

@@ -77,7 +77,7 @@ export default function GroupsScreen() {
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
-      <Appbar.Header style={transparentHeader}>
+      <Appbar.Header mode="small" style={transparentHeader}>
         <Appbar.Content title="Groups" />
       </Appbar.Header>
 

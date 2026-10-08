@@ -30,7 +30,7 @@ export default function UserScreen() {
   if (!data) {
     return (
       <View style={[styles.flex, screenBackground(theme)]}>
-        <Appbar.Header style={transparentHeader}>
+        <Appbar.Header mode="small" style={transparentHeader}>
           <Appbar.BackAction onPress={() => router.back()} />
         </Appbar.Header>
         <View style={styles.center}>
@@ -67,7 +67,7 @@ export default function UserScreen() {
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
-      <Appbar.Header style={transparentHeader}>
+      <Appbar.Header mode="small" style={transparentHeader}>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title={them.display_name} />
       </Appbar.Header>

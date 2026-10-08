@@ -1,12 +1,12 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { BlurView } from 'expo-blur';
-import { usePathname } from 'expo-router';
+import { Navigator } from 'expo-router';
 import type { TabTriggerSlotProps } from 'expo-router/ui';
 import type { ComponentProps, ReactNode, RefObject } from 'react';
-import { createContext, use, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { createContext, use, useEffect } from 'react';
+import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BUTTON_WIDTH = 74;
@@ -26,15 +26,14 @@ export function useTabBarSpace(): number {
 }
 
 /**
- * Active tab from the URL. TabTrigger's own isFocused never updates, and while a non-tab screen
- * (like a group, shown over the tabs) is open we keep the last tab so the indicator doesn't jump.
+ * The focused tab, from the tabs navigator's own state (this bar renders inside <Tabs>), like a
+ * standard custom tab bar. Not TabTrigger's isFocused: expo-router memoises it on the first state,
+ * so it never updates. Unlike the URL, this stays right while a group or Settings covers the tabs.
  */
 function useActiveTab(tabs: string[]): string {
-  const segment = usePathname().split('/')[1] || 'index';
-  const isTab = tabs.includes(segment);
-  const [last, setLast] = useState(isTab ? segment : tabs[0]!);
-  if (isTab && segment !== last) setLast(segment);
-  return isTab ? segment : last;
+  const { state } = Navigator.useContext();
+  const name = state.routes[state.index]?.name;
+  return name && tabs.includes(name) ? name : tabs[0]!;
 }
 
 const ActiveTabContext = createContext<string>('index');
@@ -50,9 +49,18 @@ export function FloatingTabBar({ blurTarget, tabs, children }: Props) {
   const activeIndex = Math.max(0, tabs.indexOf(activeTab));
   const targetX = activeIndex * (BUTTON_WIDTH + GAP);
 
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: withTiming(targetX, { duration: 220 }) }],
-  }));
+  // Slide to the active tab. A slide cut short while the app is in the background can freeze
+  // halfway, so the highlight snaps into place whenever the app comes back.
+  const x = useSharedValue(targetX);
+  useEffect(() => {
+    x.set(withTiming(targetX, { duration: 220 }));
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') x.set(targetX);
+    });
+    return () => sub.remove();
+  }, [x, targetX]);
+
+  const indicatorStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
 
   return (
     <View pointerEvents="box-none" style={[styles.wrapper, { bottom: insets.bottom + TAB_BAR_MARGIN }]}>

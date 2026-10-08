@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AppState, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Appbar,
@@ -9,11 +9,13 @@ import {
   Text,
 } from 'react-native-paper';
 
+import { CharacterIntroCard } from '@/components/character/character-intro-card';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GroupPreview } from '@/components/group-preview';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
 import { StreakCard } from '@/components/profile-stats';
 import { ProgressRing } from '@/components/progress-ring';
+import { RecapPreview } from '@/components/recap/recap-preview';
 import { useLoader } from '@/hooks/use-loader';
 import { registerBackgroundSync } from '@/lib/background-sync';
 import {
@@ -34,6 +36,7 @@ import {
   openHealthSettings,
   requestHealthPermission,
 } from '@/lib/health';
+import { loadRecap, markRecapSeen, recapUnseen } from '@/lib/recap';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, surfaceCard, transparentHeader, useAppTheme } from '@/theme';
 
@@ -71,17 +74,29 @@ export default function TodayScreen() {
       getMyGroups(),
       getProfileStats(userId),
     ]);
-    const previews = await Promise.all(
-      groups.slice(0, 3).map(async (group) => {
-        const [rows, latestMessageId] = await Promise.all([
-          getLeaderboard(group.id, 'today'),
-          getLatestMessageId(group.id, userId),
-        ]);
-        return { group, rows, latestMessageId };
-      })
-    );
-    return { profile, history, previews, lifetime, health, syncError };
+    const [previews, recap] = await Promise.all([
+      Promise.all(
+        groups.slice(0, 3).map(async (group) => {
+          const [rows, latestMessageId] = await Promise.all([
+            getLeaderboard(group.id, 'today'),
+            getLatestMessageId(group.id, userId),
+          ]);
+          return { group, rows, latestMessageId };
+        })
+      ),
+      // Extra: if the recap fails to load, the rest of the screen still shows.
+      loadRecap(userId, groups).catch(() => null),
+    ]);
+    return { profile, history, previews, lifetime, recap, health, syncError };
   }, userId);
+
+  // The morning recap pops up once a day, the first time Today loads after 5 am.
+  const recap = data?.recap;
+  useEffect(() => {
+    if (!recap?.groups.length || !recapUnseen(recap.day)) return;
+    markRecapSeen(recap.day);
+    router.push('/recap');
+  }, [recap]);
 
   // Keep today's count live while this tab is on screen: re-sync on app resume (focus doesn't
   // change then) and every minute in the foreground, so we don't fall behind the health app.
@@ -123,7 +138,7 @@ export default function TodayScreen() {
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
-      <Appbar.Header style={transparentHeader}>
+      <Appbar.Header mode="small" style={transparentHeader}>
         <Appbar.Content title="Today" />
         <Appbar.Action
           icon="sync"
@@ -131,6 +146,7 @@ export default function TodayScreen() {
           onPress={reload}
           accessibilityLabel={`Sync with ${healthSourceName}`}
         />
+        <Appbar.Action icon="cog-outline" onPress={() => router.push('/settings')} accessibilityLabel="Settings" />
       </Appbar.Header>
 
       <ScrollView
@@ -161,6 +177,8 @@ export default function TodayScreen() {
             ) : null}
           </Card>
         ) : null}
+
+        {data ? <CharacterIntroCard profile={data.profile} /> : null}
 
         <View style={styles.hero}>
             {/* Sized so the streak card still fits on screen below the insight tiles. */}
@@ -268,6 +286,7 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
+        {recap?.groups.length ? <RecapPreview recap={recap} userId={userId} /> : null}
       </ScrollView>
 
       <Snackbar

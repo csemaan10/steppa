@@ -65,6 +65,23 @@ export const avatarColors = [
   '#5D4037',
   '#D84315',
   '#212121',
+  // Vibrant: bright and saturated, but dark enough that the white initials/icon stay readable.
+  '#FF1744',
+  '#F50057',
+  '#FF2E93',
+  '#D500F9',
+  '#AA00FF',
+  '#7C3AED',
+  '#651FFF',
+  '#3D5AFE',
+  '#2962FF',
+  '#0091EA',
+  '#00A3A3',
+  '#00A86B',
+  '#2DB300',
+  '#FF6D00',
+  '#FF3D00',
+  '#E8A200',
 ];
 
 /** Applies an alpha (0–1) to a `#RRGGBB` or `rgb(a)(...)` colour. Paper's baseline purple uses rgba. */

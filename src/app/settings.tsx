@@ -1,11 +1,15 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Appbar, Button, Card, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Card, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AccountCard } from '@/components/account-card';
 import { AppLockCard } from '@/components/app-lock-card';
+import { BackgroundSyncCard } from '@/components/background-sync-card';
 import { BlockedUsersCard } from '@/components/blocked-users-card';
+import { CharacterEditorCard } from '@/components/character/character-editor-card';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { StepCheckCard } from '@/components/step-check-card';
 import { ThemePicker } from '@/components/theme-picker';
 import { AVATAR_ICONS, UserAvatar } from '@/components/user-avatar';
@@ -13,9 +17,6 @@ import { useLoader } from '@/hooks/use-loader';
 import { getProfile, updateProfile, type Profile } from '@/lib/api';
 import { useUserId } from '@/providers/auth-provider';
 import { avatarColors, screenBackground, surfaceCard, transparentHeader } from '@/theme';
-
-/** Avatar icons shown before "Show all": about two rows on a phone. */
-const COLLAPSED_ICONS = 12;
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -25,7 +26,7 @@ export default function SettingsScreen() {
   if (!profile) {
     return (
       <View style={[styles.flex, screenBackground(theme)]}>
-        <Appbar.Header style={transparentHeader}>
+        <Appbar.Header mode="small" style={transparentHeader}>
           <Appbar.BackAction onPress={() => router.back()} />
           <Appbar.Content title="Settings" />
         </Appbar.Header>
@@ -43,61 +44,62 @@ export default function SettingsScreen() {
 function SettingsForm({ profile, userId }: { profile: Profile; userId: string }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // Opened from the Today card with focus=character: scroll the character editor into view.
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const scroller = useRef<ScrollView>(null);
+  const scrolledToFocus = useRef(false);
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [goal, setGoal] = useState(String(profile.daily_goal));
   const [color, setColor] = useState(profile.avatar_color);
   const [icon, setIcon] = useState(profile.avatar_icon);
-  const [allIcons, setAllIcons] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [openAvatar, setOpenAvatar] = useState<'color' | 'icon' | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // What's saved on the server, to skip saving a field that didn't change.
+  const [saved, setSaved] = useState({ displayName: profile.display_name, goal: String(profile.daily_goal) });
 
-  // Collapsed: the first two rows, always including the current pick so it stays visible.
   const iconOptions: (string | null)[] = [null, ...AVATAR_ICONS];
-  const shownIcons = allIcons
-    ? iconOptions
-    : [...(icon && iconOptions.indexOf(icon) >= COLLAPSED_ICONS ? [icon] : []), ...iconOptions].slice(
-        0,
-        COLLAPSED_ICONS
-      );
+  const toggleAvatar = (key: 'color' | 'icon') => setOpenAvatar((current) => (current === key ? null : key));
 
-  const dirty =
-    displayName.trim() !== profile.display_name ||
-    goal !== String(profile.daily_goal) ||
-    color !== profile.avatar_color ||
-    icon !== profile.avatar_icon;
-
-  async function save() {
-    const goalNum = Number(goal);
-    if (!displayName.trim() || !Number.isInteger(goalNum) || goalNum < 1000 || goalNum > 100000) {
-      setSaveError('Enter a name and a goal between 1,000 and 100,000.');
-      return;
-    }
-    setSaving(true);
+  // Everything on this screen saves as you change it, like the cards below.
+  async function save(patch: Parameters<typeof updateProfile>[1]) {
     try {
-      await updateProfile(userId, {
-        display_name: displayName.trim(),
-        daily_goal: goalNum,
-        avatar_color: color,
-        avatar_icon: icon,
-      });
+      await updateProfile(userId, patch);
       setSaveError(null);
-      router.back();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Could not save');
-    } finally {
-      setSaving(false);
     }
+  }
+
+  function saveName() {
+    const name = displayName.trim();
+    if (!name) {
+      setSaveError('Enter a name.');
+      return;
+    }
+    if (name === saved.displayName) return;
+    setSaved((prev) => ({ ...prev, displayName: name }));
+    save({ display_name: name });
+  }
+
+  function saveGoal() {
+    const goalNum = Number(goal);
+    if (!Number.isInteger(goalNum) || goalNum < 1000 || goalNum > 100000) {
+      setSaveError('Enter a goal between 1,000 and 100,000 steps.');
+      return;
+    }
+    if (goal === saved.goal) return;
+    setSaved((prev) => ({ ...prev, goal }));
+    save({ daily_goal: goalNum });
   }
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
-      <Appbar.Header style={transparentHeader}>
+      <Appbar.Header mode="small" style={transparentHeader}>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content title="Settings" />
-        <Appbar.Action icon="check" onPress={save} disabled={!dirty || saving} accessibilityLabel="Save" />
       </Appbar.Header>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
+      <ScrollView ref={scroller} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.preview}>
           <UserAvatar name={displayName || profile.display_name} color={color} icon={icon} size={88} />
           <Text variant="titleLarge" numberOfLines={1}>
@@ -112,6 +114,7 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
               label="Display name"
               value={displayName}
               onChangeText={setDisplayName}
+              onBlur={saveName}
               maxLength={40}
             />
             <TextInput
@@ -119,6 +122,7 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
               label="Daily step goal"
               value={goal}
               onChangeText={(t) => setGoal(t.replace(/\D/g, ''))}
+              onBlur={saveGoal}
               keyboardType="number-pad"
             />
             {saveError ? (
@@ -130,56 +134,79 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
         </Card>
 
         <Card mode="contained" style={surfaceCard(theme)}>
-          <Card.Content style={styles.section}>
-            <Text variant="titleSmall">Avatar color</Text>
-            <View style={styles.wrap}>
-              {avatarColors.map((c) => (
-                <Pressable
-                  key={c}
-                  onPress={() => setColor(c)}
-                  accessibilityLabel={`Color ${c}`}
-                  accessibilityState={{ selected: c === color }}
-                  style={[
-                    styles.swatch,
-                    { backgroundColor: c },
-                    c === color && { borderColor: theme.colors.onSurface, borderWidth: 3 },
-                  ]}
-                />
-              ))}
-            </View>
-            <Text variant="titleSmall">Avatar</Text>
-            <View style={styles.wrap}>
-              {shownIcons.map((option) => {
-                const selected = option === icon;
-                return (
+          <Card.Title title="Avatar" titleVariant="titleMedium" />
+          <Card.Content style={styles.avatarSections}>
+            <CollapsibleSection
+              title="Colour"
+              accessory={<View style={[styles.dot, { backgroundColor: color }]} />}
+              expanded={openAvatar === 'color'}
+              onToggle={() => toggleAvatar('color')}>
+              <View style={styles.wrap}>
+                {avatarColors.map((c) => (
                   <Pressable
-                    key={option ?? 'initials'}
-                    onPress={() => setIcon(option)}
-                    accessibilityLabel={option ? `${option} avatar` : 'Initials avatar'}
-                    accessibilityState={{ selected }}
-                    style={[styles.iconRing, { borderColor: selected ? theme.colors.onSurface : 'transparent' }]}>
-                    <UserAvatar name={displayName || '?'} color={color} icon={option} size={40} />
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Button
-              compact
-              icon={allIcons ? 'chevron-up' : 'chevron-down'}
-              onPress={() => setAllIcons((v) => !v)}
-              style={styles.more}>
-              {allIcons ? 'Show less' : `Show all ${iconOptions.length}`}
-            </Button>
+                    key={c}
+                    onPress={() => {
+                      setColor(c);
+                      save({ avatar_color: c });
+                    }}
+                    accessibilityLabel={`Color ${c}`}
+                    accessibilityState={{ selected: c === color }}
+                    style={[
+                      styles.swatch,
+                      { backgroundColor: c },
+                      c === color && { borderColor: theme.colors.onSurface, borderWidth: 3 },
+                    ]}
+                  />
+                ))}
+              </View>
+            </CollapsibleSection>
+            <CollapsibleSection
+              title="Icon"
+              accessory={<UserAvatar name={displayName || '?'} color={color} icon={icon} size={24} />}
+              expanded={openAvatar === 'icon'}
+              onToggle={() => toggleAvatar('icon')}>
+              <View style={styles.wrap}>
+                {iconOptions.map((option) => {
+                  const selected = option === icon;
+                  return (
+                    <Pressable
+                      key={option ?? 'initials'}
+                      onPress={() => {
+                        setIcon(option);
+                        save({ avatar_icon: option });
+                      }}
+                      accessibilityLabel={option ? `${option} avatar` : 'Initials avatar'}
+                      accessibilityState={{ selected }}
+                      style={[styles.iconRing, { borderColor: selected ? theme.colors.onSurface : 'transparent' }]}>
+                      <UserAvatar name={displayName || '?'} color={color} icon={option} size={40} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </CollapsibleSection>
           </Card.Content>
         </Card>
+
+        <View
+          onLayout={(e) => {
+            if (focus !== 'character' || scrolledToFocus.current) return;
+            scrolledToFocus.current = true;
+            scroller.current?.scrollTo({ y: e.nativeEvent.layout.y - 8, animated: true });
+          }}>
+          <CharacterEditorCard key={profile.id} profile={profile} />
+        </View>
 
         <ThemePicker />
 
         <AppLockCard />
 
+        <BackgroundSyncCard />
+
         <BlockedUsersCard userId={userId} />
 
         <StepCheckCard />
+
+        <AccountCard userId={userId} />
       </ScrollView>
     </View>
   );
@@ -194,5 +221,6 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   swatch: { width: 36, height: 36, borderRadius: 18 },
   iconRing: { borderWidth: 2, borderRadius: 999, padding: 2 },
-  more: { alignSelf: 'flex-start' },
+  avatarSections: { gap: 10, paddingBottom: 16 },
+  dot: { width: 20, height: 20, borderRadius: 10 },
 });

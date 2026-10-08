@@ -1,16 +1,27 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Card, Icon, Text, useTheme } from 'react-native-paper';
+import { Card, Icon, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
-import { useThemeChoice } from '@/providers/theme-provider';
+import { useThemeChoice, type AppearanceMode } from '@/providers/theme-provider';
 import { PALETTES, surfaceCard, THEME_NAMES } from '@/theme';
 
 export function ThemePicker() {
   const theme = useTheme();
-  const { themeName, setThemeName } = useThemeChoice();
+  const { themeName, setThemeName, mode, setMode } = useThemeChoice();
 
   return (
     <Card mode="contained" style={surfaceCard(theme)}>
       <Card.Title title="Theme" titleVariant="titleMedium" />
+      <Card.Content style={styles.mode}>
+        <SegmentedButtons
+          value={mode}
+          onValueChange={(v) => setMode(v as AppearanceMode)}
+          buttons={[
+            { value: 'system', label: 'System', icon: 'theme-light-dark' },
+            { value: 'light', label: 'Light', icon: 'white-balance-sunny' },
+            { value: 'dark', label: 'Dark', icon: 'weather-night' },
+          ]}
+        />
+      </Card.Content>
       <Card.Content style={styles.row}>
         {THEME_NAMES.map((name) => {
           const palette = PALETTES[name];
@@ -46,6 +57,7 @@ export function ThemePicker() {
 }
 
 const styles = StyleSheet.create({
+  mode: { paddingBottom: 16 },
   // Four per row: eight themes make two even rows on a phone.
   row: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 16, paddingBottom: 16 },
   option: { width: '25%', alignItems: 'center', gap: 6 },

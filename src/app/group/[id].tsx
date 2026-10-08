@@ -18,6 +18,7 @@ import { GroupAvatar } from '@/components/group-avatar';
 import { UserAvatar } from '@/components/user-avatar';
 import { GroupChat } from '@/components/group-chat';
 import { GroupRace } from '@/components/group-race';
+import { TrophyCabinet } from '@/components/trophy-cabinet';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { Podium } from '@/components/podium';
 import { PrimaryTabs } from '@/components/primary-tabs';
@@ -37,7 +38,7 @@ import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader } from '@/theme';
 
-type GroupView = 'board' | 'chat' | 'race';
+type GroupView = 'board' | 'chat' | 'race' | 'trophies';
 
 export default function GroupScreen() {
   const theme = useTheme();
@@ -47,6 +48,12 @@ export default function GroupScreen() {
   const { backdropStyle, containerStyle, contentStyle, pointerEvents, close } = useExpandTransition(oy, oh);
   const [period, setPeriod] = useState<Period>('today');
   const [view, setView] = useState<GroupView>('board');
+  // Tabs are built on first visit and then kept, only hidden, so switching back is instant.
+  const [visited, setVisited] = useState<Set<GroupView>>(() => new Set<GroupView>(['board']));
+  function openView(next: GroupView) {
+    setView(next);
+    setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+  }
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -129,7 +136,7 @@ export default function GroupScreen() {
       />
       <Animated.View style={[screenBackground(theme), containerStyle]}>
         <Animated.View style={contentStyle}>
-      <Appbar.Header style={transparentHeader}>
+      <Appbar.Header mode="small" style={transparentHeader}>
         <Appbar.BackAction onPress={close} />
         <Appbar.Content
           title={
@@ -171,20 +178,32 @@ export default function GroupScreen() {
       <View style={styles.viewSwitch}>
         <PrimaryTabs
           value={view}
-          onChange={setView}
+          onChange={openView}
           tabs={[
             { value: 'board', label: 'Leaderboard', icon: 'podium' },
             { value: 'chat', label: 'Chat', icon: 'chat-outline', activeIcon: 'chat', badge: unreadChat },
             { value: 'race', label: 'Race', icon: 'flag-checkered' },
+            { value: 'trophies', label: 'Trophies', icon: 'trophy-outline', activeIcon: 'trophy' },
           ]}
         />
       </View>
 
-      {view === 'race' ? (
-        <GroupRace groupId={id} userId={userId} />
-      ) : view === 'chat' ? (
-        <GroupChat groupId={id} userId={userId} members={members} onRead={onChatRead} />
-      ) : (
+      {visited.has('trophies') ? (
+        <View style={[styles.flex, view !== 'trophies' && styles.hidden]}>
+          <TrophyCabinet rows={data?.leaderboard ?? []} userId={userId} onPressUser={openUser} active={view === 'trophies'} />
+        </View>
+      ) : null}
+      {visited.has('race') ? (
+        <View style={[styles.flex, view !== 'race' && styles.hidden]}>
+          <GroupRace groupId={id} userId={userId} />
+        </View>
+      ) : null}
+      {visited.has('chat') ? (
+        <View style={[styles.flex, view !== 'chat' && styles.hidden]}>
+          <GroupChat groupId={id} userId={userId} members={members} onRead={onChatRead} active={view === 'chat'} />
+        </View>
+      ) : null}
+      <View style={[styles.flex, view !== 'board' && styles.hidden]}>
         <FlatList
           data={data?.leaderboard.slice(3) ?? []}
           keyExtractor={(row) => row.user_id}
@@ -218,7 +237,8 @@ export default function GroupScreen() {
               {error ? <Text style={{ color: theme.colors.error }}>{error}</Text> : null}
               {data?.leaderboard.length ? (
                 <Podium
-                  key={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
+                  replayKey={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
+                  animate={view === 'board'}
                   rows={data.leaderboard}
                   userId={userId}
                   showAverage={!singleDay}
@@ -267,7 +287,7 @@ export default function GroupScreen() {
             );
           }}
         />
-      )}
+      </View>
         </Animated.View>
       </Animated.View>
     </View>
@@ -276,6 +296,7 @@ export default function GroupScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  hidden: { display: 'none' },
   viewSwitch: {},
   title: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   titleText: { flexShrink: 1 },

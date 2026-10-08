@@ -1,6 +1,7 @@
 import {
   AuthorizationRequestStatus,
   configureBackgroundTypes,
+  disableAllBackgroundDelivery,
   getRequestStatusForAuthorization,
   isHealthDataAvailable,
   isProtectedDataAvailable,
@@ -134,4 +135,18 @@ export async function diagnoseToday(): Promise<DiagnosticLine[]> {
     );
   });
   return lines;
+}
+
+/** Apple Health needs no separate permission to wake Steppa in the background. */
+export async function backgroundAccess(): Promise<'granted' | 'denied' | 'unavailable'> {
+  return 'granted';
+}
+
+export async function requestBackgroundAccess(): Promise<boolean> {
+  return true;
+}
+
+/** Stops Apple Health waking Steppa for new steps (background sync switched off). */
+export async function disableStepChangeDelivery(): Promise<void> {
+  await disableAllBackgroundDelivery();
 }
