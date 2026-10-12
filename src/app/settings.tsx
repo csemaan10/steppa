@@ -10,6 +10,7 @@ import { BackgroundSyncCard } from '@/components/background-sync-card';
 import { BlockedUsersCard } from '@/components/blocked-users-card';
 import { CharacterEditorCard } from '@/components/character/character-editor-card';
 import { CollapsibleSection } from '@/components/collapsible-section';
+import { RingStylePicker } from '@/components/ring-style-picker';
 import { StepCheckCard } from '@/components/step-check-card';
 import { ThemePicker } from '@/components/theme-picker';
 import { AVATAR_ICONS, UserAvatar } from '@/components/user-avatar';
@@ -197,6 +198,8 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
         </View>
 
         <ThemePicker />
+
+        <RingStylePicker />
 
         <AppLockCard />
 

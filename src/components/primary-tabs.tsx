@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -15,12 +15,18 @@ export type PrimaryTab<T extends string> = {
   badge?: boolean;
 };
 
-type Props<T extends string> = { value: T; onChange: (value: T) => void; tabs: PrimaryTab<T>[] };
+type Props<T extends string> = {
+  value: T;
+  onChange: (value: T) => void;
+  tabs: PrimaryTab<T>[];
+  /** Live tab position (0 = first tab, may be between tabs): the indicator follows it, e.g. while swiping pages. */
+  position?: SharedValue<number>;
+};
 
 type Box = { x: number; width: number };
 
 /** Material 3 primary tabs: icon over label, with an indicator that slides under the active tab's content. */
-export function PrimaryTabs<T extends string>({ value, onChange, tabs }: Props<T>) {
+export function PrimaryTabs<T extends string>({ value, onChange, tabs, position }: Props<T>) {
   const theme = useTheme();
   const [tabBoxes, setTabBoxes] = useState<Partial<Record<T, Box>>>({});
   const [contentBoxes, setContentBoxes] = useState<Partial<Record<T, Box>>>({});
@@ -30,10 +36,29 @@ export function PrimaryTabs<T extends string>({ value, onChange, tabs }: Props<T
   const x = (tab?.x ?? 0) + (content?.x ?? 0);
   const width = content?.width ?? 0;
 
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: withTiming(x, { duration: 220 }) }],
-    width: withTiming(width, { duration: 220 }),
-  }));
+  // Every tab's indicator spot, once all are measured, so a live position can slide between them.
+  const spots = tabs.map((t) => {
+    const tb = tabBoxes[t.value];
+    const cb = contentBoxes[t.value];
+    return tb && cb ? { x: tb.x + cb.x, width: cb.width } : null;
+  });
+  const measured = spots.every((s) => s !== null);
+  const steps = tabs.map((_, i) => i);
+  const xs = spots.map((s) => s?.x ?? 0);
+  const widths = spots.map((s) => s?.width ?? 0);
+
+  const indicatorStyle = useAnimatedStyle(() => {
+    if (position && measured) {
+      return {
+        transform: [{ translateX: interpolate(position.value, steps, xs, 'clamp') }],
+        width: interpolate(position.value, steps, widths, 'clamp'),
+      };
+    }
+    return {
+      transform: [{ translateX: withTiming(x, { duration: 220 }) }],
+      width: withTiming(width, { duration: 220 }),
+    };
+  });
 
   return (
     <View style={[styles.bar, { borderBottomColor: theme.colors.outlineVariant }]} accessibilityRole="tablist">

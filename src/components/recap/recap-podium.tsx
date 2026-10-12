@@ -14,6 +14,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { CharacterCanvas } from '@/components/character/character-canvas';
+import { ENTRANCE_HEADS_OFF, ENTRANCE_POSE, ENTRANCE_SECONDS } from '@/components/character/entrance';
+import { EntranceStage, bringToFront } from '@/components/character/entrance-stage';
 import { CHEER_HOP } from '@/components/character/rig';
 import { MEDAL_COLORS } from '@/components/character/scene-common';
 import { useCountUp } from '@/hooks/use-count-up';
@@ -71,29 +73,64 @@ function Spot({ row, slot, isMe, compact, play }: SpotProps) {
   // Ties share a rank, so the medal follows the rank, not the slot.
   const place = Math.min(row.rank, 3) - 1;
   const delay = RISE[slot]!;
+  const look = useMemo(() => normalizeLook(row.podium_character, row.user_id), [row.podium_character, row.user_id]);
+  // The chosen way of getting up onto the block (null: the block simply rises with them on it).
+  const entrance = look.entrance !== 'rise' && !reduceMotion ? look.entrance : null;
   const rise = useSharedValue(reduceMotion ? 1 : 0);
+  // Seconds into the entrance; negative until it starts.
+  const clock = useSharedValue(-1);
   const steps = useCountUp(play ? row.total_steps : 0, 900, delay + 200);
-  const [cheering, setCheering] = useState(!reduceMotion);
+  const [cheering, setCheering] = useState(!reduceMotion && !entrance);
+  const [entering, setEntering] = useState(false);
+  // Over the other spots while the entrance's effects cross them (see bringToFront).
+  const [z, setZ] = useState(0);
 
-  // A smooth rise (no bounce), then a few cheering hops before their own idle move.
+  // A smooth rise (no bounce), then a few cheering hops before their own idle move. With an
+  // entrance the block rises empty first, then they make their entrance and go straight into their
+  // own move.
   useEffect(() => {
     if (!play || reduceMotion) return;
     rise.set(0);
     rise.set(withDelay(delay, withTiming(1, { duration: RISE_MS, easing: ease })));
-    // On a replay they cheer again, starting as their block starts to rise.
-    const start = setTimeout(() => setCheering(true), delay);
-    const stop = setTimeout(() => setCheering(false), delay + RISE_MS + CHEER_MS);
-    return () => {
-      clearTimeout(start);
-      clearTimeout(stop);
-    };
-  }, [play, reduceMotion, delay, rise]);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (entrance) {
+      const start = delay + RISE_MS;
+      const length = ENTRANCE_SECONDS[entrance] * 1000;
+      clock.set(-1);
+      clock.set(
+        withDelay(
+          start,
+          withSequence(
+            withTiming(0, { duration: 1 }),
+            withTiming(ENTRANCE_SECONDS[entrance], { duration: length, easing: Easing.linear })
+          )
+        )
+      );
+      // Into the entrance pose straight away (a replay doesn't start cheering), while they're still
+      // hidden: the clock starts them on the UI thread, and a late switch would flash their idle
+      // pose (and pets) for a frame.
+      timers.push(
+        setTimeout(() => {
+          setCheering(false);
+          setEntering(true);
+        }, 0)
+      );
+      timers.push(setTimeout(() => setEntering(false), start + length));
+      timers.push(setTimeout(() => setZ(bringToFront()), start));
+      const off = ENTRANCE_HEADS_OFF[entrance];
+      if (off !== undefined) timers.push(setTimeout(() => setZ(bringToFront()), start + off * 1000));
+    } else {
+      // On a replay they cheer again, starting as their block starts to rise.
+      timers.push(setTimeout(() => setCheering(true), delay));
+      timers.push(setTimeout(() => setCheering(false), delay + RISE_MS + CHEER_MS));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [play, reduceMotion, delay, rise, clock, entrance]);
 
   const height = size.heights[slot]!;
   const blockStyle = useAnimatedStyle(() => ({ height: rise.value * height }));
   const headStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, rise.value * 2) }));
 
-  const look = useMemo(() => normalizeLook(row.podium_character, row.user_id), [row.podium_character, row.user_id]);
   const seed = (hashString(row.user_id) % 1000) / 1000;
   const [block, onBlock] = [
     [theme.colors.primaryContainer, theme.colors.onPrimaryContainer],
@@ -103,12 +140,17 @@ function Spot({ row, slot, isMe, compact, play }: SpotProps) {
 
   return (
     <View
-      style={styles.spot}
+      style={[styles.spot, { zIndex: z }]}
       accessible
       accessibilityLabel={`${place + 1}: ${isMe ? 'You' : row.display_name}, ${formatSteps(row.total_steps)} steps`}>
       <Animated.View style={[styles.head, headStyle]}>
         {/* First, so it sits behind the name and the character; the block covers its lower half. */}
-        <Glow place={place} size={size.character / 2} play={play} delay={delay + RISE_MS} />
+        <Glow
+          place={place}
+          size={size.character / 2}
+          play={play}
+          delay={delay + RISE_MS + (entrance ? ENTRANCE_SECONDS[entrance] * 1000 : 0)}
+        />
         {place === 0 && !compact ? <MaterialCommunityIcons name="crown" size={26} color="#E3B341" /> : null}
         <Text
           variant={compact ? 'labelMedium' : 'labelLarge'}
@@ -123,14 +165,28 @@ function Spot({ row, slot, isMe, compact, play }: SpotProps) {
         )}
         {/* Can be wider than the spot so the character stays big; the stage's sides are mostly empty. */}
         <View style={[styles.character, { width: size.character, height: size.character / 2 }]}>
-          <CharacterCanvas
-            look={look}
-            seed={seed}
-            width={size.character}
-            animate={play}
-            motion={cheering ? 'cheer' : undefined}
-            medal={place}
-          />
+          {entrance ? (
+            <EntranceStage kind={entrance} clock={clock} width={size.character} ground={height} fx={entering}>
+              <CharacterCanvas
+                look={look}
+                seed={seed}
+                width={size.character}
+                animate={play}
+                motion={entering ? ENTRANCE_POSE[entrance] : cheering ? 'cheer' : undefined}
+                medal={place}
+                clock={entering ? clock : undefined}
+              />
+            </EntranceStage>
+          ) : (
+            <CharacterCanvas
+              look={look}
+              seed={seed}
+              width={size.character}
+              animate={play}
+              motion={cheering ? 'cheer' : undefined}
+              medal={place}
+            />
+          )}
         </View>
       </Animated.View>
       <Animated.View style={[styles.block, { backgroundColor: block }, blockStyle]}>
@@ -191,7 +247,8 @@ function Glow({ place, size, play, delay }: { place: number; size: number; play:
 const styles = StyleSheet.create({
   podium: { flexDirection: 'row', alignItems: 'flex-end' },
   spot: { flex: 1, alignItems: 'center' },
-  head: { alignItems: 'center', width: '100%', gap: 2 },
+  // Above the block, so a character making an entrance in front of it isn't hidden by it.
+  head: { alignItems: 'center', width: '100%', gap: 2, zIndex: 2 },
   name: { maxWidth: '100%' },
   steps: { fontVariant: ['tabular-nums'], fontWeight: '700' },
   // The character stands right on the block.
@@ -204,6 +261,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 6,
     overflow: 'hidden',
+    zIndex: 1,
   },
   place: { fontWeight: '700' },
 });

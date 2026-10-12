@@ -39,6 +39,8 @@ export const CAT_COATS = {
   greycat: { base: '#7E8794', dark: '#5F6773', light: '#9AA2AE', eye: '#C9D65A', stripes: false },
   tabbycat: { base: '#9C9B94', dark: '#3F3E3A', light: '#C9C6BC', eye: '#B7C54A', stripes: true },
   gingercat: { base: '#E8893A', dark: '#B55A1B', light: '#F6C08A', eye: '#9CC55A', stripes: true },
+  // Yellow eyes so the face reads on a black coat.
+  blackcat: { base: '#2B2B2B', dark: '#111111', light: '#474747', eye: '#F2C94C', stripes: false },
 } as const;
 
 export const DOG_COATS = {
@@ -46,6 +48,17 @@ export const DOG_COATS = {
   goldendog: { coat: '#D9A441', light: '#F4DCA6', dark: '#B07F28', eye: '#222222', blaze: false },
   // White blaze and amber eyes so the face reads on a black coat.
   bwdog: { coat: '#2B2B2B', light: '#F2F2F2', dark: '#161616', eye: '#C98A2E', blaze: true },
+  blackdog: { coat: '#262626', light: '#3D3D3D', dark: '#111111', eye: '#C98A2E', blaze: false },
+} as const;
+
+/** The horse (the pet, and the one ridden in on): coat, far-side legs, mane and tail, hooves, eye, nostril. */
+export const HORSE_COAT = {
+  coat: '#8B5A2B',
+  farLeg: '#744A22',
+  mane: '#2B1B10',
+  hoof: '#1E1E1E',
+  eye: '#111111',
+  nostril: '#3A2210',
 } as const;
 
 /** Gold, silver, bronze: disc, rim, the ribbon's two halves, and the glow behind the podium character. */

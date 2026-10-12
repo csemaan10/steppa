@@ -3,17 +3,20 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, Chip, HelperText, Text, useTheme } from 'react-native-paper';
 
 import { CharacterCanvas } from '@/components/character/character-canvas';
+import { EntrancePreview } from '@/components/character/entrance-preview';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { updateProfile, type Profile } from '@/lib/api';
 import {
   BOTTOMS,
+  ENTRANCES,
+  FITS,
   EXPRESSIONS,
   EYE_COLORS,
   FACIAL_HAIR,
   GLASSES,
   HAIR_COLORS,
   HAIR_STYLES,
-  IDLES,
+  IDLE_GROUPS,
   LABELS,
   OWN_FACE_IDLES,
   PANTS_COLORS,
@@ -33,7 +36,7 @@ import {
 import { surfaceCard } from '@/theme';
 
 type Props = { profile: Profile };
-type SectionKey = 'move' | 'body' | 'face' | 'clothes' | 'watch' | 'pets';
+type SectionKey = 'move' | 'entrance' | 'body' | 'face' | 'clothes' | 'watch' | 'pets';
 
 /** Settings card for designing your podium character. Each change saves immediately. */
 export function CharacterEditorCard({ profile }: Props) {
@@ -115,7 +118,18 @@ export function CharacterEditorCard({ profile }: Props) {
         </View>
 
         <CollapsibleSection title="Move" summary={LABELS[look.idle]} expanded={open === 'move'} onToggle={() => toggle('move')}>
-          {chipRow('Idle move', 'idle', IDLES)}
+          {IDLE_GROUPS.map((g) => (
+            <View key={g.title}>{chipRow(g.title, 'idle', g.idles)}</View>
+          ))}
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Podium entrance"
+          summary={LABELS[look.entrance]}
+          expanded={open === 'entrance'}
+          onToggle={() => toggle('entrance')}>
+          {chipRow('How you get up on the podium', 'entrance', ENTRANCES)}
+          <EntrancePreview key={look.entrance} look={look} userId={profile.id} />
         </CollapsibleSection>
 
         <CollapsibleSection
@@ -161,10 +175,11 @@ export function CharacterEditorCard({ profile }: Props) {
 
         <CollapsibleSection
           title="Clothes"
-          summary={`${LABELS[look.top]} · ${LABELS[look.bottom]}`}
+          summary={`${look.topFit === 'baggy' ? 'Baggy ' : ''}${LABELS[look.top]} · ${look.bottomFit === 'baggy' && look.bottom !== 'skirt' ? 'Baggy ' : ''}${LABELS[look.bottom]}`}
           expanded={open === 'clothes'}
           onToggle={() => toggle('clothes')}>
           {chipRow('Top', 'top', TOPS)}
+          {chipRow('Top fit', 'topFit', FITS)}
           {swatchRow('Top colour', 'topColor', TOP_COLORS)}
           {look.top !== 'tank' ? (
             <View style={styles.group}>
@@ -199,6 +214,7 @@ export function CharacterEditorCard({ profile }: Props) {
           ) : null}
           {chipRow('Pattern', 'pattern', PATTERNS)}
           {chipRow('Bottoms', 'bottom', BOTTOMS)}
+          {look.bottom !== 'skirt' ? chipRow('Bottoms fit', 'bottomFit', FITS) : null}
           {swatchRow('Bottoms colour', 'pantsColor', PANTS_COLORS)}
           {swatchRow('Shoes', 'shoeColor', SHOE_COLORS)}
         </CollapsibleSection>

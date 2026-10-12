@@ -20,12 +20,13 @@ import {
   type SkPath,
 } from '@shopify/react-native-skia';
 import { useMemo } from 'react';
-import { useDerivedValue } from 'react-native-reanimated';
+import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 
-import { BIRD_COATS, CAT_COATS, DOG_COATS, MEDAL_COLORS, shade, useSceneClock } from '@/components/character/scene-common';
+import { BIRD_COATS, CAT_COATS, DOG_COATS, HORSE_COAT, MEDAL_COLORS, shade, useSceneClock } from '@/components/character/scene-common';
 import {
   CAT_X,
   DOG_X,
+  HORSE_BODY,
   HORSE_X,
   YARN_BALL,
   ballRadius,
@@ -36,8 +37,18 @@ import {
 } from '@/components/character/rig';
 import { CATS, DOGS, isBird, isSmallPet, type CharacterLook, type Pet } from '@/lib/character';
 
-/** A fill paint, or a round-capped stroke paint of the given width. */
-function makePaint(color: string, stroke?: number, alpha = 1): SkPaint {
+/**
+ * Paints are shared by every character: drawing only ever changes a paint's alpha for a moment and
+ * puts it back, so a new look or move (e.g. entrance → cheer → idle) only makes paints it hasn't
+ * seen yet. Never change a paint from here after making it.
+ */
+const paintCache = new Map<string, SkPaint>();
+
+/** A fill paint, or a stroke paint of the given width (round caps unless given). */
+function makePaint(color: string, stroke?: number, alpha = 1, cap: StrokeCap = StrokeCap.Round): SkPaint {
+  const key = `${color}|${stroke ?? 0}|${alpha}|${cap}`;
+  const cached = paintCache.get(key);
+  if (cached) return cached;
   const p = Skia.Paint();
   p.setAntiAlias(true);
   p.setColor(Skia.Color(color));
@@ -45,9 +56,10 @@ function makePaint(color: string, stroke?: number, alpha = 1): SkPaint {
   if (stroke) {
     p.setStyle(PaintStyle.Stroke);
     p.setStrokeWidth(stroke);
-    p.setStrokeCap(StrokeCap.Round);
+    p.setStrokeCap(cap);
     p.setStrokeJoin(StrokeJoin.Round);
   }
+  paintCache.set(key, p);
   return p;
 }
 
@@ -87,7 +99,7 @@ const STATIC = {
   catStripes: 'M-1.2 -17.1L-0.9 -15.6M0 -17.4L0 -15.8M1.2 -17.1L0.9 -15.6M-4 -6L-2.3 -6.3M-4.3 -3.6L-2.6 -3.8M4 -6L2.3 -6.3M4.3 -3.6L2.6 -3.8',
   dogBody: 'M-5.2 0Q-7.2 -8.5 0 -12.2Q7.2 -8.5 5.2 0Z',
   dogBlaze: 'M-0.9 -20.4Q0 -21 0.9 -20.4L1.5 -15.2L-1.5 -15.2Z',
-  horseBody: 'M7.5 -16.5Q2 -17.4 -4 -16.2C-8 -15.6 -9 -12 -6.6 -9.4Q0 -7.8 6.6 -9.2C10.4 -9.6 10.6 -15.6 7.5 -16.5Z',
+  horseBody: HORSE_BODY,
   horseFarLegs: 'M-4 -9.6L-3.9 -0.7M6.4 -9.6L6.6 -0.7',
   horseNearBackLeg: 'M4.6 -9.6L4.8 -0.7',
   yarnLines: `M${YARN_BALL.x - 2.2} ${YARN_BALL.y - 1}Q${YARN_BALL.x} ${YARN_BALL.y + 0.8} ${YARN_BALL.x + 2.2} ${YARN_BALL.y - 1}M${YARN_BALL.x - 1.2} ${YARN_BALL.y - 2.3}Q${YARN_BALL.x + 0.6} ${YARN_BALL.y} ${YARN_BALL.x + 0.4} ${YARN_BALL.y + 2.6}`,
@@ -155,6 +167,15 @@ const STATIC = {
   // Dumbbell held level in a fist: a bar through the hand, a plate at each end.
   dumbbellBar: 'M-3.4 -0.4H3.4V0.4H-3.4Z',
   dumbbellPlates: 'M-4.4 -1.7H-3V1.7H-4.4ZM3 -1.7H4.4V1.7H3Z',
+  // Claws: three blades out of the fist along +x.
+  claws: 'M1.6 -0.9L8.6 -1.3M1.6 0L9.2 0M1.6 0.9L8.6 1.3',
+  // Spell circle marks, centred: twelve ticks between the rings and a star inside.
+  spellTicks: Array.from({ length: 12 }, (_, i) => {
+    const a = (i * Math.PI) / 6;
+    const p = (r: number) => `${(Math.cos(a) * r).toFixed(2)} ${(Math.sin(a) * r).toFixed(2)}`;
+    return `M${p(6.9)}L${p(8.4)}`;
+  }).join(''),
+  spellStar: starPath(5.2),
 };
 
 type Props = {
@@ -168,18 +189,33 @@ type Props = {
   motion?: Motion;
   /** Hangs a medal on the chest: 0 gold, 1 silver, 2 bronze. */
   medal?: number;
+  /** Drives the pose from this clock (seconds) instead of the running one, e.g. for entrances. */
+  clock?: SharedValue<number>;
 };
 
 /** A player's animated character, ball or other move props, and pets, drawn with Skia as one picture per frame. */
-export function CharacterCanvas({ look, seed, width = 88, animate = true, fps = 60, motion, medal }: Props) {
-  const time = useSceneClock(animate, fps);
+export function CharacterCanvas({ look, seed, width = 88, animate = true, fps = 60, motion, medal, clock }: Props) {
+  const own = useSceneClock(animate && !clock, fps);
+  const time = clock ?? own;
   const idle = motion ?? look.idle;
+  // Pets wait until the entrance is over, then join in.
+  const entering = idle.startsWith('e-');
+  const shown = useMemo(() => (entering ? { ...look, pets: [] } : look), [look, entering]);
   const rigLook = useMemo<RigLook>(
-    () => ({ hair: look.hair, top: look.top, bottom: look.bottom, expression: look.expression, idle, pets: look.pets }),
-    [look.hair, look.top, look.bottom, look.expression, idle, look.pets]
+    () => ({
+      hair: look.hair,
+      top: look.top,
+      bottom: look.bottom,
+      topFit: look.topFit,
+      bottomFit: look.bottomFit,
+      expression: look.expression,
+      idle,
+      pets: entering ? [] : look.pets,
+    }),
+    [look.hair, look.top, look.bottom, look.topFit, look.bottomFit, look.expression, idle, look.pets, entering]
   );
 
-  const kit = useMemo(() => makeKit(look, idle, medal), [look, idle, medal]);
+  const kit = useMemo(() => makeKit(shown, idle, medal), [shown, idle, medal]);
 
   const scale = width / 120;
   const picture = useDerivedValue(() => {
@@ -219,6 +255,8 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
   // Long-sleeved tops colour the whole arm; tees and jerseys get short sleeves.
   const longSleeves = look.top === 'hoodie' || look.top === 'longsleeve' || look.top === 'jacket';
   const armColor = longSleeves ? sleeveColor : skin;
+  // Baggy clothes are cut wider: the same shapes drawn with fatter strokes.
+  const baggyTop = look.topFit === 'baggy';
   // Shorts and skirts leave the legs bare.
   const legColor = look.bottom === 'trousers' ? pantsColor : skin;
   const lightTop = luminance(topColor) > 0.7;
@@ -257,12 +295,16 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
   return {
     idle,
     tee: look.top === 'tee' || look.top === 'jersey',
+    baggyTop: look.topFit === 'baggy',
+    baggyBottom: look.bottomFit === 'baggy' && look.bottom !== 'skirt',
     top: look.top,
     bottom: look.bottom,
     hoodie: look.top === 'hoodie',
     longHair: look.hair === 'long' || look.hair === 'longcurly' || look.hair === 'afro',
     bald: look.hair === 'bald',
-    frontArms: idle === 'vbset' || idle === 'basket' || idle === 'yoga' || idle === 'boxing',
+    frontArms:
+      idle === 'vbset' || idle === 'basket' || idle === 'yoga' || idle === 'boxing' ||
+      idle === 'claws' || idle === 'spell' || idle === 'eyebeam' || idle === 'e-web',
     ball: ballRadius(idle),
     horse: look.pets.includes('horse'),
     bird: (() => {
@@ -289,7 +331,9 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
       hair: makePaint(hairColor),
       stubble: makePaint(hairColor, undefined, 0.35),
       legs: makePaint(legColor, 4.2),
-      thighs: makePaint(pantsColor, 4.8),
+      pants: makePaint(pantsColor),
+      // Butt caps so the shorts end in a straight, squared-off hem.
+      thighs: makePaint(pantsColor, 4.8, 1, StrokeCap.Butt),
       skirt: makePaint(pantsColor),
       stripe: makePaint(contrast, 1.5, 0.9),
       patternLine: makePaint(contrast, 1.3, 0.9),
@@ -297,9 +341,11 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
       zip: makePaint(shade(topColor, -0.35), 0.7),
       shoes: makePaint(look.shoeColor),
       torso: makePaint(topColor, 11),
-      arms: makePaint(armColor, 3.4),
+      torsoFlow: makePaint(topColor),
+      fold: makePaint(shade(topColor, -0.22), 0.5, 0.7),
+      arms: makePaint(armColor, longSleeves && baggyTop ? 4.9 : 3.4),
       biceps: makePaint(armColor),
-      sleeves: makePaint(sleeveColor, 3.9),
+      sleeves: makePaint(sleeveColor, baggyTop ? 5.6 : 3.9),
       skin: makePaint(skin),
       cheeks: makePaint('#FF6F91', undefined, 0.35),
       freckles: makePaint('#A0522D', undefined, 0.65),
@@ -389,6 +435,16 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
       shieldRed: makePaint('#C62828'),
       shieldWhite: makePaint('#ECEFF1'),
       shieldBlue: makePaint('#1565C0'),
+      claw: makePaint('#CFD8DC', 0.55),
+      clawEdge: makePaint('#78909C', 0.9, 0.5),
+      slashGlow: makePaint('#80D8FF', undefined, 0.4),
+      slashCore: makePaint('#FFFFFF'),
+      slashSpark: makePaint('#FFF59D', 0.55),
+      eyeGlow: makePaint('#FF1744', undefined, 0.55),
+      beamGlow: makePaint('#FF1744', 3.4, 0.45),
+      beamCore: makePaint('#FFCDD2', 1.2),
+      spellGlow: makePaint('#FFB74D', 2.6, 0.3),
+      spellLine: makePaint('#FF9800', 0.5),
       dumbbellBar: makePaint('#B0BEC5'),
       dumbbellPlates: makePaint('#37474F'),
       thunderHandle: makePaint('#6D4C41'),
@@ -417,27 +473,39 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
         })()
       : null,
     horsePaint: {
-      coat: makePaint('#8B5A2B'),
-      leg: makePaint('#8B5A2B', 1.8),
-      farLeg: makePaint('#744A22', 1.8),
-      mane: makePaint('#2B1B10', 1.9),
-      maneLine: makePaint('#2B1B10', 1.5),
-      forelock: makePaint('#2B1B10', 1),
-      hoof: makePaint('#1E1E1E'),
-      eye: makePaint('#111111'),
-      nostril: makePaint('#3A2210'),
+      coat: makePaint(HORSE_COAT.coat),
+      leg: makePaint(HORSE_COAT.coat, 1.8),
+      farLeg: makePaint(HORSE_COAT.farLeg, 1.8),
+      mane: makePaint(HORSE_COAT.mane, 1.9),
+      maneLine: makePaint(HORSE_COAT.mane, 1.5),
+      forelock: makePaint(HORSE_COAT.mane, 1),
+      hoof: makePaint(HORSE_COAT.hoof),
+      eye: makePaint(HORSE_COAT.eye),
+      nostril: makePaint(HORSE_COAT.nostril),
     },
+    ...staticShapes(),
+  };
+}
+
+let shapes: Pick<Kit, 'paths' | 'stubble'> | null = null;
+
+/** The fixed shapes, the same for everyone: parsed once and shared (they're only ever drawn). */
+function staticShapes(): Pick<Kit, 'paths' | 'stubble'> {
+  shapes ??= {
     paths: Object.fromEntries(Object.entries(STATIC).map(([k, d]) => [k, parse(d)])) as Record<keyof typeof STATIC, SkPath>,
     // Stubble is the beard's shape trimmed to the face, so it never hangs below the chin.
     stubble:
       Skia.Path.MakeFromOp(parse(STATIC.beard), parse(circle(0, 0, 8.4)), PathOp.Intersect) ?? parse(STATIC.beard),
   };
+  return shapes;
 }
 
 /** Per-character drawing kit: which parts exist, their paints, and the fixed shapes. */
 type Kit = {
   idle: Motion;
   tee: boolean;
+  baggyTop: boolean;
+  baggyBottom: boolean;
   top: CharacterLook['top'];
   bottom: CharacterLook['bottom'];
   hoodie: boolean;
@@ -642,6 +710,79 @@ function drawBird(canvas: SkCanvas, F: Frame, kit: Kit) {
   canvas.restore();
 }
 
+/**
+ * One claw swing: three parallel glowing marks following the claw tips along `pts` (x, y pairs),
+ * thin at the tail and sharp at the head. `lam` is how far the strike has got (0 → 1) and `v` how
+ * far through the whole swing, after which the marks catch up with the head and vanish.
+ */
+function drawSlash(canvas: SkCanvas, P: Kit['paint'], pts: number[], lam: number, v: number, scale: number) {
+  'worklet';
+  const n = pts.length / 2 - 1;
+  const head = lam;
+  const gone = Math.min(1, Math.max(0, (v - 0.62) / 0.25));
+  const tail = head - 0.6 > 0 ? head - 0.6 : 0;
+  const from = tail + (head - tail) * gone;
+  const fade = 1 - 0.7 * gone;
+  if (head - from < 0.02) return;
+  // The tip path at s (0 → 1), and the way it's heading there.
+  const at = (s: number, out: number[]) => {
+    const x = Math.min(n - 0.001, Math.max(0, s * n));
+    const i = Math.floor(x);
+    const k = x - i;
+    out[0] = pts[2 * i] + (pts[2 * i + 2] - pts[2 * i]) * k;
+    out[1] = pts[2 * i + 1] + (pts[2 * i + 3] - pts[2 * i + 1]) * k;
+    out[2] = pts[2 * i + 2] - pts[2 * i];
+    out[3] = pts[2 * i + 3] - pts[2 * i + 1];
+  };
+  const q = [0, 0, 0, 0];
+  const N = 14;
+  for (let lane = -1; lane <= 1; lane++) {
+    const off = lane * 2.6 * scale;
+    for (const [paint, wide] of [
+      [P.slashGlow!, 1.9],
+      [P.slashCore!, 0.85],
+    ] as const) {
+      const left: number[] = [];
+      const right: number[] = [];
+      for (let i = 0; i <= N; i++) {
+        const u = i / N;
+        at(from + (head - from) * u, q);
+        const len = Math.hypot(q[2], q[3]) || 1;
+        const nx = -q[3] / len;
+        const ny = q[2] / len;
+        const w = 0.9 * scale * wide * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.75)), 0.9);
+        left.push(q[0] + nx * (off + w), q[1] + ny * (off + w));
+        right.push(q[0] + nx * (off - w), q[1] + ny * (off - w));
+      }
+      const path = Skia.Path.Make();
+      path.moveTo(left[0], left[1]);
+      for (let i = 2; i < left.length; i += 2) path.lineTo(left[i], left[i + 1]);
+      for (let i = right.length - 2; i >= 0; i -= 2) path.lineTo(right[i], right[i + 1]);
+      path.close();
+      const base = paint.getAlphaf();
+      paint.setAlphaf(base * fade);
+      canvas.drawPath(path, paint);
+      paint.setAlphaf(base);
+    }
+  }
+}
+
+/** Short bright rays bursting out from (x, y); `u` runs 0 → 1 as they fly out and fade. */
+function drawBurst(canvas: SkCanvas, P: Kit['paint'], x: number, y: number, u: number, rays: number, reach: number, turn: number) {
+  'worklet';
+  const out = 1 - (1 - u) * (1 - u);
+  const paint = P.slashSpark!;
+  const base = paint.getAlphaf();
+  paint.setAlphaf(base * (1 - u));
+  for (let i = 0; i < rays; i++) {
+    const a = turn + (i / rays) * 2 * Math.PI;
+    const r0 = reach * (0.25 + 0.55 * out);
+    const r1 = reach * (0.45 + 0.75 * out);
+    canvas.drawLine(x + r0 * Math.cos(a), y + r0 * Math.sin(a), x + r1 * Math.cos(a), y + r1 * Math.sin(a), paint);
+  }
+  paint.setAlphaf(base);
+}
+
 /** Draws one frame of the scene, back to front. */
 function drawScene(canvas: SkCanvas, F: Frame, kit: Kit) {
   'worklet';
@@ -677,7 +818,7 @@ function drawScene(canvas: SkCanvas, F: Frame, kit: Kit) {
   };
   // The power ring on a finger poking out of the right fist, along the forearm.
   const ring = () => {
-    if (kit.watch !== 'ring' && kit.idle !== 'construct') return;
+    if (kit.watch !== 'ring' && kit.idle !== 'construct' && kit.idle !== 'e-lantern') return;
     canvas.save();
     canvas.translate(F.handRX as number, F.handRY as number);
     canvas.rotate(F.handRDeg as number, 0, 0);
@@ -738,14 +879,26 @@ function drawScene(canvas: SkCanvas, F: Frame, kit: Kit) {
     canvas.restore();
   }
 
-  // Crossed legs (meditating) rest in the lap, so the skirt goes behind them.
-  const skirtUnder = kit.bottom === 'skirt' && kit.idle === 'meditate';
-  if (skirtUnder) fill('skirt', P.skirt!);
   fill('legs', P.legs!);
   if (kit.bottom === 'shorts') fill('thighs', P.thighs!);
+  if (kit.baggyBottom) {
+    fill('baggyPants', P.pants!);
+    fill('baggyKnees', P.pants!);
+  }
   fill('shoes', P.shoes!);
-  fill('torso', P.torso!);
-  if (kit.bottom === 'skirt' && !skirtUnder) fill('skirt', P.skirt!);
+  // Tops go over the bottoms, so a skirt is drawn first and the shirt hangs over its waist. Sitting
+  // cross-legged the shirt stops at the waist instead, with the skirt in front of the legs below it.
+  const sitting = F.crossLegged === 1;
+  if (kit.bottom === 'skirt' && !sitting) fill('skirt', P.skirt!);
+  if (kit.baggyTop) {
+    fill('torsoFlow', P.torsoFlow!);
+    fill('folds', P.fold!);
+  } else {
+    fill('torso', P.torso!);
+    // The torso's round end, squared off into a straight hem.
+    fill('hem', P.torsoFlow!);
+  }
+  if (kit.bottom === 'skirt' && sitting) fill('skirt', P.skirt!);
   if (kit.top === 'jersey') fill('stripe', P.stripe!);
   if (kit.top === 'jacket') fill('zip', P.zip!);
   if (kit.idle === 'webswing') fill('web', P.web!, F.webO as number);
@@ -855,11 +1008,25 @@ function drawScene(canvas: SkCanvas, F: Frame, kit: Kit) {
     canvas.restore();
   }
   if (kit.bird) drawBird(canvas, F, kit);
-  if (kit.idle === 'sad') {
-    fill('brows', P.brows!);
-    fill('tear', P.tear!, F.tearO as number);
-  }
+  if (kit.idle === 'sad' || F.angry) fill('brows', P.brows!);
+  if (kit.idle === 'sad') fill('tear', P.tear!, F.tearO as number);
   if (kit.frontArms) armSet(F.armsFront as number, false);
+  // In front of the hands, which circle behind it.
+  if (kit.idle === 'spell') {
+    const o = F.spellO as number;
+    canvas.save();
+    canvas.translate(F.spellX as number, F.spellY as number);
+    faded(P.spellGlow!, o, () => canvas.drawCircle(0, 0, 7.6, P.spellGlow!));
+    faded(P.spellLine!, o, () => {
+      canvas.drawCircle(0, 0, 8.4, P.spellLine!);
+      canvas.drawCircle(0, 0, 6.9, P.spellLine!);
+      canvas.rotate(F.spellDeg as number, 0, 0);
+      canvas.drawPath(S.spellTicks, P.spellLine!);
+      canvas.rotate(-2 * (F.spellDeg as number), 0, 0);
+      canvas.drawPath(S.spellStar, P.spellLine!);
+    });
+    canvas.restore();
+  }
   if (kit.idle === 'boxing') {
     for (const [x, y] of [
       [F.handLX as number, F.handLY as number],
@@ -896,6 +1063,71 @@ function drawScene(canvas: SkCanvas, F: Frame, kit: Kit) {
       canvas.restore();
     }
     faded(P.ripple!, F.rippleO as number, () => oval(60, 58.4, F.rippleR as number, (F.rippleR as number) * 0.25, P.ripple!));
+  }
+  if (kit.idle === 'claws' && (F.clawExt as number) > 0.01) {
+    for (const [x, y, deg] of [
+      [F.handLX as number, F.handLY as number, F.handLDeg as number],
+      [F.handRX as number, F.handRY as number, F.handRDeg as number],
+    ] as const) {
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(deg, 0, 0);
+      canvas.scale(F.clawExt as number, 1);
+      canvas.drawPath(S.claws, P.clawEdge!);
+      canvas.drawPath(S.claws, P.claw!);
+      canvas.restore();
+    }
+  }
+  if (kit.idle === 'claws') {
+    const cx = F.cfxX as number;
+    const cy = F.cfxY as number;
+    // SNIKT: a bright flash and a ring of sparks at each fist as the blades fire out.
+    const sn = F.cfxSnikt as number;
+    if (sn >= 0) {
+      for (const [x, y] of [
+        [F.handLX as number, F.handLY as number],
+        [F.handRX as number, F.handRY as number],
+      ] as const) {
+        faded(P.slashCore!, 1 - sn, () => canvas.drawCircle(x, y, 2.6 * (1 - sn) + 0.8, P.slashCore!));
+        drawBurst(canvas, P, x, y, sn, 8, 6, 0.4);
+      }
+    }
+    // Each swing's three marks along the claw tips, and a spark burst where it ends.
+    const count = F.cfxN as number;
+    const big = count > 1 && (F.cfxV0 as number) === (F.cfxV1 as number);
+    for (let i = 0; i < count; i++) {
+      const pts = (F['cfxP' + i] as string).trim().split(' ').map(Number);
+      const v = F['cfxV' + i] as number;
+      const lam = F['cfxL' + i] as number;
+      drawSlash(canvas, P, pts, lam, v, big ? 1.25 : 1);
+      if (lam > 0.98 && v < 0.9) {
+        const k = (v - 0.55) / 0.35;
+        drawBurst(canvas, P, pts[pts.length - 2], pts[pts.length - 1], Math.min(1, Math.max(0, k)), 6, 5, i * 0.5);
+      }
+    }
+    // Both arms together cross in an X: a flash where the marks meet.
+    if (big) {
+      const v = F.cfxV0 as number;
+      const k = (v - 0.45) / 0.45;
+      if (k > 0 && k < 1) {
+        faded(P.slashCore!, 1 - k, () => canvas.drawCircle(cx, cy, 3.4 * (1 - k) + 1, P.slashCore!));
+        drawBurst(canvas, P, cx, cy, k, 10, 11, 0.15);
+      }
+    }
+  }
+  if (kit.idle === 'eyebeam') {
+    faded(P.beamGlow!, F.beamO as number, () => fill('beam', P.beamGlow!));
+    faded(P.beamCore!, F.beamO as number, () => fill('beam', P.beamCore!));
+    // Both eyes glow red as it charges.
+    const g = F.eyeGlow as number;
+    if (g > 0.02) {
+      inHead();
+      faded(P.eyeGlow!, g, () => {
+        canvas.drawCircle(-3, 0.6, 1.4 + 0.8 * g, P.eyeGlow!);
+        canvas.drawCircle(3, 0.6, 1.4 + 0.8 * g, P.eyeGlow!);
+      });
+      canvas.restore();
+    }
   }
   if (kit.idle === 'shield' || kit.idle === 'thunder' || kit.idle === 'speedster') {
     if (kit.idle === 'shield') {

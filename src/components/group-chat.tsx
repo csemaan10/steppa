@@ -1,7 +1,17 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useEffect, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { IconButton, Text, useTheme } from 'react-native-paper';
-import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, {
+  Keyframe,
+  useAnimatedKeyboard,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatPodiumCard } from '@/components/chat-podium-card';
@@ -49,6 +59,18 @@ function dayLabel(day: string, today: Date): string {
   });
 }
 
+// New messages animate in. Only sideways moves and scaling: the list is inverted (flipped
+// vertically), so an up or down slide would run backwards.
+const POP_IN_MINE = new Keyframe({
+  0: { opacity: 0, transform: [{ translateX: 36 }, { scale: 0.6 }] },
+  60: { opacity: 1, transform: [{ translateX: -3 }, { scale: 1.04 }] },
+  100: { opacity: 1, transform: [{ translateX: 0 }, { scale: 1 }] },
+}).duration(320);
+const SLIDE_IN_THEIRS = new Keyframe({
+  0: { opacity: 0, transform: [{ translateX: -24 }] },
+  100: { opacity: 1, transform: [{ translateX: 0 }] },
+}).duration(260);
+
 function addMessage(list: ChatMessage[], message: ChatMessage): ChatMessage[] {
   return list.some((m) => m.id === message.id) ? list : [message, ...list];
 }
@@ -66,6 +88,15 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [podium, setPodium] = useState<LeaderboardRow[]>([]);
+  // Messages that arrived while the chat is open, so they animate in (history doesn't).
+  const [fresh, setFresh] = useState<ReadonlySet<number>>(new Set());
+  const markFresh = (id: number) => setFresh((s) => new Set(s).add(id));
+  const fly = useSharedValue(0);
+  const pop = useSharedValue(1);
+  const sendIconStyle = useAnimatedStyle(() => ({
+    opacity: 1 - fly.value,
+    transform: [{ translateX: 14 * fly.value }, { translateY: -14 * fly.value }, { scale: pop.value }],
+  }));
   const today = startOfDay(new Date());
   const yesterday = toDayKey(addDays(today, -1));
   const keyboard = useAnimatedKeyboard();
@@ -86,7 +117,10 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
         }
       })
       .catch((e) => active && setError(e instanceof Error ? e.message : String(e)));
-    const unsubscribe = subscribeToMessages(groupId, (m) => setMessages((list) => addMessage(list, m)));
+    const unsubscribe = subscribeToMessages(groupId, (m) => {
+      setMessages((list) => addMessage(list, m));
+      setFresh((s) => new Set(s).add(m.id));
+    });
     return () => {
       active = false;
       unsubscribe();
@@ -172,9 +206,13 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
     if (!body) return;
     setSending(true);
     setError(null);
+    // The send icon flies off like a paper plane, then springs back in.
+    fly.set(withSequence(withTiming(1, { duration: 200 }), withTiming(0, { duration: 0 })));
+    pop.set(withDelay(200, withSequence(withTiming(0.3, { duration: 0 }), withSpring(1, { damping: 10, stiffness: 220 }))));
     try {
       const message = await sendMessage(groupId, userId, body);
       setDraft('');
+      markFresh(message.id);
       setMessages((list) => addMessage(list, message));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send');
@@ -215,7 +253,9 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
           const above = items[index + 1];
           const firstOfRun = above?.kind !== 'message' || above.message.user_id !== item.user_id;
           return (
-            <View style={[styles.messageRow, mine && styles.mineRow, !firstOfRun && styles.tight]}>
+            <Animated.View
+              entering={fresh.has(item.id) ? (mine ? POP_IN_MINE : SLIDE_IN_THEIRS) : undefined}
+              style={[styles.messageRow, mine && styles.mineRow, !firstOfRun && styles.tight]}>
               {!mine ? (
                 <View style={styles.avatarSlot}>
                   {firstOfRun ? (
@@ -258,7 +298,7 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
                   </Text>
                 </Pressable>
               </View>
-            </View>
+            </Animated.View>
           );
         }}
       />
@@ -284,7 +324,11 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
           />
         </View>
         <IconButton
-          icon="send"
+          icon={({ size, color }) => (
+            <Animated.View style={sendIconStyle}>
+              <MaterialCommunityIcons name="send" size={size} color={color} />
+            </Animated.View>
+          )}
           mode="contained"
           size={22}
           onPress={send}

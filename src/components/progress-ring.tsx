@@ -9,6 +9,9 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
+import { SkiaRing } from '@/components/skia-ring';
+import { THICKNESS_SCALE, useRingSettings, type RingSettings } from '@/lib/ring-style';
+
 type Props = {
   /** Fraction of the goal; values above 1 draw a second, brighter lap. */
   progress: number;
@@ -17,22 +20,30 @@ type Props = {
   color: string;
   overflowColor: string;
   trackColor: string;
+  /** Overrides the ring settings chosen in Settings (for the previews there). */
+  settings?: Partial<RingSettings>;
   children?: ReactNode;
 };
 
 /**
- * Circular progress built from two clipped half-rings (no SVG needed).
- * A left-half ring rotated θ inside a right-half clip reveals the arc 0..θ, and vice versa.
+ * Circular step progress in the style chosen in Settings. Classic is built from two clipped
+ * half-rings (a left-half ring rotated θ inside a right-half clip reveals the arc 0..θ, and vice
+ * versa); the other styles are drawn with Skia.
  */
 export function ProgressRing({
   progress,
   size = 220,
-  stroke = 18,
-  color,
+  stroke: baseStroke = 18,
+  color: themeColor,
   overflowColor,
   trackColor,
+  settings,
   children,
 }: Props) {
+  const chosen = useRingSettings();
+  const { style, color: chosenColor, thickness, cat } = { ...chosen, ...settings };
+  const color = chosenColor ?? themeColor;
+  const stroke = baseStroke * THICKNESS_SCALE[thickness];
   const value = useSharedValue(0);
 
   useEffect(() => {
@@ -50,14 +61,30 @@ export function ProgressRing({
         // RN's boxShadow supports coloured glows on both platforms.
         over && { borderRadius: size / 2, boxShadow: `0 0 28px 2px ${overflowColor}88` },
       ]}>
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          { borderRadius: size / 2, borderWidth: stroke, borderColor: trackColor },
-        ]}
-      />
-      <Lap progress={lap1} size={size} stroke={stroke} color={color} />
-      <Lap progress={lap2} size={size} stroke={stroke} color={overflowColor} />
+      {style === 'classic' ? (
+        <>
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { borderRadius: size / 2, borderWidth: stroke, borderColor: trackColor },
+            ]}
+          />
+          <Lap progress={lap1} size={size} stroke={stroke} color={color} />
+          <Lap progress={lap2} size={size} stroke={stroke} color={overflowColor} />
+        </>
+      ) : (
+        <SkiaRing
+          style={style}
+          lap1={lap1}
+          lap2={lap2}
+          size={size}
+          stroke={stroke}
+          color={color}
+          overflowColor={overflowColor}
+          trackColor={trackColor}
+          cat={cat}
+        />
+      )}
       <View style={[StyleSheet.absoluteFill, styles.center]}>{children}</View>
     </View>
   );

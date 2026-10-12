@@ -10,7 +10,7 @@ export const HAIR_STYLES = [
 ] as const;
 export const HAIR_COLORS = ['#1B1B1B', '#4E342E', '#8D6E63', '#E6C27A', '#C0532B', '#9E1B1B', '#9E9E9E'] as const;
 export const EYE_COLORS = ['#222222', '#5D3A1A', '#2E6DB4', '#3B8D4A', '#8E7A3A', '#6B7B8C'] as const;
-export const EXPRESSIONS = ['happy', 'grin', 'surprised', 'wink'] as const;
+export const EXPRESSIONS = ['happy', 'grin', 'surprised', 'wink', 'angry'] as const;
 export const GLASSES = ['none', 'round', 'square', 'cateye', 'aviator', 'shades', 'heart'] as const;
 export const FACIAL_HAIR = ['none', 'stubble', 'moustache', 'goatee', 'disconnected', 'beard'] as const;
 export const TOPS = ['tee', 'hoodie', 'tank', 'longsleeve', 'jersey', 'jacket'] as const;
@@ -20,6 +20,9 @@ export const TOP_COLORS = [
 ] as const;
 export const PATTERNS = ['none', 'stripes', 'heart', 'bolt', 'star'] as const;
 export const BOTTOMS = ['trousers', 'shorts', 'skirt'] as const;
+export const FITS = ['regular', 'baggy'] as const;
+/** How they get up onto the podium in the morning recap; 'rise' is the plain block rise. */
+export const ENTRANCES = ['rise', 'bigjump', 'superman', 'lantern', 'web', 'cards', 'cars', 'teleport', 'lightning', 'jetpack', 'parachute', 'portal', 'horseride', 'carpet', 'ufo', 'zipline'] as const;
 export const PANTS_COLORS = [
   '#263238', '#3949AB', '#6D4C41', '#90A4AE', '#1565C0', '#C62828', '#AD1457', '#2E7D32', '#D7CCC8',
 ] as const;
@@ -32,13 +35,33 @@ export const IDLES = [
   'walk', 'archery', 'guitar', 'jumprope', 'yoga',
   'run', 'skate', 'boxing', 'tennis', 'meditate',
   'webswing', 'cardthrow', 'hero', 'construct', 'flight', 'shield', 'thunder', 'speedster', 'weights',
+  'claws', 'eyebeam', 'spell',
 ] as const;
+/** Moves grouped for the picker; every idle is in exactly one group. */
+export const IDLE_GROUPS: { title: string; idles: readonly Idle[] }[] = [
+  {
+    title: 'Movement',
+    idles: ['smile', 'wave', 'flex', 'dance', 'jump', 'walk', 'run', 'lounge', 'sleep', 'yoga', 'meditate', 'knit', 'guitar'],
+  },
+  {
+    title: 'Sports',
+    idles: ['soccer', 'basket', 'vbspike', 'vbset', 'vbbump', 'tennis', 'boxing', 'archery', 'skate', 'jumprope', 'weights'],
+  },
+  {
+    title: 'Heroes',
+    idles: [
+      'webswing', 'cardthrow', 'hero', 'flight', 'shield', 'thunder', 'speedster', 'construct', 'claws',
+      'eyebeam', 'spell',
+    ],
+  },
+];
+
 /** Moves that use their own face (eyes closed), so the chosen expression doesn't show. */
-export const OWN_FACE_IDLES: readonly Idle[] = ['sleep', 'yoga', 'meditate'];
-export const CATS = ['greycat', 'tabbycat', 'gingercat'] as const;
+export const OWN_FACE_IDLES: readonly Idle[] = ['sleep', 'yoga', 'meditate', 'claws'];
+export const CATS = ['greycat', 'tabbycat', 'gingercat', 'blackcat'] as const;
 /** Small ground pets that aren't cats; they take the same spots as cats. */
 export const CRITTERS = ['bunny', 'hamster'] as const;
-export const DOGS = ['browndog', 'goldendog', 'bwdog'] as const;
+export const DOGS = ['browndog', 'goldendog', 'bwdog', 'blackdog'] as const;
 /** Shoulder birds; .bird. is the green parrot (its id predates the others). */
 export const BIRDS = ['bird', 'bluebird', 'macaw', 'canary', 'cockatoo'] as const;
 export const PETS = [...CATS, ...CRITTERS, ...DOGS, 'horse', ...BIRDS] as const;
@@ -50,6 +73,8 @@ export type FacialHair = (typeof FACIAL_HAIR)[number];
 export type Top = (typeof TOPS)[number];
 export type Pattern = (typeof PATTERNS)[number];
 export type Bottom = (typeof BOTTOMS)[number];
+export type Fit = (typeof FITS)[number];
+export type Entrance = (typeof ENTRANCES)[number];
 export type Watch = (typeof WATCHES)[number];
 export type Idle = (typeof IDLES)[number];
 export type Pet = (typeof PETS)[number];
@@ -65,32 +90,43 @@ export type CharacterLook = {
   facialHair: FacialHair;
   freckles: boolean;
   top: Top;
+  /** Baggy tops are wider and longer, with looser sleeves. */
+  topFit: Fit;
   topColor: string;
   /** Sleeve colour for a two-tone top; null matches the top. */
   sleeveColor: string | null;
   pattern: Pattern;
   bottom: Bottom;
+  /** Baggy trousers and shorts are wider and looser; skirts ignore it. */
+  bottomFit: Fit;
   /** Colour of the bottoms (trousers, shorts or skirt); named before skirts existed. */
   pantsColor: string;
   shoeColor: string;
   watch: Watch;
   watchColor: string;
   idle: Idle;
+  /** How they get up onto the podium in the recap. */
+  entrance: Entrance;
   pets: Pet[];
 };
 
 export const LABELS: Record<
-  HairStyle | Expression | Glasses | FacialHair | Top | Pattern | Bottom | Watch | Idle | Pet,
+  HairStyle | Expression | Glasses | FacialHair | Top | Pattern | Bottom | Fit | Entrance | Watch | Idle | Pet,
   string
 > = {
   short: 'Short', buzz: 'Buzz cut', sidepart: 'Side part', quiff: 'Curly bun', mohawk: 'Mohawk', afro: 'Afro',
   long: 'Long', bun: 'Bun', curly: 'Curly', curtains: 'Curly curtains', longcurly: 'Long curly', spiky: 'Spiky', bald: 'Bald',
-  happy: 'Happy', grin: 'Big grin', surprised: 'Surprised', wink: 'Wink',
+  happy: 'Happy', grin: 'Big grin', surprised: 'Surprised', wink: 'Wink', angry: 'Angry',
   none: 'None', round: 'Round', square: 'Square', cateye: 'Cat-eye', aviator: 'Aviator', shades: 'Sunglasses',
   stubble: 'Stubble', moustache: 'Moustache', goatee: 'Goatee', disconnected: 'Goatee 2', beard: 'Beard',
   tee: 'Tee', hoodie: 'Hoodie', tank: 'Tank', longsleeve: 'Long sleeve', jersey: 'Jersey', jacket: 'Jacket',
   stripes: 'Stripes', heart: 'Heart', bolt: 'Lightning', star: 'Star',
   trousers: 'Trousers', shorts: 'Shorts', skirt: 'Skirt',
+  regular: 'Regular', baggy: 'Baggy',
+  rise: 'Block rise', bigjump: 'Big jump', superman: 'Superman flight', lantern: 'Lantern lift-off', web: 'Web sling',
+  cards: 'Card explosion', cars: 'Car bounce', teleport: 'Teleport', lightning: 'Lightning strike', jetpack: 'Jetpack',
+  parachute: 'Parachute', portal: 'Portal', horseride: 'Horse ride', carpet: 'Magic carpet', ufo: 'UFO beam',
+  zipline: 'Zipline',
   smart: 'Smartwatch', classic: 'Classic', band: 'Fitness band', ring: 'Power ring',
   smile: 'Smile', wave: 'Wave', flex: 'Flex', dance: 'Dance', jump: 'Jump', lounge: 'Lounge', sleep: 'Sleep',
   soccer: 'Soccer', basket: 'Basketball', vbspike: 'Volleyball spike', vbset: 'Volleyball set',
@@ -100,8 +136,9 @@ export const LABELS: Record<
   webswing: 'Web swing', cardthrow: 'Card throw', hero: 'Hero pose', construct: 'Power construct',
   flight: 'Take flight', shield: 'Shield throw', thunder: 'Thunder strike', speedster: 'Speedster',
   weights: 'Lift weights',
-  greycat: 'Grey cat', tabbycat: 'Tabby cat', gingercat: 'Ginger cat', bunny: 'Bunny', hamster: 'Hamster',
-  browndog: 'Brown dog', goldendog: 'Golden dog', bwdog: 'Black & white dog', horse: 'Horse',
+  claws: 'Claws', eyebeam: 'Eye beam', spell: 'Spell circle',
+  greycat: 'Grey cat', tabbycat: 'Tabby cat', gingercat: 'Ginger cat', blackcat: 'Black cat', bunny: 'Bunny', hamster: 'Hamster',
+  browndog: 'Brown dog', goldendog: 'Golden dog', bwdog: 'Black & white dog', blackdog: 'Black dog', horse: 'Horse',
   bird: 'Green parrot', bluebird: 'Blue parrot', macaw: 'Macaw', canary: 'Canary', cockatoo: 'Cockatoo',
 };
 
@@ -129,15 +166,20 @@ export function defaultLook(userId: string): CharacterLook {
     facialHair: 'none',
     freckles: false,
     top: pick(TOPS.slice(0, 3), 9),
+    topFit: 'regular',
     topColor: pick(TOP_COLORS.slice(0, 9), 12),
     sleeveColor: null,
     pattern: 'none',
     bottom: 'trousers',
+    bottomFit: 'regular',
     pantsColor: pick(PANTS_COLORS.slice(0, 4), 15),
     shoeColor: SHOE_COLORS[0],
     watch: 'none',
     watchColor: WATCH_COLORS[0],
     idle: pick(IDLES.slice(0, 13), 18),
+    // Everyone gets one of the entrances by default, picked by their id; 'rise' is still on offer.
+    // Only the first eleven, so adding an entrance doesn't change anyone's default.
+    entrance: pick(ENTRANCES.slice(1, 12), 21),
     pets: [],
   };
 }
@@ -168,15 +210,18 @@ export function normalizeLook(raw: unknown, userId: string): CharacterLook {
     facialHair: oneOf(FACIAL_HAIR, r.facialHair, d.facialHair),
     freckles: r.freckles === true,
     top: oneOf(TOPS, r.top, d.top),
+    topFit: oneOf(FITS, r.topFit, d.topFit),
     topColor: color(r.topColor, d.topColor),
     sleeveColor: isColor(r.sleeveColor) ? r.sleeveColor : null,
     pattern: oneOf(PATTERNS, r.pattern, d.pattern),
     bottom: oneOf(BOTTOMS, r.bottom, d.bottom),
+    bottomFit: oneOf(FITS, r.bottomFit, d.bottomFit),
     pantsColor: color(r.pantsColor, d.pantsColor),
     shoeColor: color(r.shoeColor, d.shoeColor),
     watch: oneOf(WATCHES, r.watch, d.watch),
     watchColor: color(r.watchColor, d.watchColor),
     idle: oneOf(IDLES, r.idle, d.idle),
+    entrance: oneOf(ENTRANCES, r.entrance, d.entrance),
     pets,
   };
 }

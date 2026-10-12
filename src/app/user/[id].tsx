@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Appbar, Card, Divider, Text, useTheme } from 'react-native-paper';
 
+import { ProfileCharacter } from '@/components/character/profile-character';
 import { TrophyCase } from '@/components/trophy-case';
 import { UserAvatar } from '@/components/user-avatar';
 import { WeekChart } from '@/components/week-chart';
@@ -73,6 +74,8 @@ export default function UserScreen() {
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <ProfileCharacter profile={them} />
+
         <View style={styles.versus}>
           <View style={styles.person}>
             <UserAvatar name={me.display_name} color={me.avatar_color} icon={me.avatar_icon} size={64} />

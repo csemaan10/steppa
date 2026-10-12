@@ -201,7 +201,7 @@ export default function TodayScreen() {
               </Text>
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                 {over
-                  ? `+${formatSteps((stats?.today ?? 0) - goal)} over goal 🎉`
+                  ? `+${formatSteps((stats?.today ?? 0) - goal)} over goal`
                   : `${Math.round(ratio * 100)}% of ${formatSteps(goal)}`}
               </Text>
             </ProgressRing>
@@ -286,7 +286,7 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
-        {recap?.groups.length ? <RecapPreview recap={recap} userId={userId} /> : null}
+        {recap?.groups.length ? <RecapPreview recap={recap} /> : null}
       </ScrollView>
 
       <Snackbar

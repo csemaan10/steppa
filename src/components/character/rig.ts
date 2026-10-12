@@ -3,18 +3,42 @@
 // (viewBox "-30 0 120 60"): the character stands in x 0–60 on y = 58.5, pets use the sides.
 // Ported one-to-one from the approved web preview.
 
-import type { Bottom, Expression, HairStyle, Idle, Pet, Top } from '@/lib/character';
+import {
+  CARPET,
+  HORSE_LAUNCH,
+  UFO,
+  ZIP,
+  gallopPhase,
+  jumpLimbs,
+  type EntranceKind,
+  type EntrancePose,
+} from '@/components/character/entrance';
+import type { Bottom, Expression, Fit, HairStyle, Idle, Pet, Top } from '@/lib/character';
 
 /**
  * A podium idle, 'walk' (the Today screen's walker), or a recap reaction: 'cheer' on the podium,
  * 'sad' off it.
  */
-export type Motion = Idle | 'walk' | 'cheer' | 'sad';
+export type Motion = Idle | 'walk' | 'cheer' | 'sad' | EntrancePose;
+
+/** The entrances whose motion is a jump (crouch, spring, land), by their rig motion. */
+const JUMP_ENTRANCES: Partial<Record<Motion, EntranceKind>> = {
+  'e-jump': 'bigjump',
+  'e-cards': 'cards',
+  'e-cars': 'cars',
+  'e-horse': 'horseride',
+  'e-carpet': 'carpet',
+  'e-ufo': 'ufo',
+  'e-zip': 'zipline',
+};
+
 /** `facing` turns the face toward where they're walking: -1 left, 0 ahead, 1 right. */
 export type RigLook = {
   hair: HairStyle;
   top: Top;
   bottom: Bottom;
+  topFit?: Fit;
+  bottomFit?: Fit;
   expression: Expression;
   idle: Motion;
   pets: Pet[];
@@ -35,9 +59,13 @@ const FORE = 6;
 const LEG = 12;
 export const YARN_BALL = { x: 45.5, y: 55.9 };
 /** Where each cat sits: first cat, second cat. */
-export const CAT_X = [-7, -20];
+export const CAT_X = [-4, -14];
 export const DOG_X = 66;
-export const HORSE_X = 76;
+/**
+ * Close enough that the horse's tail stays over its own podium block, and far enough that its nose
+ * (about 16 in front, grazing) clears the character's outstretched right arm (reaches x ≈ 47).
+ */
+export const HORSE_X = 64;
 /** Where the web swing hangs from: above the top of the scene. */
 const WEB_PIVOT = { x: 30, y: -20 };
 /** Walk cycles per second (two steps each). */
@@ -94,10 +122,20 @@ type Pose = {
   shield?: { held: boolean; x: number; y: number; spin: number };
   /** Thunder strike: the hammer in the raised hand, and the lightning bolt's flash (0 = none). */
   thunder?: { bolt: number; seed: number };
+  /** Claws: how far the blades are out of the fists (0 → 1). */
+  claws?: number;
+  /** Claw slash effects: each swing's progress, how far the strike is (0 → 1) and the claw tips' path; the "snikt" flash (0 → 1, -1 = off). */
+  clawFx?: { swings: { v: number; lam: number; pts: number[] }[]; snikt: number };
+  /** Eye beam: the eyes' charge glow (0 → 1), the beam's strength (0 = off) and its up/down sweep. */
+  eyebeam?: { charge: number; beam: number; sweep: number };
+  /** Spell circle: how much the circle shows (0 → 1). */
+  spell?: number;
   /** Speedster: which crackle pattern of lightning to show this moment. */
   sparks?: number;
   /** How far the head hangs toward the chest. */
   headDrop?: number;
+  /** Sitting cross-legged (meditating, on the magic carpet): the top stops at the waist and a skirt spreads over the lap. */
+  crossLegged?: boolean;
   /** Sad brows, plus a tear's progress down the cheek (0 → 1). */
   tear?: number;
 };
@@ -112,6 +150,13 @@ function hash01(n: number): number {
   'worklet';
   const v = Math.sin(n * 12.9898) * 43758.5453;
   return v - Math.floor(v);
+}
+
+/** Smoothstep of a value clamped to 0 → 1. */
+function sm01(v: number): number {
+  'worklet';
+  const k = Math.min(1, Math.max(0, v));
+  return k * k * (3 - 2 * k);
 }
 
 function clamp01(v: number): number {
@@ -325,7 +370,7 @@ function pose(idle: Motion, t: number, seed: number): Pose {
     return {
       angle: 0, bob: -5 + 1.2 * fl, tilt: 0.02 * s(0.2), shadow: 0.55 - 0.1 * fl,
       armL: { a: 0.62, f: 0.05 }, armR: { a: 0.62, f: 0.05 },
-      legL: 1.35, legR: 1.35, kneeL: 2.7, kneeR: -2.7,
+      legL: 1.35, legR: 1.35, kneeL: 2.7, kneeR: -2.7, crossLegged: true,
       eyes: 0.1, mouth: { w: 3.4, curve: 1.4 }, aura: (fl + 1) / 2,
     };
   }
@@ -452,6 +497,87 @@ function pose(idle: Motion, t: number, seed: number): Pose {
       thunder: { bolt: strike ? 1 : 0, seed: Math.floor(t * 18) },
     };
   }
+  if (idle === 'claws') {
+    // Crouch with fists up, SNIKT: blades shoot out of both fists, a chop with each arm across the
+    // body leaving three glowing claw marks, then both arms together in a big X, blades go back.
+    // The arms swing straight from the shoulders, so the marks follow the claw tips.
+    const u = ((t + seed * 3) % 3) / 3;
+    const ease = (v: number) => v * v * (3 - 2 * v);
+    const guard = ease(clamp01(u / 0.14)) * (1 - ease(clamp01((u - 0.92) / 0.08)));
+    const ext = ease(clamp01((u - 0.18) / 0.04)) * (1 - ease(clamp01((u - 0.9) / 0.04)));
+    const gA = mix(0.3, 0.25, guard);
+    const gF = mix(0.4, Math.PI - 0.35, guard);
+    const W = 0.16;
+    // Progress through a swing that starts at `at`: 0 → 1, or -1 when it isn't swinging.
+    const win = (at: number) => (u >= at && u < at + W ? (u - at) / W : -1);
+    // Guard → raise the arm to `from` → strike through to `to` → back to guard.
+    const lam = (v: number) => ease(clamp01((v - 0.3) / 0.35));
+    const swingArm = (v: number, from: number, to: number) => {
+      if (v < 0) return { a: gA, f: gF };
+      const wind = ease(clamp01(v / 0.3));
+      const back = ease(clamp01((v - 0.85) / 0.15));
+      const m = (g: number) => mix(mix(mix(g, from, wind), to, lam(v)), g, back);
+      return { a: m(gA), f: m(gF) };
+    };
+    // The claw tips' path through a swing (body coordinates), for the glowing marks.
+    const trail = (side: number, from: number, to: number) => {
+      const sh = side < 0 ? SHOULDER_L : SHOULDER_R;
+      const pts: number[] = [];
+      for (let i = 0; i <= 12; i++) {
+        const g = mix(from, to, i / 12);
+        const tip = limb(limb(sh, side, g, UPPER + FORE), side, g, 5);
+        pts.push(tip.x, tip.y);
+      }
+      return pts;
+    };
+    const vR = win(0.34);
+    const vL = win(0.52);
+    const vX = win(0.7);
+    const bump = (v: number) => (v >= 0 ? Math.sin(Math.PI * v) : 0);
+    const swings: { v: number; lam: number; pts: number[] }[] = [];
+    if (vR >= 0) swings.push({ v: vR, lam: lam(vR), pts: trail(1, 2.7, -0.5) });
+    if (vL >= 0) swings.push({ v: vL, lam: lam(vL), pts: trail(-1, 2.7, -0.5) });
+    if (vX >= 0) {
+      swings.push({ v: vX, lam: lam(vX), pts: trail(1, 2.9, -0.9) });
+      swings.push({ v: vX, lam: lam(vX), pts: trail(-1, 2.9, -0.9) });
+    }
+    const armR = vX >= 0 ? swingArm(vX, 2.9, -0.9) : swingArm(vR, 2.7, -0.5);
+    const armL = vX >= 0 ? swingArm(vX, 2.9, -0.9) : swingArm(vL, 2.7, -0.5);
+    const sn = u >= 0.18 && u < 0.3 ? (u - 0.18) / 0.12 : -1;
+    return {
+      angle: 0, bob: 1.2 * guard + 0.8 * bump(vX), tilt: 0.06 * (bump(vL) - bump(vR)), armsFront: true,
+      armL, armR,
+      legL: 0.28, legR: 0.28, eyes: blink(t, seed), mouth: { w: 3.4, curve: -0.9 }, claws: ext,
+      clawFx: { swings, snikt: sn },
+    };
+  }
+  if (idle === 'eyebeam') {
+    // Hand to the temple, the eyes charge up red, a beam fires from them off to the right while the
+    // head kicks back and sweeps it a little, then the glow cools.
+    const u = ((t + seed * 2.2) % 2.2) / 2.2;
+    const ease = (v: number) => v * v * (3 - 2 * v);
+    const raise = ease(clamp01(u / 0.18)) * (1 - ease(clamp01((u - 0.85) / 0.15)));
+    const blast = u >= 0.45 && u < 0.66;
+    const kick = blast ? Math.sin((Math.PI * (u - 0.45)) / 0.21) : 0;
+    const charge = u < 0.45 ? clamp01((u - 0.18) / 0.27) : blast ? 1 : Math.max(0, 1 - (u - 0.66) / 0.12);
+    return {
+      angle: 0, bob: 0, tilt: -0.1 * kick, armsFront: true,
+      armL: { a: 0.3, f: 0.4 },
+      armR: { a: mix(0.35, 2.4, raise), f: mix(0.4, Math.PI + 0.21, raise) },
+      legL: 0.22, legR: 0.22, eyes: charge > 0.3 ? 0.5 : blink(t, seed), mouth: { w: 3.8, curve: 0.6 },
+      eyebeam: { charge, beam: blast ? 1 - 0.3 * kick : 0, sweep: blast ? Math.sin(TAU * 2 * (u - 0.45)) : 0 },
+    };
+  }
+  if (idle === 'spell') {
+    // Hands circling in front of the chest, a glowing rune circle turning between them.
+    const c = Math.cos(TAU * 0.5 * (t + seed));
+    const sn = Math.sin(TAU * 0.5 * (t + seed));
+    return {
+      angle: 0, bob: 0.3 * sn, tilt: 0.04 * c, armsFront: true,
+      armL: { a: 0.75 + 0.1 * sn, f: -0.95 + 0.15 * c }, armR: { a: 0.75 - 0.1 * sn, f: -0.95 - 0.15 * c },
+      legL: 0.2, legR: 0.2, eyes: blink(t, seed), mouth: { w: 3.6, curve: 1.2 }, spell: 0.75 + 0.25 * sn,
+    };
+  }
   if (idle === 'weights') {
     // Alternating dumbbell curls: each forearm comes up to the shoulder in turn; a little effort
     // squint at the top of every rep.
@@ -476,6 +602,132 @@ function pose(idle: Motion, t: number, seed: number): Pose {
       armL: { a: 0.35 + 0.5 * down, f: -1.1 + 0.8 * down }, armR: { a: 0.35 + 0.5 * up, f: -1.1 + 0.8 * up },
       legL: 0.06 + 0.1 * up, legR: 0.06 + 0.1 * down, liftL: 6 * up, liftR: 6 * down,
       eyes: blink(t, seed), mouth: { w: 4.8, curve: 2.6 }, sparks: Math.floor(t * 12),
+    };
+  }
+  if (idle === 'e-carpet' && t < CARPET.hop) {
+    // Flying in cross-legged on the carpet: one hand on a knee, the other waving, a big grin.
+    const wave = Math.sin(t * 9);
+    return {
+      angle: 0, bob: 0, tilt: 0.03 * Math.sin(t * 3), shadow: 0, crossLegged: true,
+      armL: { a: 0.62, f: 0.05 },
+      armR: { a: 2.4 + 0.15 * wave, f: 2.9 + 0.3 * wave },
+      legL: 1.35, legR: 1.35, kneeL: 2.7, kneeR: -2.7,
+      eyes: blink(t, seed), mouth: { w: 5.6, curve: 2.8, open: 1 },
+    };
+  }
+  if (idle === 'e-ufo' && t < UFO.touchdown) {
+    // Floating down the beam: arms out and paddling, legs dangling, mouth open in amazement.
+    const f = Math.sin(t * 5);
+    return {
+      angle: 0, bob: 0, tilt: 0.04 * f, shadow: 0,
+      armL: { a: 1.25 + 0.15 * f, f: 1.5 + 0.2 * f }, armR: { a: 1.25 - 0.15 * f, f: 1.5 - 0.2 * f },
+      legL: 0.2, legR: 0.2, kneeL: 0.2, kneeR: -0.2,
+      eyes: 1, mouth: { w: 2.6, curve: 0, open: 1 },
+    };
+  }
+  if (idle === 'e-zip' && t < ZIP.release) {
+    // Hanging from the handle with both hands, legs swinging, grinning all the way down.
+    const sw = Math.sin(t * 6);
+    return {
+      angle: 0, bob: 0, tilt: 0.03 * sw, shadow: 0,
+      armL: { a: 2.75, f: 2.95 }, armR: { a: 2.75, f: 2.95 },
+      legL: 0.1 + 0.08 * sw, legR: 0.1 - 0.08 * sw, kneeL: 0.4, kneeR: 0.4,
+      eyes: blink(t, seed), mouth: { w: 5.6, curve: 2.8, open: 1 },
+    };
+  }
+  if (idle === 'e-horse' && t < HORSE_LAUNCH) {
+    // Riding in sideways on the horse, facing us: sitting on its back with the legs dangling down
+    // its side and bouncing with the gallop, one hand holding on, the other waving overhead.
+    const g = Math.sin(gallopPhase(t));
+    const wave = Math.sin(t * 11);
+    return {
+      angle: 0, bob: 0, tilt: 0.03 * g, shadow: 0,
+      armL: { a: 0.45, f: 1.25 },
+      armR: { a: 2.45 + 0.2 * wave, f: 2.95 + 0.3 * wave },
+      legL: 0.14 + 0.06 * g, legR: 0.14 - 0.06 * g, kneeL: 0.35, kneeR: 0.35, liftL: 1.2, liftR: 1.2,
+      eyes: blink(t, seed), mouth: { w: 5.6, curve: 2.8, open: 1 },
+    };
+  }
+  const kind = JUMP_ENTRANCES[idle];
+  if (kind) {
+    // Podium entrances that jump: crouch, spring up with the arms thrown high and the knees
+    // tucked, and absorb the landing. (The container carries them through the air.)
+    const { air, squat } = jumpLimbs(kind, t);
+    // Before the card launch: a glowing card raised in the right hand, then flicked at the floor.
+    const aim = kind === 'cards' ? sm01(t / 0.35) * (1 - sm01((t - 0.5) / 0.1)) : 0;
+    const flick = kind === 'cards' ? sm01((t - 0.5) / 0.1) * (1 - sm01((t - 0.72) / 0.1)) : 0;
+    const a = mix(mix(0.3, 0.9, squat), 2.7, air);
+    const fa = mix(mix(0.4, 0.7, squat), 3, air);
+    return {
+      angle: 0, bob: 2.2 * squat, tilt: 0, shadow: 0,
+      armL: { a, f: fa },
+      armR: {
+        a: mix(mix(a, 2.4, aim), 1.2, flick),
+        f: mix(mix(fa, 2.8, aim), 1.5, flick),
+      },
+      legL: 0.06 + 0.35 * squat + 0.12 * air, legR: 0.06 + 0.35 * squat + 0.12 * air,
+      kneeL: 0.9 * air, kneeR: 0.9 * air,
+      eyes: air > 0 ? 0.8 : blink(t, seed), mouth: { w: 5.6, curve: 2.8, open: air },
+    };
+  }
+  if (idle === 'e-fly') {
+    // The hovering flight pose, fist up and cape streaming, settling onto the block at the end.
+    const land = sm01((t - 1.05) / 0.45);
+    return {
+      angle: 0, bob: (-8 + 1.6 * Math.sin(t * 9)) * (1 - land), tilt: 0.04 * Math.sin(t * 5), shadow: 0,
+      armL: { a: 0.35, f: 0.3 }, armR: { a: 2.9, f: 3.05 },
+      legL: 0.03, legR: 0.08, liftR: 1.5 * (1 - land), eyes: blink(t, seed), mouth: { w: 4.6, curve: 2.4 },
+      cape: t * 1.6 + seed * 5,
+    };
+  }
+  if (idle === 'e-pop') {
+    // Arriving in a flash: arms flung out and up, a big grin.
+    return {
+      angle: 0, bob: 0, tilt: 0, shadow: 0,
+      armL: { a: 2.3, f: 2.6 }, armR: { a: 2.3, f: 2.6 },
+      legL: 0.12, legR: 0.12, eyes: blink(t, seed), mouth: { w: 5.6, curve: 2.8, open: 1 },
+    };
+  }
+  if (idle === 'e-jet') {
+    // Rocketing up on a pack: arms down and out, legs together, hair-raising grin.
+    return {
+      angle: 0, bob: -2, tilt: 0, shadow: 0,
+      armL: { a: 0.55, f: 0.6 }, armR: { a: 0.55, f: 0.6 },
+      legL: 0.05, legR: 0.05, kneeL: 0.25, kneeR: 0.15, liftL: 0.8, liftR: 0.4,
+      eyes: 0.9, mouth: { w: 5, curve: 2.6, open: 1 },
+    };
+  }
+  if (idle === 'e-chute') {
+    // Hanging from the lines overhead, legs swinging.
+    const sw = Math.sin(t * 5);
+    return {
+      angle: 0, bob: 0, tilt: 0.03 * sw, shadow: 0,
+      armL: { a: 2.75, f: 2.95 }, armR: { a: 2.75, f: 2.95 },
+      legL: 0.14 + 0.1 * sw, legR: 0.14 - 0.1 * sw, kneeL: 0.3, kneeR: 0.3,
+      eyes: blink(t, seed), mouth: { w: 5, curve: 2.4, open: 1 },
+    };
+  }
+  if (idle === 'e-lantern') {
+    // Rising on a column of green light: arms straight down and a little out, fists clenched,
+    // legs together, chin up.
+    return {
+      angle: 0, bob: 0, tilt: -0.03, shadow: 0,
+      armL: { a: 0.22, f: 0.2 }, armR: { a: 0.22, f: 0.2 },
+      legL: 0.02, legR: 0.02, kneeL: 0.12, kneeR: 0.12, liftL: 0.6, liftR: 0.6,
+      eyes: 0.85, mouth: { w: 4.2, curve: 1.6 },
+    };
+  }
+  if (idle === 'e-web') {
+    // Aim the right hand at the anchor above and shoot, then hang from the line while swinging up
+    // (legs trailing), and let go with the arms flung wide.
+    const aim = sm01(t / 0.18);
+    const free = sm01((t - 1.45) / 0.12);
+    return {
+      angle: 0, bob: 0, tilt: 0, shadow: 0, armsFront: true,
+      armL: { a: mix(mix(0.3, 0.5, aim), 1.7, free), f: mix(mix(0.4, 0.9, aim), 1.7, free) },
+      armR: { a: mix(mix(0.3, 2.6, aim), 1.7, free), f: mix(mix(0.4, 2.9, aim), 1.7, free) },
+      legL: 0.2 + 0.25 * aim, legR: 0.1, kneeL: 0.5 * aim, kneeR: 0.9 * aim,
+      eyes: 0.9, mouth: { w: 4.6, curve: 2.2, open: free },
     };
   }
   if (idle === 'cheer') {
@@ -944,6 +1196,22 @@ const HORSE_NECK_HEAD: Cmd[] = [
 const HORSE_MANE: Cmd[] = [['M', -3, -16.6], ['C', -6.2, -18.8, -8, -23, -9.4, -24.9]];
 const HORSE_FORELOCK: Cmd[] = [['M', -9.7, -25.3], ['Q', -11, -25.6, -11.6, -24.4]];
 const HORSE_EAR: Cmd[] = [['M', -9.5, -24.9], ['L', -9.1, -27.5], ['L', -8.2, -24.7], ['Z']];
+/** The base of the neck, which the head nods about; and the eye and nostril at rest. */
+export const HORSE_NECK_PIVOT = { x: -5, y: -14 };
+export const HORSE_EYE = { x: -11.7, y: -23.1 };
+export const HORSE_NOSTRIL = { x: -14.8, y: -20.4 };
+/** The horse's body, in its own coordinates: hooves at y = 0, facing left. */
+export const HORSE_BODY = 'M7.5 -16.5Q2 -17.4 -4 -16.2C-8 -15.6 -9 -12 -6.6 -9.4Q0 -7.8 6.6 -9.2C10.4 -9.6 10.6 -15.6 7.5 -16.5Z';
+/** The neck and head, mane, forelock and ear at rest (for the ridden horse, which nods them as one). */
+export const HORSE_HEAD_SHAPES = (() => {
+  const still = (x: number, y: number): Pt => ({ x, y });
+  return {
+    head: shapePath(HORSE_NECK_HEAD, still),
+    mane: shapePath(HORSE_MANE, still),
+    forelock: shapePath(HORSE_FORELOCK, still),
+    ear: shapePath(HORSE_EAR, still),
+  };
+})();
 
 /**
  * Everything animated in a scene at time t. Keys are read by the scene's shapes; values are
@@ -955,10 +1223,15 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
   const F: Frame = {};
   // The chosen resting face, except in moves that have their own (eyes closed, crying, cheering).
   const idle = look.idle;
-  const ownFace = idle === 'sleep' || idle === 'sad' || idle === 'yoga' || idle === 'meditate' || idle === 'cheer';
-  const expr = ownFace ? 'happy' : look.expression;
+  const ownFace = idle.startsWith('e-') || idle === 'sleep' || idle === 'sad' || idle === 'yoga' || idle === 'meditate' || idle === 'cheer';
+  // The claws move is always angry.
+  const expr = idle === 'claws' ? 'angry' : ownFace ? 'happy' : look.expression;
   if (expr === 'grin') P.mouth = { w: P.mouth.w + 0.6, curve: P.mouth.curve, open: 1 };
   else if (expr === 'surprised') P.eyes *= 1.3;
+  else if (expr === 'angry') {
+    P.eyes *= 0.75;
+    P.mouth = { w: 3.4, curve: -0.9 };
+  }
   const pivot = P.pivot || HIP;
   const bodyRaw = (x: number, y: number) => rot({ x, y }, pivot, P.angle);
 
@@ -997,6 +1270,8 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
     const q = rot({ x, y }, NECK, P.tilt);
     return B(q.x, q.y + (P.headDrop || 0));
   };
+  const baggyTop = look.topFit === 'baggy';
+  const baggyBottom = look.bottomFit === 'baggy' && look.bottom !== 'skirt';
   const seg = (a: Pt, b: Pt, c?: Pt) =>
     'M' + f(a.x) + ' ' + f(a.y) + 'L' + f(b.x) + ' ' + f(b.y) + (c ? 'L' + f(c.x) + ' ' + f(c.y) : '');
 
@@ -1010,12 +1285,33 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
   let shoesD = '';
   // Shorts: the upper thighs, drawn in the bottoms colour over bare legs.
   let thighsD = '';
+  // Baggy bottoms: filled shapes for each leg.
+  let baggyD = '';
+  // The knee joints are separate shapes: overlapping fills in one path can cancel where they
+  // wind opposite ways, leaving holes.
+  let baggyKneesD = '';
+  const quad = (a: Pt, b: Pt, wa: number, wb: number) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    return (
+      'M' + f(a.x + (nx * wa) / 2) + ' ' + f(a.y + (ny * wa) / 2) +
+      'L' + f(b.x + (nx * wb) / 2) + ' ' + f(b.y + (ny * wb) / 2) +
+      'L' + f(b.x - (nx * wb) / 2) + ' ' + f(b.y - (ny * wb) / 2) +
+      'L' + f(a.x - (nx * wa) / 2) + ' ' + f(a.y - (ny * wa) / 2) + 'Z'
+    );
+  };
   for (let i = 0; i < 2; i++) {
     const side = legs[i]![0];
     const hip = legs[i]![1];
     const sg = legs[i]![2];
     const thighA = legs[i]![3];
-    const knee = limb(hip, sg, thighA, LEG / 2);
+    // Baggy legs drift a little outward below the waist so the wide legs don't merge into one block.
+    const out = baggyBottom ? sg * 0.8 : 0;
+    const kneeRaw = limb(hip, sg, thighA, LEG / 2);
+    const knee = { x: kneeRaw.x + out, y: kneeRaw.y };
     const fold = side === 'L' ? P.kneeL || 0 : P.kneeR || 0;
     const dir = rot({ x: sg * Math.sin(thighA), y: Math.cos(thighA) }, { x: 0, y: 0 }, -fold);
     const foot = { x: knee.x + dir.x * (LEG / 2), y: knee.y + dir.y * (LEG / 2) };
@@ -1023,23 +1319,71 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
     const b = B(foot.x, foot.y);
     legsD += seg(B(hip.x, hip.y), B(knee.x, knee.y), b);
     shoesD += circlePath({ x: b.x, y: b.y + 0.4 }, 2.3);
-    thighsD += seg(B(hip.x, hip.y - 1), B(mix(hip.x, knee.x, 0.8), mix(hip.y, knee.y, 0.8)));
+    const reach = 0.8;
+    // Start the shorts a little behind the hip, along the leg, so the bare leg's rounded top never
+    // shows (sitting cross-legged the legs run sideways, so "up" isn't behind them).
+    const dx = knee.x - hip.x;
+    const dy = knee.y - hip.y;
+    const dl = Math.hypot(dx, dy) || 1;
+    const back = { x: hip.x - (dx / dl) * 2.4, y: hip.y - (dy / dl) * 2.4 };
+    thighsD += seg(B(back.x, back.y), B(mix(hip.x, knee.x, reach), mix(hip.y, knee.y, reach)));
+    if (baggyBottom) {
+      // Wide trousers or shorts as tapered shapes: narrow under the shirt, wider at the knee, so the
+      // top follows the waist instead of sticking out. Shorts stop square at the knee.
+      const top = B(back.x, back.y);
+      const kn = B(knee.x, knee.y);
+      baggyD += quad(top, kn, 5, look.bottom === 'shorts' ? 6.6 : 6.4);
+      if (look.bottom === 'trousers') {
+        baggyD += quad(kn, b, 6.4, 6);
+        baggyKneesD += circlePath(kn, 3.2);
+      }
+    }
   }
   F.legs = legsD;
   F.shoes = shoesD;
-  F.thighs = look.bottom === 'shorts' ? thighsD : 'M0 0';
+  F.thighs = look.bottom === 'shorts' && !baggyBottom ? thighsD : 'M0 0';
+  F.baggyPants = baggyD || 'M0 0';
+  F.baggyKnees = baggyKneesD || 'M0 0';
   // Sitting cross-legged the skirt spreads over the lap toward the knees and ends at the legs
   // (drawn behind them), instead of hanging below them.
   F.skirt =
     look.bottom !== 'skirt'
       ? 'M0 0'
-      : idle === 'meditate'
+      : P.crossLegged
         ? shapePath([['M', 25.4, 41.5], ['L', 34.6, 41.5], ['L', 38.6, 46.4], ['Q', 30, 48.4, 21.4, 46.4], ['Z']], B)
-        : shapePath([['M', 25.4, 41.5], ['L', 34.6, 41.5], ['L', 37.2, 50], ['Q', 30, 51.6, 22.8, 50], ['Z']], B);
-  F.torso = seg(B(30, 35.5), B(30, 41));
+        : shapePath([['M', 25.4, 43], ['L', 34.6, 43], ['L', 37.4, 52], ['Q', 30, 53.6, 22.6, 52], ['Z']], B);
+  // Where the hem falls. Sitting cross-legged the top stops at the waist (right above a skirt, or
+  // just over the tops of the legs) instead of hanging over the lap.
+  const hemY = P.crossLegged ? (look.bottom === 'skirt' ? 41.8 : 44.5) : 45.6;
+  F.crossLegged = P.crossLegged ? 1 : 0;
+  const dHem = hemY - 46.5;
+  F.torso = baggyTop ? 'M0 0' : seg(B(30, 35.5), B(30, hemY - 5.5));
+  F.hem = baggyTop
+    ? 'M0 0'
+    : shapePath([['M', 24.5, hemY - 5.5], ['L', 35.5, hemY - 5.5], ['L', 35.5, hemY], ['L', 24.5, hemY], ['Z']], B);
+  // A baggy top is a boxy, oversized cut: wide drop shoulders, near-straight sides, a flat hem that
+  // stops at the hips, and a couple of soft creases.
+  F.torsoFlow = baggyTop
+    ? shapePath(
+        [
+          ['M', 23.6, 33.2], ['Q', 23.6, 30.4, 26.6, 30.4], ['L', 33.4, 30.4], ['Q', 36.4, 30.4, 36.4, 33.2],
+          ['L', 36.7, hemY], ['L', 23.3, hemY], ['Z'],
+        ],
+        B
+      )
+    : 'M0 0';
+  F.folds = baggyTop
+    ? shapePath(
+        [
+          ['M', 25.8, 46.4 + dHem], ['Q', 26.6, 43.6 + dHem, 26.2, 41 + dHem],
+          ['M', 34.2, 46.4 + dHem], ['Q', 33.6, 44 + dHem, 34, 42 + dHem],
+        ],
+        B
+      )
+    : 'M0 0';
   // Jersey stripe across the chest, jacket zip down the middle.
   F.stripe = look.top === 'jersey' ? seg(B(25.2, 37.6), B(34.8, 37.6)) : 'M0 0';
-  F.zip = look.top === 'jacket' ? seg(B(30, 31.6), B(30, 46)) : 'M0 0';
+  F.zip = look.top === 'jacket' ? seg(B(30, 31.6), B(30, hemY - 0.5)) : 'M0 0';
   // Medal on the chest, its ribbon running up behind the head.
   const medal = B(30, 39.2);
   F.medalX = medal.x;
@@ -1063,7 +1407,7 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
     const arm = arms[i]![3];
     const elbow = arms[i]![4];
     const hand = arms[i]![5];
-    const sleeveEnd = limb(sh, sg, arm.a, UPPER * 0.55);
+    const sleeveEnd = limb(sh, sg, arm.a, UPPER * (baggyTop ? 0.8 : 0.55));
     armsD += seg(B(sh.x, sh.y), B(elbow.x, elbow.y), B(hand.x, hand.y));
     sleevesD += seg(B(sh.x, sh.y), B(sleeveEnd.x, sleeveEnd.y));
     const h = B(hand.x, hand.y);
@@ -1087,6 +1431,9 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
   // Right forearm direction, for things held in or worn on that hand (the ring, the hammer).
   const elbowRB = B(elbowR.x, elbowR.y);
   F.handRDeg = (Math.atan2(hands[1]!.y - elbowRB.y, hands[1]!.x - elbowRB.x) * 180) / Math.PI;
+  const elbowLB2 = B(elbowL.x, elbowL.y);
+  F.handLDeg = (Math.atan2(hands[0]!.y - elbowLB2.y, hands[0]!.x - elbowLB2.x) * 180) / Math.PI;
+  F.angry = expr === 'angry' ? 1 : 0;
   // Watch on the left wrist, turned to lie across the forearm.
   const wrist = B(mix(elbowL.x, handL.x, 0.72), mix(elbowL.y, handL.y, 0.72));
   const elbowLB = B(elbowL.x, elbowL.y);
@@ -1130,6 +1477,14 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
   F.headDeg = headDeg;
   F.faceDx = fx;
   F.ohO = expr === 'surprised' ? 1 : 0;
+  // Eye beam: from between the eyes straight out to the right, turning with the head.
+  if (P.eyebeam) {
+    const from = Fc(31, 23.6);
+    const to = Fc(104, 23.6 + 7 * P.eyebeam.sweep);
+    F.beam = 'M' + f(from.x) + ' ' + f(from.y) + 'L' + f(to.x) + ' ' + f(to.y);
+    F.beamO = P.eyebeam.beam;
+    F.eyeGlow = P.eyebeam.charge;
+  }
   const cl = Fc(25.6, 26.3);
   const cr = Fc(34.4, 26.3);
   F.cheeks = circlePath(cl, 1.3) + circlePath(cr, 1.3);
@@ -1157,7 +1512,8 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
       + 'L' + f(tp.x + 0.8) + ' ' + f(tp.y - 0.2) + 'Z';
     F.tearO = P.tear < 0.7 ? Math.sin(Math.PI * q) : 0;
   } else {
-    F.brows = 'M0 0';
+    // Angry: brows slanting down toward the middle.
+    F.brows = expr === 'angry' ? seg(Fc(25.2, 20), Fc(28.5, 21.4)) + seg(Fc(31.5, 21.4), Fc(34.8, 20)) : 'M0 0';
     F.tear = 'M0 0';
     F.tearO = 0;
   }
@@ -1406,6 +1762,35 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
     }
   }
 
+  // Claws: drawn as fixed blades along each forearm, stretched by how far they're out.
+  if (P.claws !== undefined) F.clawExt = P.claws;
+  if (P.clawFx) {
+    const c = B(30, 38);
+    F.cfxX = c.x;
+    F.cfxY = c.y;
+    F.cfxSnikt = P.clawFx.snikt;
+    F.cfxN = P.clawFx.swings.length;
+    P.clawFx.swings.forEach((s, i) => {
+      F['cfxV' + i] = s.v;
+      F['cfxL' + i] = s.lam;
+      let d = '';
+      for (let k = 0; k < s.pts.length; k += 2) {
+        const q = B(s.pts[k], s.pts[k + 1]);
+        d += f(q.x) + ' ' + f(q.y) + ' ';
+      }
+      F['cfxP' + i] = d;
+    });
+  }
+
+  // Spell circle: centred in front of the chest between the hands, turning slowly.
+  if (P.spell !== undefined) {
+    const c = B(30, 39.5);
+    F.spellX = c.x;
+    F.spellY = c.y;
+    F.spellDeg = t * 40;
+    F.spellO = P.spell;
+  }
+
   // Speedster: three small zigzags of lightning around the body, jumping about every flash.
   if (P.sparks !== undefined) {
     let d = '';
@@ -1426,7 +1811,7 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
   for (let i = 0; i < look.pets.length; i++) {
     const p = look.pets[i]!;
     if (p === 'horse') hasHorse = true;
-    else if (p === 'browndog' || p === 'goldendog' || p === 'bwdog') hasDog = true;
+    else if (p === 'browndog' || p === 'goldendog' || p === 'bwdog' || p === 'blackdog') hasDog = true;
     else if (p !== 'bird' && p !== 'bluebird' && p !== 'macaw' && p !== 'canary' && p !== 'cockatoo') catCount++;
   }
   // Shoulder bird (any pet left over): bobs on the shoulder, blinks, and now and then flaps its wing.
@@ -1464,14 +1849,13 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
     F.horseTail = 'M8.4 -15.4Q' + f(11.6 + 1.3 * swish) + ' -12 ' + f(10.6 + 1.8 * swish) + ' -5';
     const graze = (S(0.18, sd) + 1) / 2;
     const nod = ((-2 + 9 * graze * graze) * Math.PI) / 180;
-    const neckPivot = { x: -5, y: -14 };
-    const N = (x: number, y: number) => rot({ x, y }, neckPivot, nod);
+    const N = (x: number, y: number) => rot({ x, y }, HORSE_NECK_PIVOT, nod);
     F.horseHead = shapePath(HORSE_NECK_HEAD, N);
     F.horseMane = shapePath(HORSE_MANE, N);
     F.horseForelock = shapePath(HORSE_FORELOCK, N);
     F.horseEar = shapePath(HORSE_EAR, N);
-    const eye = N(-11.7, -23.1);
-    const nostril = N(-14.8, -20.4);
+    const eye = N(HORSE_EYE.x, HORSE_EYE.y);
+    const nostril = N(HORSE_NOSTRIL.x, HORSE_NOSTRIL.y);
     F.horseEyeX = eye.x;
     F.horseEyeY = eye.y;
     F.horseNostrilX = nostril.x;
