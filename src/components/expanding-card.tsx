@@ -135,6 +135,6 @@ const styles = StyleSheet.create({
   content: { position: 'absolute' },
   header: { height: HEADER_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: 12, paddingLeft: 20, paddingRight: 8 },
   flex: { flex: 1 },
-  title: { fontWeight: '800', fontStyle: 'italic' },
+  title: { fontWeight: '800' },
   body: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 20, gap: 16 },
 });

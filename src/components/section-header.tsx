@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
   section: { gap: 12, paddingTop: 4 },
   rule: { height: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontWeight: '800', fontStyle: 'italic' },
+  title: { flex: 1, fontWeight: '800' },
   note: { letterSpacing: 1.2, fontWeight: '600' },
   link: { flexDirection: 'row', alignItems: 'center', gap: 2 },
 });
