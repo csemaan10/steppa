@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Platform, RefreshControl, ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import {
   Appbar,
   Card,
@@ -149,6 +149,16 @@ export default function TodayScreen() {
   const [detail, setDetail] = useState<{ kind: WeekDetailKind; origin: Rect } | null>(null);
   const open = (kind: WeekDetailKind) => (origin: Rect) => setDetail({ kind, origin });
 
+  // All four tiles match the tallest (Goal met, with its weekday letters), across both rows.
+  const [tileHeight, setTileHeight] = useState(0);
+  const tileSize = {
+    minHeight: tileHeight || undefined,
+    onLayout: (e: LayoutChangeEvent) => {
+      const height = Math.ceil(e.nativeEvent.layout.height);
+      setTileHeight((t) => Math.max(t, height));
+    },
+  };
+
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
       <Appbar.Header mode="small" style={transparentHeader}>
@@ -226,6 +236,7 @@ export default function TodayScreen() {
             <SectionHeader title="Last 7 days" note={weekRange} />
             <View style={styles.row}>
               <InsightTile
+                {...tileSize}
                 label="Daily average"
                 value={formatSteps(stats.average)}
                 progress={stats.average / goal}
@@ -233,6 +244,7 @@ export default function TodayScreen() {
                 onPress={open('average')}
               />
               <InsightTile
+                {...tileSize}
                 label="Total"
                 value={formatSteps(stats.total)}
                 progress={stats.total / (goal * 7)}
@@ -242,6 +254,7 @@ export default function TodayScreen() {
             </View>
             <View style={styles.row}>
               <InsightTile
+                {...tileSize}
                 label="Best day"
                 value={formatSteps(stats.best)}
                 progress={stats.best / goal}
@@ -253,6 +266,7 @@ export default function TodayScreen() {
                 onPress={open('best')}
               />
               <InsightTile
+                {...tileSize}
                 label="Goal met"
                 value={`${goalHits.filter(Boolean).length} of 7 days`}
                 supporting={`Goal: ${formatSteps(goal)} steps`}
