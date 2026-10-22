@@ -126,6 +126,14 @@ export function screenBackground(theme: AppTheme): ViewStyle {
 
 export const transparentHeader: ViewStyle = { backgroundColor: 'transparent' };
 
+/**
+ * The unfilled part of a progress ring. In light mode a dark wash rather than the pale surfaceVariant,
+ * which is about as light as the glows and see-through glass behind it and disappears into them.
+ */
+export function ringTrack(theme: MD3Theme): string {
+  return theme.dark ? theme.colors.surfaceVariant : withAlpha(theme.colors.onSurface, 0.12);
+}
+
 const CARD_RADIUS = 24;
 
 /**

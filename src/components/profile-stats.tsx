@@ -6,7 +6,7 @@ import { StreakFlame, flameTier } from '@/components/streak-flame';
 import { summarize, type DaySteps, type ProfileStats } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { KCAL_PER_STEP, KM_PER_STEP, STEPS_PER_MINUTE } from '@/lib/estimates';
-import { glassCard, useAppTheme } from '@/theme';
+import { glassCard, ringTrack, useAppTheme } from '@/theme';
 
 const MARATHON_KM = 42.195;
 
@@ -54,7 +54,7 @@ export function StepsOverviewCard({ history, previous, goal }: OverviewProps) {
             stroke={10}
             color={theme.colors.primary}
             overflowColor={theme.colors.accent}
-            trackColor={theme.colors.surfaceVariant}>
+            trackColor={ringTrack(theme)}>
             <Text variant="titleMedium" style={styles.bold}>
               {Math.round(ratio * 100)}%
             </Text>

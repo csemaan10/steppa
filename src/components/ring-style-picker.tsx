@@ -12,7 +12,7 @@ import {
   type RingCat,
   type RingThickness,
 } from '@/lib/ring-style';
-import { glassCard, useAppTheme, withAlpha } from '@/theme';
+import { glassCard, ringTrack, useAppTheme, withAlpha } from '@/theme';
 
 /**
  * Settings card for the step ring: style (each a small live preview), the cat's coat on Cat paws,
@@ -50,7 +50,7 @@ export function RingStylePicker() {
                   stroke={7}
                   color={theme.colors.primary}
                   overflowColor={theme.colors.accent}
-                  trackColor={theme.colors.surfaceVariant}
+                  trackColor={ringTrack(theme)}
                 />
                 <Text variant="labelMedium" style={selected && { color: theme.colors.primary, fontWeight: '700' }}>
                   {RING_STYLE_LABELS[s]}

@@ -42,7 +42,7 @@ import {
 } from '@/lib/health';
 import { loadRecap, markRecapSeen, recapUnseen } from '@/lib/recap';
 import { useUserId } from '@/providers/auth-provider';
-import { glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
+import { glassCard, ringTrack, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 /** How often the Today tab re-reads the health store while it's on screen. */
 const RESYNC_MS = 60_000;
@@ -201,7 +201,7 @@ export default function TodayScreen() {
               stroke={14}
               color={theme.colors.primary}
               overflowColor={theme.colors.accent}
-              trackColor={theme.colors.surfaceVariant}>
+              trackColor={ringTrack(theme)}>
               <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
                 Steps today
               </Text>
