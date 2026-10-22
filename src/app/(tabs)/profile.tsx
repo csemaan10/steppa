@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Appbar, Card, Text, useTheme } from 'react-native-paper';
+import { Appbar, Card, Text } from 'react-native-paper';
 
+import { GlassAction } from '@/components/glass-action';
 import { UserAvatar } from '@/components/user-avatar';
 import { useTabBarSpace } from '@/components/floating-tab-bar';
 import { MonthCard } from '@/components/month-card';
@@ -13,10 +14,10 @@ import { useLoader } from '@/hooks/use-loader';
 import { getProfile, getProfileStats, getStepHistory } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
-import { screenBackground, surfaceCard, transparentHeader } from '@/theme';
+import { glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 export default function ProfileScreen() {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const userId = useUserId();
   const tabBarSpace = useTabBarSpace();
   const { data } = useLoader(async () => {
@@ -34,7 +35,7 @@ export default function ProfileScreen() {
     <View style={[styles.flex, screenBackground(theme)]}>
       <Appbar.Header mode="small" style={transparentHeader}>
         <Appbar.Content title="Profile" />
-        <Appbar.Action icon="cog-outline" onPress={() => router.push('/settings')} accessibilityLabel="Settings" />
+        <GlassAction icon="cog-outline" onPress={() => router.push('/settings')} accessibilityLabel="Settings" />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: tabBarSpace }]}>
@@ -59,7 +60,7 @@ export default function ProfileScreen() {
 
             {lifetime ? <StreakCard current={lifetime.current_streak} longest={lifetime.longest_streak} /> : null}
 
-            <Card mode="contained" style={surfaceCard(theme)}>
+            <Card mode="contained" style={glassCard(theme)}>
               <Card.Title title="This week" />
               <Card.Content>
                 <WeekChart
@@ -72,7 +73,7 @@ export default function ProfileScreen() {
             {/* Remounts after a history import (Settings) adds days, so the calendar refetches. */}
             <MonthCard key={lifetime?.days_tracked} userId={userId} goal={data.profile.daily_goal} />
 
-            <Card mode="contained" style={surfaceCard(theme)}>
+            <Card mode="contained" style={glassCard(theme)}>
               <Card.Title title="Your rhythm" subtitle="Average by weekday, last 60 days" />
               <Card.Content>
                 <WeekdayChart history={data.history60} />

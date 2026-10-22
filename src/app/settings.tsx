@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Appbar, Card, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Card, HelperText, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccountCard } from '@/components/account-card';
@@ -10,6 +10,7 @@ import { BackgroundSyncCard } from '@/components/background-sync-card';
 import { BlockedUsersCard } from '@/components/blocked-users-card';
 import { CharacterEditorCard } from '@/components/character/character-editor-card';
 import { CollapsibleSection } from '@/components/collapsible-section';
+import { GlassBackAction } from '@/components/glass-action';
 import { RingStylePicker } from '@/components/ring-style-picker';
 import { StepCheckCard } from '@/components/step-check-card';
 import { ThemePicker } from '@/components/theme-picker';
@@ -17,10 +18,10 @@ import { AVATAR_ICONS, UserAvatar } from '@/components/user-avatar';
 import { useLoader } from '@/hooks/use-loader';
 import { getProfile, updateProfile, type Profile } from '@/lib/api';
 import { useUserId } from '@/providers/auth-provider';
-import { avatarColors, screenBackground, surfaceCard, transparentHeader } from '@/theme';
+import { avatarColors, glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 export default function SettingsScreen() {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const userId = useUserId();
   const { data: profile, error } = useLoader(() => getProfile(userId), userId);
 
@@ -28,7 +29,7 @@ export default function SettingsScreen() {
     return (
       <View style={[styles.flex, screenBackground(theme)]}>
         <Appbar.Header mode="small" style={transparentHeader}>
-          <Appbar.BackAction onPress={() => router.back()} />
+          <GlassBackAction onPress={() => router.back()} />
           <Appbar.Content title="Settings" />
         </Appbar.Header>
         <View style={styles.center}>
@@ -43,7 +44,7 @@ export default function SettingsScreen() {
 }
 
 function SettingsForm({ profile, userId }: { profile: Profile; userId: string }) {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   // Opened from the Today card with focus=character: scroll the character editor into view.
   const { focus } = useLocalSearchParams<{ focus?: string }>();
@@ -96,7 +97,7 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
       <Appbar.Header mode="small" style={transparentHeader}>
-        <Appbar.BackAction onPress={() => router.back()} />
+        <GlassBackAction onPress={() => router.back()} />
         <Appbar.Content title="Settings" />
       </Appbar.Header>
 
@@ -108,7 +109,7 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
           </Text>
         </View>
 
-        <Card mode="contained" style={surfaceCard(theme)}>
+        <Card mode="contained" style={glassCard(theme)}>
           <Card.Content style={styles.section}>
             <TextInput
               mode="outlined"
@@ -134,7 +135,7 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
           </Card.Content>
         </Card>
 
-        <Card mode="contained" style={surfaceCard(theme)}>
+        <Card mode="contained" style={glassCard(theme)}>
           <Card.Title title="Avatar" titleVariant="titleMedium" />
           <Card.Content style={styles.avatarSections}>
             <CollapsibleSection

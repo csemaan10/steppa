@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Card, Text, useTheme } from 'react-native-paper';
+import { Card, Text, useTheme } from 'react-native-paper';
 
+import { Button } from '@/components/button';
 import { diagnoseToday, type DiagnosticLine } from '@/lib/health';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 /** Reads today's steps several ways and shows the results, for tracking down wrong step counts. */
 export function StepCheckCard() {
@@ -23,7 +24,7 @@ export function StepCheckCard() {
   }
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <Card.Title
         title="Step check"
         subtitle="Compare with your Health app if your steps look wrong"

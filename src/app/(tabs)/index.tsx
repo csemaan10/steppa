@@ -3,19 +3,23 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Appbar,
-  Button,
   Card,
   Snackbar,
   Text,
 } from 'react-native-paper';
 
+import { Button } from '@/components/button';
 import { CharacterIntroCard } from '@/components/character/character-intro-card';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
+import { GlassAction } from '@/components/glass-action';
 import { GroupPreview } from '@/components/group-preview';
+import type { Rect } from '@/components/expanding-card';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
 import { StreakCard } from '@/components/profile-stats';
 import { ProgressRing } from '@/components/progress-ring';
 import { RecapPreview } from '@/components/recap/recap-preview';
+import { SectionHeader } from '@/components/section-header';
+import { WeekDetail, type WeekDetailKind } from '@/components/week-detail';
 import { useLoader } from '@/hooks/use-loader';
 import { registerBackgroundSync } from '@/lib/background-sync';
 import {
@@ -38,7 +42,7 @@ import {
 } from '@/lib/health';
 import { loadRecap, markRecapSeen, recapUnseen } from '@/lib/recap';
 import { useUserId } from '@/providers/auth-provider';
-import { screenBackground, surfaceCard, transparentHeader, useAppTheme } from '@/theme';
+import { glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 /** How often the Today tab re-reads the health store while it's on screen. */
 const RESYNC_MS = 60_000;
@@ -70,7 +74,8 @@ export default function TodayScreen() {
     await syncTimezone(userId);
     const [profile, history, groups, lifetime] = await Promise.all([
       getProfile(userId),
-      getStepHistory(userId, 7),
+      // Two weeks: the tiles show the last 7 days, and the detail card compares them with the 7 before.
+      getStepHistory(userId, 14),
       getMyGroups(),
       getProfileStats(userId),
     ]);
@@ -87,7 +92,7 @@ export default function TodayScreen() {
       // Extra: if the recap fails to load, the rest of the screen still shows.
       loadRecap(userId, groups).catch(() => null),
     ]);
-    return { profile, history, previews, lifetime, recap, health, syncError };
+    return { profile, history, previews, groupCount: groups.length, lifetime, recap, health, syncError };
   }, userId);
 
   // The morning recap pops up once a day, the first time Today loads after 5 am.
@@ -127,26 +132,34 @@ export default function TodayScreen() {
   const snack = data?.syncError && data.syncError !== dismissedError ? data.syncError : null;
 
   const goal = data?.profile.daily_goal ?? 10000;
-  const stats = data ? summarize(data.history) : null;
+  const week = data?.history.slice(-7) ?? [];
+  const stats = data ? summarize(week) : null;
   const ratio = stats ? stats.today / goal : 0;
   const over = ratio > 1;
-  const bestDay = data?.history.reduce<(typeof data.history)[number] | null>(
+  const bestDay = week.reduce<(typeof week)[number] | null>(
     (best, d) => (d.steps > 0 && (!best || d.steps > best.steps) ? d : best),
     null
   );
-  const goalHits = data?.history.map((d) => d.steps >= goal) ?? [];
+  const goalHits = week.map((d) => d.steps >= goal);
+  const shortDate = (day: string) =>
+    new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const weekRange = week.length ? `${shortDate(week[0].day)} – ${shortDate(week[week.length - 1].day)}` : undefined;
+
+  // Each tile opens its own detail card, grown out of that tile.
+  const [detail, setDetail] = useState<{ kind: WeekDetailKind; origin: Rect } | null>(null);
+  const open = (kind: WeekDetailKind) => (origin: Rect) => setDetail({ kind, origin });
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
       <Appbar.Header mode="small" style={transparentHeader}>
         <Appbar.Content title="Today" />
-        <Appbar.Action
+        <GlassAction
           icon="sync"
           disabled={loading}
           onPress={reload}
           accessibilityLabel={`Sync with ${healthSourceName}`}
         />
-        <Appbar.Action icon="cog-outline" onPress={() => router.push('/settings')} accessibilityLabel="Settings" />
+        <GlassAction icon="cog-outline" onPress={() => router.push('/settings')} accessibilityLabel="Settings" />
       </Appbar.Header>
 
       <ScrollView
@@ -210,19 +223,21 @@ export default function TodayScreen() {
         {data && stats ? (
           <View style={styles.grid}>
             {/* Every tile below covers the same window: today and the 6 days before it. */}
-            <Text variant="titleMedium">Last 7 days</Text>
+            <SectionHeader title="Last 7 days" note={weekRange} />
             <View style={styles.row}>
               <InsightTile
                 label="Daily average"
                 value={formatSteps(stats.average)}
                 progress={stats.average / goal}
                 supporting={`${Math.round((stats.average / goal) * 100)}% of goal`}
+                onPress={open('average')}
               />
               <InsightTile
                 label="Total"
                 value={formatSteps(stats.total)}
                 progress={stats.total / (goal * 7)}
                 supporting={`of ${formatSteps(goal * 7)}`}
+                onPress={open('total')}
               />
             </View>
             <View style={styles.row}>
@@ -235,14 +250,16 @@ export default function TodayScreen() {
                     ? new Date(`${bestDay.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })
                     : 'No steps yet'
                 }
+                onPress={open('best')}
               />
               <InsightTile
                 label="Goal met"
                 value={`${goalHits.filter(Boolean).length} of 7 days`}
-                supporting={`Goal: ${formatSteps(goal)} steps`}>
+                supporting={`Goal: ${formatSteps(goal)} steps`}
+                onPress={open('goal')}>
                 <GoalSegments
                   hits={goalHits}
-                  labels={data.history.map((d) => shortWeekday(new Date(`${d.day}T12:00:00`)))}
+                  labels={week.map((d) => shortWeekday(new Date(`${d.day}T12:00:00`)))}
                 />
               </InsightTile>
             </View>
@@ -253,14 +270,11 @@ export default function TodayScreen() {
 
         {data ? (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text variant="titleMedium">Your groups</Text>
-              {data.previews.length ? (
-                <Button compact onPress={() => router.navigate('/groups')}>
-                  See all
-                </Button>
-              ) : null}
-            </View>
+            <SectionHeader
+              title="Your groups"
+              note={data.groupCount ? `${data.groupCount} ${data.groupCount === 1 ? 'group' : 'groups'}` : undefined}
+              onPress={data.groupCount ? () => router.navigate('/groups') : undefined}
+            />
             {data.previews.length ? (
               data.previews.map(({ group, rows, latestMessageId }) => (
                 <GroupPreview
@@ -272,7 +286,7 @@ export default function TodayScreen() {
                 />
               ))
             ) : (
-              <Card mode="contained" style={surfaceCard(theme)}>
+              <Card mode="contained" style={glassCard(theme)}>
                 <Card.Content style={styles.emptyGroups}>
                   <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                     Compete with friends by creating or joining a group.
@@ -288,6 +302,17 @@ export default function TodayScreen() {
 
         {recap?.groups.length ? <RecapPreview recap={recap} /> : null}
       </ScrollView>
+
+      {data && detail ? (
+        <WeekDetail
+          kind={detail.kind}
+          origin={detail.origin}
+          history={data.history}
+          goal={goal}
+          streak={data.lifetime.current_streak}
+          onClose={() => setDetail(null)}
+        />
+      ) : null}
 
       <Snackbar
         visible={!!snack}
@@ -306,7 +331,6 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', paddingVertical: 8 },
   row: { flexDirection: 'row', gap: 12 },
   grid: { gap: 12 },
-  section: { gap: 8 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  section: { gap: 12 },
   emptyGroups: { gap: 12, alignItems: 'flex-start', paddingVertical: 16 },
 });

@@ -7,13 +7,19 @@ import { formatSteps, shortWeekday } from '@/lib/dates';
 
 type Series = { name: string; color: string; data: DaySteps[] };
 
-type Props = { series: Series[]; goal?: number; height?: number };
+type Props = {
+  series: Series[];
+  goal?: number;
+  height?: number;
+  /** A day to start selected, with its value shown and the others dimmed. */
+  highlight?: number;
+};
 
-export function WeekChart({ series, goal, height = 140 }: Props) {
+export function WeekChart({ series, goal, height = 140, highlight }: Props) {
   const theme = useTheme();
   const days = series[0]?.data ?? [];
   const max = Math.max(goal ?? 0, 1, ...series.flatMap((s) => s.data.map((d) => d.steps)));
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(highlight ?? null);
 
   return (
     <View style={{ paddingTop: series.length > 1 ? 52 : 36 }}>

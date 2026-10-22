@@ -1,20 +1,21 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, HelperText, SegmentedButtons, Text, TextInput, useTheme } from 'react-native-paper';
+import { HelperText, SegmentedButtons, Text, TextInput } from 'react-native-paper';
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/button';
 import { supabase } from '@/lib/supabase';
 import { useAppLock } from '@/providers/app-lock-provider';
 import { useAuth } from '@/providers/auth-provider';
-import { screenBackground } from '@/theme';
+import { screenBackground, useAppTheme } from '@/theme';
 
 type Mode = 'sign-in' | 'sign-up';
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
 export default function SignInScreen() {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const { session } = useAuth();
   const { locked, signInWithBiometrics, forget, clearLock } = useAppLock();
   const [mode, setMode] = useState<Mode>('sign-in');

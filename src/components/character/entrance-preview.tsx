@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from 'react-native-paper';
 import { Easing, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
+import { Button } from '@/components/button';
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import { ENTRANCE_POSE, ENTRANCE_SECONDS, type EntranceKind } from '@/components/character/entrance';
 import { EntranceStage } from '@/components/character/entrance-stage';

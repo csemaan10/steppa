@@ -7,9 +7,14 @@ import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useDerivedValue,
-  withTiming,
+  withSpring,
   type DerivedValue,
 } from 'react-native-reanimated';
+
+import { usePressed } from '@/hooks/use-pressed';
+import { motion } from '@/theme/motion';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -21,7 +26,9 @@ type Props = { actions: FabMenuAction[]; bottom: number };
 export function FabMenu({ actions, bottom }: Props) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
-  const progress = useDerivedValue<number>(() => withTiming(open ? 1 : 0, { duration: 220 }));
+  const progress = useDerivedValue<number>(() => withSpring(open ? 1 : 0, motion.spatial));
+  // Held, the FAB tightens its corners and dips (M3 Expressive), on top of the open/close morph.
+  const { pressed, onPressIn, onPressOut } = usePressed();
 
   const fabStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
@@ -29,7 +36,8 @@ export function FabMenu({ actions, bottom }: Props) {
       [0, 1],
       [theme.colors.primaryContainer, theme.colors.primary]
     ),
-    borderRadius: interpolate(progress.value, [0, 1], [16, 28]),
+    borderRadius: interpolate(progress.value, [0, 1], [16, 28]) - pressed.value * 6,
+    transform: [{ scale: 1 - pressed.value * 0.06 }],
   }));
   const iconStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${interpolate(progress.value, [0, 1], [0, 45])}deg` }],
@@ -65,6 +73,8 @@ export function FabMenu({ actions, bottom }: Props) {
 
         <Pressable
           onPress={() => setOpen((o) => !o)}
+          onPressIn={onPressIn}
+          onPressOut={onPressOut}
           accessibilityRole="button"
           accessibilityLabel={open ? 'Close menu' : 'Open menu'}
           accessibilityState={{ expanded: open }}>
@@ -92,26 +102,30 @@ type ItemProps = {
 
 function FabMenuItem({ action, progress, order, onPress }: ItemProps) {
   const theme = useTheme();
+  const { pressed, onPressIn, onPressOut } = usePressed();
   const style = useAnimatedStyle(() => {
     const start = order * 0.15;
     const t = interpolate(progress.value, [start, Math.min(1, start + 0.7)], [0, 1], 'clamp');
     return {
       opacity: t,
-      transform: [{ translateY: (1 - t) * 16 }, { scale: 0.9 + t * 0.1 }],
+      transform: [{ translateY: (1 - t) * 16 }, { scale: (0.9 + t * 0.1) * (1 - pressed.value * 0.04) }],
     };
   });
+  const shape = useAnimatedStyle(() => ({ borderRadius: 28 - pressed.value * 10 }));
 
   return (
     <Animated.View style={style}>
-      <Pressable
+      <AnimatedPressable
         onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
         accessibilityRole="menuitem"
-        style={[styles.item, { backgroundColor: theme.colors.primaryContainer }]}>
+        style={[styles.item, { backgroundColor: theme.colors.primaryContainer }, shape]}>
         <MaterialCommunityIcons name={action.icon} size={22} color={theme.colors.onPrimaryContainer} />
         <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer }}>
           {action.label}
         </Text>
-      </Pressable>
+      </AnimatedPressable>
     </Animated.View>
   );
 }

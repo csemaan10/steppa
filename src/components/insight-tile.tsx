@@ -1,8 +1,10 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Card, ProgressBar, Text } from 'react-native-paper';
 
-import { useAppTheme } from '@/theme';
+import type { Rect } from '@/components/expanding-card';
+import { PressableScale } from '@/components/pressable-scale';
+import { glassCard, useAppTheme } from '@/theme';
 
 type Props = {
   label: string;
@@ -10,20 +12,23 @@ type Props = {
   supporting: string;
   /** Fraction of a target; renders a linear progress indicator. */
   progress?: number;
+  /** Makes the tile a button; gets the tile's place on screen, for a detail card to grow out of. */
+  onPress?: (origin: Rect) => void;
   children?: ReactNode;
 };
 
-/** Material 3 filled card: label, headline value, optional linear progress, supporting text. */
-export function InsightTile({ label, value, supporting, progress, children }: Props) {
+/** Compact frosted glass tile: label, headline value, optional linear progress, supporting text. */
+export function InsightTile({ label, value, supporting, progress, onPress, children }: Props) {
   const theme = useAppTheme();
+  const ref = useRef<View>(null);
 
-  return (
-    <Card mode="contained" style={[styles.card, { backgroundColor: theme.colors.elevation.level2 }]}>
+  const card = (
+    <Card mode="contained" style={[styles.flex, glassCard(theme)]}>
       <Card.Content style={styles.content}>
-        <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+        <Text variant="labelMedium" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
           {label}
         </Text>
-        <Text variant="headlineSmall" style={{ color: theme.colors.onSurface }}>
+        <Text variant="titleLarge" numberOfLines={1} adjustsFontSizeToFit style={[styles.value, { color: theme.colors.onSurface }]}>
           {value}
         </Text>
         {progress !== undefined ? (
@@ -34,11 +39,27 @@ export function InsightTile({ label, value, supporting, progress, children }: Pr
           />
         ) : null}
         {children}
-        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+        <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
           {supporting}
         </Text>
       </Card.Content>
     </Card>
+  );
+  if (!onPress) return card;
+
+  // The ref is on a plain view outside the press dip, so the measured rect is the tile at rest.
+  return (
+    <View ref={ref} collapsable={false} style={styles.flex}>
+      <PressableScale
+        onPress={() => ref.current?.measureInWindow((x, y, width, height) => onPress({ x, y, width, height }))}
+        pressedScale={0.96}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${value}`}
+        accessibilityHint="Opens more detail"
+        style={styles.flex}>
+        {card}
+      </PressableScale>
+    </View>
   );
 }
 
@@ -65,10 +86,11 @@ export function GoalSegments({ hits, labels }: { hits: boolean[]; labels: string
 }
 
 const styles = StyleSheet.create({
-  card: { flex: 1 },
-  content: { gap: 6, paddingVertical: 16 },
-  progress: { height: 4, borderRadius: 2, marginVertical: 4 },
-  segments: { flexDirection: 'row', gap: 4, marginVertical: 4 },
-  segmentColumn: { flex: 1, alignItems: 'center', gap: 4 },
+  flex: { flex: 1 },
+  content: { gap: 2, paddingHorizontal: 14, paddingVertical: 12 },
+  value: { fontWeight: '700' },
+  progress: { height: 4, borderRadius: 2, marginVertical: 3 },
+  segments: { flexDirection: 'row', gap: 4, marginVertical: 2 },
+  segmentColumn: { flex: 1, alignItems: 'center', gap: 2 },
   segment: { alignSelf: 'stretch', height: 4, borderRadius: 2 },
 });

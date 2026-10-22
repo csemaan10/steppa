@@ -9,7 +9,6 @@ import Animated, {
   useSharedValue,
   withDelay,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -29,8 +28,9 @@ const CHARACTER_WIDTH = 88;
 const CHARACTER_FPS = 30;
 // 3rd rises first, then 2nd, then 1st.
 const DELAYS = [30, 15, 0];
-/** About how long the block's spring takes to settle, so entrances start once it's up. */
+/** How long the block takes to rise (no bounce), so entrances start once it's up. */
 const RISE_MS = 300;
+const ease = Easing.out(Easing.cubic);
 // Entrances: 3rd goes first, then 2nd, then 1st.
 const ENTRANCE_DELAYS = [500, 250, 0];
 
@@ -102,7 +102,7 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
   useEffect(() => {
     height.set(0);
     reveal.set(0);
-    height.set(withDelay(delay, withSpring(HEIGHTS[place]!, { damping: 30, stiffness: 1000 })));
+    height.set(withDelay(delay, withTiming(HEIGHTS[place]!, { duration: RISE_MS, easing: ease })));
     reveal.set(withDelay(delay, withTiming(1, { duration: 80 })));
     if (!entrance) return;
     const start = delay + RISE_MS + ENTRANCE_DELAYS[place]!;

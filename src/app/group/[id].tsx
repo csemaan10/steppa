@@ -2,13 +2,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Platform, RefreshControl, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Appbar, Card, Chip, Menu, Text, useTheme } from 'react-native-paper';
+import { Appbar, Card, Chip, Menu, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { ButtonGroup } from '@/components/button-group';
 import { useExpandTransition } from '@/components/expand-transition';
+import { GlassAction, GlassBackAction } from '@/components/glass-action';
 import { GroupAvatar } from '@/components/group-avatar';
 import { UserAvatar } from '@/components/user-avatar';
 import { GroupChat } from '@/components/group-chat';
@@ -32,7 +33,7 @@ import {
 import { getLastRead } from '@/lib/chat-read';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
-import { screenBackground, transparentHeader } from '@/theme';
+import { liftedCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 type GroupView = 'board' | 'chat' | 'race' | 'trophies';
 /** The tabs in page order, left to right. */
@@ -40,7 +41,7 @@ const VIEWS: GroupView[] = ['board', 'chat', 'race', 'trophies'];
 const PAGE_MS = 240;
 
 export default function GroupScreen() {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const userId = useUserId();
   const { id, oy, oh } = useLocalSearchParams<{
@@ -216,7 +217,7 @@ export default function GroupScreen() {
       <Animated.View style={[screenBackground(theme), containerStyle]}>
         <Animated.View style={contentStyle}>
           <Appbar.Header mode="small" style={transparentHeader}>
-            <Appbar.BackAction onPress={close} />
+            <GlassBackAction onPress={close} />
             <Appbar.Content
               title={
                 data ? (
@@ -231,17 +232,18 @@ export default function GroupScreen() {
                 )
               }
             />
-            <Appbar.Action
+            <GlassAction
               icon="share-variant"
               onPress={shareInvite}
               disabled={!data}
               accessibilityLabel="Share invite"
+              contentStyle={styles.shareIcon}
             />
             <Menu
               visible={menuOpen}
               onDismiss={() => setMenuOpen(false)}
               anchor={
-                <Appbar.Action icon="dots-vertical" onPress={() => setMenuOpen(true)} accessibilityLabel="More" />
+                <GlassAction icon="dots-vertical" onPress={() => setMenuOpen(true)} accessibilityLabel="More" />
               }
             >
               {isOwner ? (
@@ -350,9 +352,7 @@ export default function GroupScreen() {
                       return (
                         <Card
                           mode="contained"
-                          style={{
-                            backgroundColor: isMe ? theme.colors.primaryContainer : theme.colors.elevation.level1,
-                          }}
+                          style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
                           onPress={isMe ? undefined : () => openUser(item.user_id)}
                         >
                           <View style={styles.row}>
@@ -424,6 +424,9 @@ export default function GroupScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  // The share glyph has two dots on the right and one on the left, so centred by its box it looks
+  // pushed right inside the round button; this sets it where it looks centred.
+  shareIcon: { transform: [{ translateX: -1.5 }] },
   // The pages sit side by side and slide along; the pager shows one at a time.
   pager: { flex: 1, overflow: 'hidden' },
   pages: { flex: 1, flexDirection: 'row' },

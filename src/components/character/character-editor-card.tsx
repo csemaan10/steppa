@@ -33,7 +33,7 @@ import {
   togglePet,
   type CharacterLook,
 } from '@/lib/character';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 type Props = { profile: Profile };
 type SectionKey = 'move' | 'entrance' | 'body' | 'face' | 'clothes' | 'watch' | 'pets';
@@ -108,7 +108,7 @@ export function CharacterEditorCard({ profile }: Props) {
   const ownFace = OWN_FACE_IDLES.includes(look.idle);
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <Card.Title title="Podium character" subtitle="How you appear on podiums and in trophy cabinets" titleVariant="titleMedium" />
       <Card.Content style={styles.content}>
         <View

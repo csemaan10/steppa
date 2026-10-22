@@ -1,8 +1,12 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import type { ComponentProps } from 'react';
+import { useEffect, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+
+import { usePressed } from '@/hooks/use-pressed';
+import { glass } from '@/theme';
+import { motion } from '@/theme/motion';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -48,16 +52,32 @@ function GroupButton<T extends string>({ option, selected, first, last, onPress 
   const theme = useTheme();
   const left = selected || first ? OUTER : INNER;
   const right = selected || last ? OUTER : INNER;
-  const background = selected ? theme.colors.primary : theme.colors.secondaryContainer;
-  const foreground = selected ? theme.colors.onPrimary : theme.colors.onSecondaryContainer;
+  const foreground = selected ? theme.colors.onPrimary : theme.colors.onSurface;
 
-  const animated = useAnimatedStyle(() => ({
-    borderTopLeftRadius: withTiming(left, { duration: 180 }),
-    borderBottomLeftRadius: withTiming(left, { duration: 180 }),
-    borderTopRightRadius: withTiming(right, { duration: 180 }),
-    borderBottomRightRadius: withTiming(right, { duration: 180 }),
-    backgroundColor: withTiming(background, { duration: 180 }),
-  }));
+  // Unselected options are frosted glass, so they stand off the screen's glows; the selected one
+  // fills with primary. Corners and fill spring to the new selection; while held, the corners also
+  // tighten and the button dips (M3 Expressive), so a tap shows before the selection changes.
+  const { pressed, onPressIn, onPressOut } = usePressed();
+  const leftRadius = useSharedValue(left);
+  const rightRadius = useSharedValue(right);
+  const on = useSharedValue(selected ? 1 : 0);
+  useEffect(() => {
+    leftRadius.set(withSpring(left, motion.spatial));
+    rightRadius.set(withSpring(right, motion.spatial));
+    on.set(withSpring(selected ? 1 : 0, motion.effects));
+  }, [left, right, selected, leftRadius, rightRadius, on]);
+
+  const shape = useAnimatedStyle(() => {
+    const squeeze = 1 - pressed.value * 0.4;
+    return {
+      borderTopLeftRadius: leftRadius.value * squeeze,
+      borderBottomLeftRadius: leftRadius.value * squeeze,
+      borderTopRightRadius: rightRadius.value * squeeze,
+      borderBottomRightRadius: rightRadius.value * squeeze,
+    };
+  });
+  const dip = useAnimatedStyle(() => ({ transform: [{ scale: 1 - pressed.value * 0.03 }] }));
+  const fill = useAnimatedStyle(() => ({ opacity: on.value }));
 
   const icon = option.icon;
 
@@ -65,10 +85,17 @@ function GroupButton<T extends string>({ option, selected, first, last, onPress 
     <Pressable
       style={styles.flex}
       onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
       accessibilityLabel={option.label}>
-      <Animated.View style={[styles.button, animated]}>
+      <Animated.View style={[styles.button, glass(theme, 'small'), shape, dip]}>
+        {/* Shaped like the button rather than clipped by it, and over the rim, so no edge shows round it. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.fill, { backgroundColor: theme.colors.primary }, shape, fill]}
+        />
         {icon ? <MaterialCommunityIcons name={icon} size={18} color={foreground} /> : null}
         {/* Shrink slightly rather than truncate when four or more options share the width. */}
         <Text
@@ -94,5 +121,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingHorizontal: 8,
+  },
+  // Out to the glass rim's outer edge (glass() draws it at two hairlines).
+  fill: {
+    position: 'absolute',
+    top: -StyleSheet.hairlineWidth * 2,
+    left: -StyleSheet.hairlineWidth * 2,
+    right: -StyleSheet.hairlineWidth * 2,
+    bottom: -StyleSheet.hairlineWidth * 2,
   },
 });

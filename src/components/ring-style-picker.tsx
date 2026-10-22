@@ -12,7 +12,7 @@ import {
   type RingCat,
   type RingThickness,
 } from '@/lib/ring-style';
-import { surfaceCard, useAppTheme, withAlpha } from '@/theme';
+import { glassCard, useAppTheme, withAlpha } from '@/theme';
 
 /**
  * Settings card for the step ring: style (each a small live preview), the cat's coat on Cat paws,
@@ -23,7 +23,7 @@ export function RingStylePicker() {
   const settings = useRingSettings();
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <Card.Title title="Progress ring" titleVariant="titleMedium" />
       <Card.Content style={styles.content}>
         <View style={styles.grid}>

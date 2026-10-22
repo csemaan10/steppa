@@ -7,7 +7,7 @@ import { CharacterCanvas } from '@/components/character/character-canvas';
 import { CAT_X, DOG_X, HORSE_X } from '@/components/character/rig';
 import type { LeaderboardRow } from '@/lib/api';
 import { DOGS, hashString, isSmallPet, normalizeLook, type CharacterLook, type Pet } from '@/lib/character';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 /** Stage width for cabinet characters: twice the podium's, so only a few shelves fit on screen. */
 const STAGE_WIDTH = 176;
@@ -102,7 +102,8 @@ const Shelf = memo(function Shelf({ row, isMe, animate, onPressUser }: ShelfProp
   return (
     <Card
       mode="contained"
-      style={isMe ? { backgroundColor: theme.colors.primaryContainer } : surfaceCard(theme)}
+      // Yours is picked out by a primary rim; a solid fill would stop it reading as glass.
+      style={[glassCard(theme), isMe && { borderColor: theme.colors.primary }]}
       onPress={isMe ? undefined : () => onPressUser(row.user_id)}
       accessibilityLabel={`${row.display_name}: ${row.gold} gold, ${row.silver} silver, ${row.bronze} bronze`}>
       <View style={styles.row}>

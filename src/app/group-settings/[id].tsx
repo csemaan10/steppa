@@ -4,16 +4,16 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   ActivityIndicator,
   Appbar,
-  Button,
   Card,
   HelperText,
   IconButton,
   Text,
   TextInput,
-  useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/button';
+import { GlassAction, GlassBackAction } from '@/components/glass-action';
 import { GROUP_ICONS, GroupAvatar } from '@/components/group-avatar';
 import { UserAvatar } from '@/components/user-avatar';
 import { useLoader } from '@/hooks/use-loader';
@@ -28,10 +28,10 @@ import {
   type LeaderboardRow,
 } from '@/lib/api';
 import { useUserId } from '@/providers/auth-provider';
-import { avatarColors, screenBackground, surfaceCard, transparentHeader } from '@/theme';
+import { avatarColors, glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 export default function GroupSettingsScreen() {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const userId = useUserId();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -44,7 +44,7 @@ export default function GroupSettingsScreen() {
     return (
       <View style={[styles.flex, screenBackground(theme)]}>
         <Appbar.Header mode="small" style={transparentHeader}>
-          <Appbar.BackAction onPress={() => router.back()} />
+          <GlassBackAction onPress={() => router.back()} />
           <Appbar.Content title="Group settings" />
         </Appbar.Header>
         <View style={styles.center}>
@@ -58,7 +58,7 @@ export default function GroupSettingsScreen() {
     return (
       <View style={[styles.flex, screenBackground(theme)]}>
         <Appbar.Header mode="small" style={transparentHeader}>
-          <Appbar.BackAction onPress={() => router.back()} />
+          <GlassBackAction onPress={() => router.back()} />
           <Appbar.Content title="Group settings" />
         </Appbar.Header>
         <View style={styles.center}>
@@ -75,7 +75,7 @@ export default function GroupSettingsScreen() {
 type FormProps = { group: Group; members: LeaderboardRow[]; userId: string; reload: () => Promise<void> };
 
 function SettingsForm({ group, members, userId, reload }: FormProps) {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const id = group.id;
   const [name, setName] = useState(group.name);
@@ -128,9 +128,9 @@ function SettingsForm({ group, members, userId, reload }: FormProps) {
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
       <Appbar.Header mode="small" style={transparentHeader}>
-        <Appbar.BackAction onPress={() => router.back()} />
+        <GlassBackAction onPress={() => router.back()} />
         <Appbar.Content title="Group settings" />
-        <Appbar.Action
+        <GlassAction
           icon="check"
           onPress={save}
           disabled={!dirty || saving}
@@ -146,7 +146,7 @@ function SettingsForm({ group, members, userId, reload }: FormProps) {
           </Text>
         </View>
 
-        <Card mode="contained" style={surfaceCard(theme)}>
+        <Card mode="contained" style={glassCard(theme)}>
           <Card.Content style={styles.section}>
             <TextInput mode="outlined" label="Name" value={name} onChangeText={setName} maxLength={40} />
             <TextInput
@@ -165,7 +165,7 @@ function SettingsForm({ group, members, userId, reload }: FormProps) {
           </Card.Content>
         </Card>
 
-        <Card mode="contained" style={surfaceCard(theme)}>
+        <Card mode="contained" style={glassCard(theme)}>
           <Card.Content style={styles.section}>
             <Text variant="titleSmall">Color</Text>
             <View style={styles.wrap}>
@@ -202,7 +202,7 @@ function SettingsForm({ group, members, userId, reload }: FormProps) {
           </Card.Content>
         </Card>
 
-        <Card mode="contained" style={surfaceCard(theme)}>
+        <Card mode="contained" style={glassCard(theme)}>
           <Card.Content style={styles.section}>
             <Text variant="titleSmall">Invite code</Text>
             <View style={styles.codeRow}>
@@ -224,7 +224,7 @@ function SettingsForm({ group, members, userId, reload }: FormProps) {
           </Card.Content>
         </Card>
 
-        <Card mode="contained" style={surfaceCard(theme)}>
+        <Card mode="contained" style={glassCard(theme)}>
           <Card.Content style={styles.section}>
             <Text variant="titleSmall">Members · {members.length}</Text>
             {members.map((m) => (

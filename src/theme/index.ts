@@ -1,6 +1,6 @@
 import { DarkTheme as NavDark, DefaultTheme as NavLight, type Theme } from 'expo-router';
-import type { ViewStyle } from 'react-native';
-import { MD3DarkTheme, MD3LightTheme, useTheme, type MD3Theme } from 'react-native-paper';
+import { Platform, StyleSheet, type ViewStyle } from 'react-native';
+import { configureFonts, MD3DarkTheme, MD3LightTheme, useTheme, type MD3Theme } from 'react-native-paper';
 
 import { PALETTES, type ThemeName } from '@/theme/palettes';
 
@@ -9,19 +9,30 @@ export { PALETTES, THEME_NAMES, type ThemeName } from '@/theme/palettes';
 /** Paper MD3 theme plus a bright `accent` used for "over goal" highlights. */
 export type AppTheme = MD3Theme & {
   colors: MD3Theme['colors'] & { accent: string; accentText: string };
+  /** Soft glows behind the frosted glass cards, from the top-left corner down. */
+  blobs: [string, string, string];
 };
+
+// Some Android OEM system fonts (OnePlus, Oppo, Xiaomi...) measure bold text with the regular face,
+// then clip its last letters when drawing. Naming the family outright makes the two agree.
+const fonts = Platform.OS === 'android' ? configureFonts({ config: { fontFamily: 'Roboto' } }) : MD3LightTheme.fonts;
 
 export function buildTheme(name: ThemeName, dark: boolean): AppTheme {
   const palette = PALETTES[name];
   const base = dark ? MD3DarkTheme : MD3LightTheme;
+  const scheme = { ...base.colors, ...(dark ? palette.dark : palette.light) };
   return {
     ...base,
+    fonts,
     colors: {
-      ...base.colors,
-      ...(dark ? palette.dark : palette.light),
+      ...scheme,
       accent: dark ? palette.accent.dark : palette.accent.light,
       accentText: dark ? palette.accent.dark : palette.accent.text,
     },
+    // One colour, in the palette's own primary tones (80 and 90 in light, 30 and 40 in dark).
+    blobs: dark
+      ? [scheme.primaryContainer, scheme.inversePrimary, scheme.primaryContainer]
+      : [scheme.inversePrimary, scheme.primaryContainer, scheme.inversePrimary],
   };
 }
 
@@ -94,18 +105,103 @@ export function withAlpha(color: string, alpha: number): string {
   return color;
 }
 
-/** Screen background: a soft primary-container tint at the top fading into the surface. */
-export function screenBackground(theme: MD3Theme): ViewStyle {
-  const tint = withAlpha(theme.colors.primaryContainer, theme.dark ? 0.4 : 0.6);
+/**
+ * Screen background: three soft glows of the theme colour for the glass cards to frost over. They're on the
+ * screen, not the scroll content, so they stay put while cards slide across them like glass over light.
+ * Each glow fades to its own colour at zero alpha; fading to `transparent` (black) would grey the edges.
+ */
+export function screenBackground(theme: AppTheme): ViewStyle {
+  const strength = theme.dark ? 0.55 : 0.75;
+  const [a, b, c] = theme.blobs;
+  // `soften` scales a glow down: the lower ones are gentler, so the bottom half stays calm.
+  const glow = (color: string, at: string, reach: number, soften = 1) =>
+    `radial-gradient(circle at ${at}, ${withAlpha(color, strength * soften)} 0%, ${withAlpha(color, 0)} ${reach}%)`;
   return {
     backgroundColor: theme.colors.background,
-    experimental_backgroundImage: `linear-gradient(180deg, ${tint} 0%, ${theme.colors.background} 70%)`,
+    experimental_backgroundImage: [glow(a, '8% 4%', 55), glow(b, '100% 38%', 45, 0.8), glow(c, '12% 92%', 50, 0.6)].join(
+      ', '
+    ),
   };
 }
 
 export const transparentHeader: ViewStyle = { backgroundColor: 'transparent' };
 
-/** Material 3 filled card surface, shared by every card so they read as one system. */
-export function surfaceCard(theme: MD3Theme): ViewStyle {
-  return { backgroundColor: theme.colors.elevation.level1 };
+const CARD_RADIUS = 24;
+
+/**
+ * Frosted glass tokens: a translucent fill, a bright rim and a sheen across the top-left. The shadows
+ * are kept faint, just enough to hold a pane's edge where it sits over plain background rather than
+ * a glow; small things like the top-bar buttons get only the tight one, so nothing smudges below them.
+ * Small panes are also milkier, with a softer rim and no sheen: on something button-sized a clear fill
+ * and a bright streak read as liquid glass rather than frost.
+ */
+const GLASS = {
+  light: {
+    fill: 'rgba(255, 255, 255, 0.3)',
+    border: 'rgba(255, 255, 255, 0.85)',
+    sheen: 'rgba(255, 255, 255, 0.35)',
+    shadow: '0px 1px 2px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.04)',
+    smallFill: 'rgba(255, 255, 255, 0.34)',
+    smallBorder: 'rgba(255, 255, 255, 0.55)',
+    smallShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
+  },
+  dark: {
+    fill: 'rgba(255, 255, 255, 0.055)',
+    border: 'rgba(255, 255, 255, 0.12)',
+    sheen: 'rgba(255, 255, 255, 0.07)',
+    shadow: '0px 1px 2px rgba(0, 0, 0, 0.2), 0px 4px 12px rgba(0, 0, 0, 0.16)',
+    smallFill: 'rgba(255, 255, 255, 0.13)',
+    smallBorder: 'rgba(255, 255, 255, 0.08)',
+    smallShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)',
+  },
+};
+
+/**
+ * Frosted glass without a shape. Behind a pane there's only the fixed glow background, which a blur
+ * wouldn't change, so a translucent fill gives the same look.
+ * - `card`: menu cards.
+ * - `small`: buttons and other small panes: milky, matte and with only a tight shadow.
+ * - `strong`: frosted nearly opaque, for a card floating over a dimmed screen with content behind.
+ */
+export function glass(theme: MD3Theme, kind: 'card' | 'small' | 'strong' = 'card'): ViewStyle {
+  const g = theme.dark ? GLASS.dark : GLASS.light;
+  const small = kind === 'small';
+  const fill =
+    kind === 'strong'
+      ? theme.dark
+        ? withAlpha(theme.colors.background, 0.8)
+        : 'rgba(255, 255, 255, 0.8)'
+      : small
+        ? g.smallFill
+        : g.fill;
+  const sheen = `linear-gradient(150deg, ${g.sheen} 0%, ${withAlpha(g.sheen, 0)} 40%)`;
+  return {
+    // Paper's iOS Surface paints its background colour on two stacked layers, which would double a
+    // translucent fill, so the fill is drawn as an image (under the sheen, if any) instead.
+    backgroundColor: 'transparent',
+    experimental_backgroundImage: small ? `linear-gradient(${fill}, ${fill})` : `${sheen}, linear-gradient(${fill}, ${fill})`,
+    borderColor: small ? g.smallBorder : g.border,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    // Unlike `shadow*` and Android elevation, a box shadow is only drawn outside the pane, so it
+    // doesn't show through the fill as a dark smudge.
+    boxShadow: small ? g.smallShadow : g.shadow,
+  };
+}
+
+/** Frosted glass card, shared by every menu card so they read as one system. */
+export function glassCard(theme: MD3Theme): ViewStyle {
+  return { ...glass(theme), borderRadius: CARD_RADIUS };
+}
+
+/** Solid, raised card for leaderboards, so they stand up off the glass around them. */
+export function liftedCard(theme: MD3Theme): ViewStyle {
+  return {
+    backgroundColor: theme.dark ? theme.colors.elevation.level3 : theme.colors.surface,
+    borderRadius: CARD_RADIUS,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+    boxShadow: theme.dark
+      ? '0px 1px 3px rgba(0, 0, 0, 0.3), 0px 6px 16px rgba(0, 0, 0, 0.28)'
+      : '0px 1px 3px rgba(0, 0, 0, 0.05), 0px 6px 16px rgba(0, 0, 0, 0.08)',
+  };
 }

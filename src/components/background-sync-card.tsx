@@ -1,11 +1,12 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Platform } from 'react-native';
-import { Button, Card, List, Switch, useTheme } from 'react-native-paper';
+import { Card, List, Switch, useTheme } from 'react-native-paper';
 
+import { Button } from '@/components/button';
 import { isBackgroundSyncEnabled, setBackgroundSyncEnabled } from '@/lib/background-sync';
 import { backgroundAccess, healthSourceName, openHealthSettings, requestBackgroundAccess } from '@/lib/health';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 type Access = 'granted' | 'denied' | 'unavailable' | null;
 
@@ -45,7 +46,7 @@ export function BackgroundSyncCard() {
         : 'Keeps your steps up to date for your groups, even when Steppa is closed';
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <List.Item
         title="Background sync"
         description={description}

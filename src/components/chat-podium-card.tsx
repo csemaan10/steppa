@@ -4,6 +4,7 @@ import { Card, Icon, Text, useTheme } from 'react-native-paper';
 import { UserAvatar } from '@/components/user-avatar';
 import type { LeaderboardRow } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
+import { liftedCard } from '@/theme';
 
 const MEDALS = ['#E3B341', '#A8B0B8', '#C3834C'];
 
@@ -26,8 +27,8 @@ export function ChatPodiumCard({ rows, day, userId }: Props) {
 
   return (
     <Card
-      mode="outlined"
-      style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}
+      mode="contained"
+      style={[styles.card, liftedCard(theme)]}
       accessibilityLabel={`Yesterday's podium: ${rows
         .map((r) => `${r.rank}. ${r.display_name}, ${formatSteps(r.total_steps)} steps`)
         .join('; ')}`}>

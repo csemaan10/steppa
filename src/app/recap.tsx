@@ -8,9 +8,11 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { ActivityIndicator, Button, IconButton, Text } from 'react-native-paper';
+import { ActivityIndicator, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/button';
+import { GlassAction } from '@/components/glass-action';
 import { GroupAvatar } from '@/components/group-avatar';
 import { Confetti } from '@/components/recap/celebration';
 import { RecapPlacement, placementOf } from '@/components/recap/recap-placement';
@@ -60,7 +62,7 @@ export default function RecapScreen() {
             Final results · {date}
           </Text>
         </View>
-        <IconButton icon="close" onPress={() => router.back()} accessibilityLabel="Close" />
+        <GlassAction icon="close" onPress={() => router.back()} accessibilityLabel="Close" />
       </View>
 
       {!recap ? (

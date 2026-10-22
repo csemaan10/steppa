@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { Button, Card, Icon, Text, useTheme } from 'react-native-paper';
+import { Card, Icon, Text, useTheme } from 'react-native-paper';
 
+import { Button } from '@/components/button';
 import { recapDayLabel, type Recap } from '@/lib/recap';
-import { surfaceCard, withAlpha } from '@/theme';
+import { glassCard, withAlpha } from '@/theme';
 
 /**
  * Small Today-screen card pointing to the morning recap. It doesn't show the results, so the
@@ -15,7 +16,7 @@ export function RecapPreview({ recap }: { recap: Recap }) {
   const open = () => router.push('/recap');
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)} onPress={open} accessibilityHint="Opens the podium recap">
+    <Card mode="contained" style={glassCard(theme)} onPress={open} accessibilityHint="Opens the podium recap">
       <View style={styles.row}>
         <View style={[styles.badge, { backgroundColor: withAlpha('#F5CD4B', theme.dark ? 0.25 : 0.35) }]}>
           <Icon source="podium-gold" size={22} color="#C99A1B" />

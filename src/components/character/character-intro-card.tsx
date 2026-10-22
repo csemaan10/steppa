@@ -2,12 +2,13 @@ import 'expo-sqlite/localStorage/install';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Card, Text, useTheme } from 'react-native-paper';
+import { Card, Text, useTheme } from 'react-native-paper';
 
+import { Button } from '@/components/button';
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import type { Profile } from '@/lib/api';
 import { hashString, normalizeLook } from '@/lib/character';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 const SEEN_KEY = 'steppa:character-intro-seen';
 
@@ -48,7 +49,7 @@ export function CharacterIntroCard({ profile }: { profile: Profile }) {
   }
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <Card.Content style={styles.row}>
         <CharacterCanvas look={look} seed={seed} width={112} />
         <View style={styles.text}>

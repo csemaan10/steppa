@@ -1,10 +1,11 @@
 import { Alert, View } from 'react-native';
-import { Button, Card, List, useTheme } from 'react-native-paper';
+import { Card, List, useTheme } from 'react-native-paper';
 
+import { Button } from '@/components/button';
 import { UserAvatar } from '@/components/user-avatar';
 import { useLoader } from '@/hooks/use-loader';
 import { getBlockedUsers, unblockUser, type BlockedUser } from '@/lib/api';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 /** People you've blocked from chat, with unblock. Hidden when the list is empty. */
 export function BlockedUsersCard({ userId }: { userId: string }) {
@@ -20,7 +21,7 @@ export function BlockedUsersCard({ userId }: { userId: string }) {
   }
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <List.Accordion
         title={`Blocked users · ${data.length}`}
         description="Their chat messages are hidden from you"

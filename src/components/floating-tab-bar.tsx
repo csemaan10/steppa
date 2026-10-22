@@ -6,7 +6,13 @@ import type { ComponentProps, ReactNode, RefObject } from 'react';
 import { createContext, use, useEffect } from 'react';
 import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  type WithSpringConfig,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BUTTON_WIDTH = 74;
@@ -16,6 +22,23 @@ const GAP = 4;
 const PADDING = 7;
 const TAB_BAR_HEIGHT = BUTTON_HEIGHT + PADDING * 2;
 const TAB_BAR_MARGIN = 12;
+
+/**
+ * Indicator springs (same as Fooda and Pulse): stiff and well damped (ratio 0.9), so they settle in
+ * ~0.15 s with no visible bounce. The trailing edge uses the softer one so it lags the leading edge.
+ * The low energy threshold stops Reanimated running on for hundreds of ms of sub-pixel wobble.
+ */
+function spring(stiffness: number): WithSpringConfig {
+  return {
+    stiffness,
+    damping: 0.9 * 2 * Math.sqrt(stiffness),
+    mass: 1,
+    energyThreshold: 1e-4,
+    reduceMotion: ReduceMotion.System,
+  };
+}
+const LEADING_SPRING = spring(1400);
+const TRAILING_SPRING = spring(600);
 
 /** Distance from the safe-area bottom to the top of the floating bar (for FABs/snackbars). */
 export const TAB_BAR_OFFSET = TAB_BAR_HEIGHT + TAB_BAR_MARGIN;
@@ -49,18 +72,29 @@ export function FloatingTabBar({ blurTarget, tabs, children }: Props) {
   const activeIndex = Math.max(0, tabs.indexOf(activeTab));
   const targetX = activeIndex * (BUTTON_WIDTH + GAP);
 
-  // Slide to the active tab. A slide cut short while the app is in the background can freeze
-  // halfway, so the highlight snaps into place whenever the app comes back.
-  const x = useSharedValue(targetX);
+  // Slide to the active tab, stretching on the way (M3 Expressive, as in Fooda): the edge in front
+  // leads on a quick spring and the one behind follows on a slower one, so the pill grows long
+  // mid-flight and snaps back to size as it lands. A slide cut short while the app is in the
+  // background can freeze halfway, so the highlight snaps into place whenever the app comes back.
+  const left = useSharedValue(targetX);
+  const right = useSharedValue(targetX + BUTTON_WIDTH);
   useEffect(() => {
-    x.set(withTiming(targetX, { duration: 220 }));
+    const forward = targetX > left.get();
+    left.set(withSpring(targetX, forward ? TRAILING_SPRING : LEADING_SPRING));
+    right.set(withSpring(targetX + BUTTON_WIDTH, forward ? LEADING_SPRING : TRAILING_SPRING));
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') x.set(targetX);
+      if (state === 'active') {
+        left.set(targetX);
+        right.set(targetX + BUTTON_WIDTH);
+      }
     });
     return () => sub.remove();
-  }, [x, targetX]);
+  }, [left, right, targetX]);
 
-  const indicatorStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: left.value }],
+    width: Math.max(BUTTON_HEIGHT, right.value - left.value),
+  }));
 
   return (
     <View pointerEvents="box-none" style={[styles.wrapper, { bottom: insets.bottom + TAB_BAR_MARGIN }]}>
@@ -117,7 +151,7 @@ const styles = StyleSheet.create({
   shadow: {
     borderRadius: TAB_BAR_HEIGHT / 2,
     ...Platform.select({
-      ios: { shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
+      ios: { shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
     }),
   },
   clip: {

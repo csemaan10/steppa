@@ -5,13 +5,10 @@ import { ProgressRing } from '@/components/progress-ring';
 import { StreakFlame, flameTier } from '@/components/streak-flame';
 import { summarize, type DaySteps, type ProfileStats } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
-import { surfaceCard, useAppTheme } from '@/theme';
+import { KCAL_PER_STEP, KM_PER_STEP, STEPS_PER_MINUTE } from '@/lib/estimates';
+import { glassCard, useAppTheme } from '@/theme';
 
-const KM_PER_STEP = 0.000762;
-const KCAL_PER_STEP = 0.04;
 const MARATHON_KM = 42.195;
-/** Roughly 100 steps a minute at an easy walking pace. */
-const STEPS_PER_MINUTE = 100;
 
 const dayLabel = (day: string, opts: Intl.DateTimeFormatOptions) =>
   new Date(`${day}T12:00:00`).toLocaleDateString(undefined, opts);
@@ -48,7 +45,7 @@ export function StepsOverviewCard({ history, previous, goal }: OverviewProps) {
         : `You average ${formatSteps(-gap)} above your goal. Time to raise it?`;
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <Card.Content style={styles.content}>
         <View style={styles.today}>
           <ProgressRing
@@ -167,46 +164,49 @@ function Metric({
   );
 }
 
-/** Current streak against the personal record, with a flame that grows as the streak does. */
+/**
+ * Current streak against the personal record, with a flame that grows as the streak does. Kept
+ * compact: one row (flame, streak and a short note, record) over a thin progress bar.
+ */
 export function StreakCard({ current, longest }: { current: number; longest: number }) {
   const theme = useAppTheme();
   const tier = flameTier(current);
   const isRecord = current > 0 && current >= longest;
+  const toBeat = longest - current + 1;
   const supporting =
     current === 0
-      ? 'Hit your goal today to start a streak.'
+      ? 'Hit your goal today to start one.'
       : isRecord
-        ? 'This is your longest streak yet. Keep it going!'
-        : `${longest - current + 1} more day${longest - current + 1 === 1 ? '' : 's'} to beat your record.`;
+        ? 'Your longest yet. Keep it going!'
+        : `${toBeat} more day${toBeat === 1 ? '' : 's'} to beat your record.`;
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
-      <Card.Content style={styles.content}>
+    <Card mode="contained" style={glassCard(theme)}>
+      <Card.Content style={styles.streak}>
         <View style={styles.streakRow}>
-          <StreakFlame streak={current} />
+          <StreakFlame streak={current} width={34} />
           <View style={styles.flex}>
-            <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-              Current streak
+            <Text variant="titleMedium" style={styles.bold}>
+              {current === 0 ? 'No streak yet' : `${current}-day streak`}
             </Text>
-            <Text variant="titleLarge" style={styles.bold}>
-              {current} day{current === 1 ? '' : 's'}
+            <Text variant="bodySmall" numberOfLines={2} style={{ color: theme.colors.onSurfaceVariant }}>
+              {supporting}
             </Text>
           </View>
           <View style={styles.end}>
-            <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
               Record
             </Text>
-            <Text variant="titleMedium">{longest}</Text>
+            <Text variant="titleSmall" style={styles.bold}>
+              {longest} day{longest === 1 ? '' : 's'}
+            </Text>
           </View>
         </View>
         <ProgressBar
           progress={longest ? Math.min(current / longest, 1) : 0}
           color={current > 0 ? tier.outer[0] : theme.colors.tertiary}
-          style={[styles.progress, { backgroundColor: theme.colors.surfaceVariant }]}
+          style={[styles.streakBar, { backgroundColor: theme.colors.surfaceVariant }]}
         />
-        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-          {supporting}
-        </Text>
       </Card.Content>
     </Card>
   );
@@ -260,7 +260,7 @@ export function LifetimeCard({ stats }: { stats: ProfileStats }) {
   ];
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <Card.Title title="All time" titleVariant="titleMedium" />
       <Card.Content style={styles.list}>
         {rows.map((row, i) => (
@@ -314,7 +314,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 8,
   },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  streak: { gap: 10, paddingTop: 12, paddingBottom: 14 },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  streakBar: { height: 4, borderRadius: 2 },
   leading: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   end: { alignItems: 'flex-end' },
   list: { paddingBottom: 8 },

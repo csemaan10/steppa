@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Alert, StyleSheet } from 'react-native';
-import { Button, Card, HelperText, useTheme } from 'react-native-paper';
+import { Card, HelperText, useTheme } from 'react-native-paper';
 
+import { Button } from '@/components/button';
 import { deleteMyAccount, importStepHistory } from '@/lib/api';
 import { healthSourceName, isHealthAvailable, requestHealthPermission, requestHistoryPermission } from '@/lib/health';
 import { useAppLock } from '@/providers/app-lock-provider';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 /** Settings card for the account: import a year of steps, sign out, or delete the account. */
 export function AccountCard({ userId }: { userId: string }) {
@@ -57,7 +58,7 @@ export function AccountCard({ userId }: { userId: string }) {
   }
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <Card.Title title="Account" titleVariant="titleMedium" />
       <Card.Content style={styles.content}>
         <Button mode="contained-tonal" icon="history" onPress={importHistory} loading={importing} disabled={importing}>

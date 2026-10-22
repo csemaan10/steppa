@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, HelperText, List, Switch, useTheme } from 'react-native-paper';
 
 import { useAppLock } from '@/providers/app-lock-provider';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 export function AppLockCard() {
   const theme = useTheme();
@@ -17,7 +17,7 @@ export function AppLockCard() {
   }
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <List.Item
         title="Biometric sign-in"
         description="After signing out, sign back in with your fingerprint or face"

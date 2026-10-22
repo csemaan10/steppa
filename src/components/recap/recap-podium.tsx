@@ -14,13 +14,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { CharacterCanvas } from '@/components/character/character-canvas';
-import { ENTRANCE_HEADS_OFF, ENTRANCE_POSE, ENTRANCE_SECONDS } from '@/components/character/entrance';
+import { ENTRANCE_HEADS_OFF, ENTRANCE_POSE, ENTRANCE_SECONDS, type EntranceKind } from '@/components/character/entrance';
 import { EntranceStage, bringToFront } from '@/components/character/entrance-stage';
 import { CHEER_HOP } from '@/components/character/rig';
 import { MEDAL_COLORS } from '@/components/character/scene-common';
 import { useCountUp } from '@/hooks/use-count-up';
 import type { LeaderboardRow } from '@/lib/api';
-import { hashString, normalizeLook } from '@/lib/character';
+import { hashString, normalizeLook, type CharacterLook } from '@/lib/character';
 import { formatSteps } from '@/lib/dates';
 
 const SIZES = {
@@ -30,6 +30,8 @@ const SIZES = {
 /** Bronze rises first, then silver, then gold. */
 const RISE = [500, 250, 0];
 const RISE_MS = 550;
+/** The pause between one entrance finishing and the next one starting. */
+const TURN_GAP_MS = 250;
 /** How long they cheer once they're up, before going back to their own move. */
 const CHEER_MS = CHEER_HOP * 4 * 1000;
 const ease = Easing.out(Easing.cubic);
@@ -43,9 +45,25 @@ type Props = {
   play: boolean;
 };
 
-/** The day's final podium: blocks rise, the medalled characters cheer, then do their own move. */
+/**
+ * The day's final podium: blocks rise, the medalled characters make their entrances one at a time
+ * (third place first) or cheer, then do their own move.
+ */
 export function RecapPodium({ podium, userId, compact = false, play }: Props) {
   const size = SIZES[compact ? 'compact' : 'full'];
+  const reduceMotion = useReducedMotion();
+  const looks = useMemo(() => podium.map((row) => normalizeLook(row.podium_character, row.user_id)), [podium]);
+  // The chosen way of getting up onto the block (null: the block simply rises with them on it).
+  const entrances = looks.map((look) => (look.entrance !== 'rise' && !reduceMotion ? look.entrance : null));
+  // The entrances take turns, third place first: each starts once its block is up and the one
+  // before has finished.
+  const starts: number[] = [];
+  let free = 0;
+  for (let slot = podium.length - 1; slot >= 0; slot--) {
+    const entrance = entrances[slot];
+    starts[slot] = Math.max(free, RISE[slot]! + RISE_MS);
+    if (entrance) free = starts[slot]! + ENTRANCE_SECONDS[entrance] * 1000 + TURN_GAP_MS;
+  }
   // Visual order: 2nd, 1st, 3rd.
   const order = [1, 0, 2].filter((i) => i < podium.length);
   return (
@@ -54,6 +72,9 @@ export function RecapPodium({ podium, userId, compact = false, play }: Props) {
         <Spot
           key={podium[slot]!.user_id}
           row={podium[slot]!}
+          look={looks[slot]!}
+          entrance={entrances[slot]!}
+          start={starts[slot]!}
           slot={slot}
           isMe={podium[slot]!.user_id === userId}
           compact={compact}
@@ -64,18 +85,25 @@ export function RecapPodium({ podium, userId, compact = false, play }: Props) {
   );
 }
 
-type SpotProps = { row: LeaderboardRow; slot: number; isMe: boolean; compact: boolean; play: boolean };
+type SpotProps = {
+  row: LeaderboardRow;
+  look: CharacterLook;
+  entrance: EntranceKind | null;
+  /** When their entrance starts (ms after the podium starts playing). */
+  start: number;
+  slot: number;
+  isMe: boolean;
+  compact: boolean;
+  play: boolean;
+};
 
-function Spot({ row, slot, isMe, compact, play }: SpotProps) {
+function Spot({ row, look, entrance, start, slot, isMe, compact, play }: SpotProps) {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const size = SIZES[compact ? 'compact' : 'full'];
   // Ties share a rank, so the medal follows the rank, not the slot.
   const place = Math.min(row.rank, 3) - 1;
   const delay = RISE[slot]!;
-  const look = useMemo(() => normalizeLook(row.podium_character, row.user_id), [row.podium_character, row.user_id]);
-  // The chosen way of getting up onto the block (null: the block simply rises with them on it).
-  const entrance = look.entrance !== 'rise' && !reduceMotion ? look.entrance : null;
   const rise = useSharedValue(reduceMotion ? 1 : 0);
   // Seconds into the entrance; negative until it starts.
   const clock = useSharedValue(-1);
@@ -86,15 +114,14 @@ function Spot({ row, slot, isMe, compact, play }: SpotProps) {
   const [z, setZ] = useState(0);
 
   // A smooth rise (no bounce), then a few cheering hops before their own idle move. With an
-  // entrance the block rises empty first, then they make their entrance and go straight into their
-  // own move.
+  // entrance the block rises empty first, then they make their entrance when it's their turn
+  // (`start`) and go straight into their own move.
   useEffect(() => {
     if (!play || reduceMotion) return;
     rise.set(0);
     rise.set(withDelay(delay, withTiming(1, { duration: RISE_MS, easing: ease })));
     const timers: ReturnType<typeof setTimeout>[] = [];
     if (entrance) {
-      const start = delay + RISE_MS;
       const length = ENTRANCE_SECONDS[entrance] * 1000;
       clock.set(-1);
       clock.set(
@@ -125,7 +152,7 @@ function Spot({ row, slot, isMe, compact, play }: SpotProps) {
       timers.push(setTimeout(() => setCheering(false), delay + RISE_MS + CHEER_MS));
     }
     return () => timers.forEach(clearTimeout);
-  }, [play, reduceMotion, delay, rise, clock, entrance]);
+  }, [play, reduceMotion, delay, start, rise, clock, entrance]);
 
   const height = size.heights[slot]!;
   const blockStyle = useAnimatedStyle(() => ({ height: rise.value * height }));
@@ -149,7 +176,7 @@ function Spot({ row, slot, isMe, compact, play }: SpotProps) {
           place={place}
           size={size.character / 2}
           play={play}
-          delay={delay + RISE_MS + (entrance ? ENTRANCE_SECONDS[entrance] * 1000 : 0)}
+          delay={entrance ? start + ENTRANCE_SECONDS[entrance] * 1000 : delay + RISE_MS}
         />
         {place === 0 && !compact ? <MaterialCommunityIcons name="crown" size={26} color="#E3B341" /> : null}
         <Text

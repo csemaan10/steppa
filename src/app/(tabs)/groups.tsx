@@ -4,28 +4,27 @@ import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import {
   Appbar,
   Avatar,
-  Button,
   Dialog,
   HelperText,
   Portal,
   Text,
   TextInput,
-  useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/button';
 import { FabMenu } from '@/components/fab-menu';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GroupPreview } from '@/components/group-preview';
 import { useLoader } from '@/hooks/use-loader';
 import { createGroup, getLatestMessageId, getLeaderboard, getMyGroups, joinGroup } from '@/lib/api';
 import { useUserId } from '@/providers/auth-provider';
-import { screenBackground, transparentHeader } from '@/theme';
+import { screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 type DialogKind = 'create' | 'join' | null;
 
 export default function GroupsScreen() {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const userId = useUserId();
   const tabBarSpace = useTabBarSpace();
   const insets = useSafeAreaInsets();

@@ -9,7 +9,7 @@ import { EntranceStage } from '@/components/character/entrance-stage';
 import { CHEER_HOP } from '@/components/character/rig';
 import type { Profile } from '@/lib/api';
 import { hashString, normalizeLook } from '@/lib/character';
-import { surfaceCard } from '@/theme';
+import { glassCard } from '@/theme';
 
 /** Big enough to fill the card on any phone (the character's body is the middle of this stage). */
 const WIDTH = 240;
@@ -77,7 +77,7 @@ export function ProfileCharacter({ profile }: { profile: Profile }) {
   return (
     <Pressable
       onPress={() => setRun((n) => n + 1)}
-      style={[styles.stage, surfaceCard(theme)]}
+      style={[styles.stage, glassCard(theme)]}
       accessibilityRole="button"
       accessibilityLabel={`${profile.display_name}'s podium character`}
       accessibilityHint={entrance ? 'Replays their entrance' : 'Makes them cheer'}>

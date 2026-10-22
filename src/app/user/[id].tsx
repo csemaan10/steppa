@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Appbar, Card, Divider, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Card, Divider, Text } from 'react-native-paper';
 
 import { ProfileCharacter } from '@/components/character/profile-character';
+import { GlassBackAction } from '@/components/glass-action';
 import { TrophyCase } from '@/components/trophy-case';
 import { UserAvatar } from '@/components/user-avatar';
 import { WeekChart } from '@/components/week-chart';
@@ -10,10 +11,10 @@ import { useLoader } from '@/hooks/use-loader';
 import { getProfile, getProfileStats, getStepHistory, summarize } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
-import { screenBackground, surfaceCard, transparentHeader } from '@/theme';
+import { glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 export default function UserScreen() {
-  const theme = useTheme();
+  const theme = useAppTheme();
   const myId = useUserId();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -32,7 +33,7 @@ export default function UserScreen() {
     return (
       <View style={[styles.flex, screenBackground(theme)]}>
         <Appbar.Header mode="small" style={transparentHeader}>
-          <Appbar.BackAction onPress={() => router.back()} />
+          <GlassBackAction onPress={() => router.back()} />
         </Appbar.Header>
         <View style={styles.center}>
           {error ? <Text style={{ color: theme.colors.error }}>{error}</Text> : <ActivityIndicator />}
@@ -69,7 +70,7 @@ export default function UserScreen() {
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
       <Appbar.Header mode="small" style={transparentHeader}>
-        <Appbar.BackAction onPress={() => router.back()} />
+        <GlassBackAction onPress={() => router.back()} />
         <Appbar.Content title={them.display_name} />
       </Appbar.Header>
 
@@ -108,7 +109,7 @@ export default function UserScreen() {
 
         <TrophyCase stats={theirStats} />
 
-        <Card mode="elevated">
+        <Card mode="contained" style={glassCard(theme)}>
           <Card.Content>
             {rows.map((row, i) => (
               <View key={row.label}>
@@ -137,7 +138,7 @@ export default function UserScreen() {
           </Card.Content>
         </Card>
 
-        <Card mode="contained" style={surfaceCard(theme)}>
+        <Card mode="contained" style={glassCard(theme)}>
           <Card.Title title="Last 7 days" />
           <Card.Content>
             <WeekChart

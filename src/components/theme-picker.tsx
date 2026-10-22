@@ -2,14 +2,14 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, Icon, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { useThemeChoice, type AppearanceMode } from '@/providers/theme-provider';
-import { PALETTES, surfaceCard, THEME_NAMES } from '@/theme';
+import { glassCard, PALETTES, THEME_NAMES } from '@/theme';
 
 export function ThemePicker() {
   const theme = useTheme();
   const { themeName, setThemeName, mode, setMode } = useThemeChoice();
 
   return (
-    <Card mode="contained" style={surfaceCard(theme)}>
+    <Card mode="contained" style={glassCard(theme)}>
       <Card.Title title="Theme" titleVariant="titleMedium" />
       <Card.Content style={styles.mode}>
         <SegmentedButtons
