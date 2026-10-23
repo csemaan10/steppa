@@ -65,6 +65,7 @@ function RootNavigator() {
         <Stack.Screen name="user/[id]" />
         <Stack.Screen name="group-settings/[id]" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="journey" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" options={{ animation: 'none' }} />

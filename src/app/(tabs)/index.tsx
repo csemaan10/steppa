@@ -12,12 +12,14 @@ import {
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GroupPreview } from '@/components/group-preview';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
+import { JourneyPreview } from '@/components/journey-preview';
 import { RecapSummaryCard } from '@/components/morning-recap';
 import { StreakCard } from '@/components/profile-stats';
 import { ProgressRing } from '@/components/progress-ring';
 import { useLoader } from '@/hooks/use-loader';
 import { registerBackgroundSync } from '@/lib/background-sync';
 import {
+  getCurrentJourney,
   getLatestMessageId,
   getLeaderboard,
   getMyGroups,
@@ -66,11 +68,13 @@ export default function TodayScreen() {
   const { data, loading, reload } = useLoader(async () => {
     const { health, syncError } = await connectAndSync(userId);
     await syncTimezone(userId);
-    const [profile, history, groups, lifetime] = await Promise.all([
+    const [profile, history, groups, lifetime, journey] = await Promise.all([
       getProfile(userId),
       getStepHistory(userId, 7),
       getMyGroups(),
       getProfileStats(userId),
+      // undefined (card hidden) rather than failing the whole screen, e.g. before migration 012.
+      getCurrentJourney(userId).catch(() => undefined),
     ]);
     const previews = await Promise.all(
       groups.slice(0, 3).map(async (group) => {
@@ -81,7 +85,7 @@ export default function TodayScreen() {
         return { group, rows, latestMessageId };
       })
     );
-    return { profile, history, previews, lifetime, health, syncError };
+    return { profile, history, previews, lifetime, journey, health, syncError };
   }, userId);
 
   // Keep today's count live while this tab is on screen: re-sync on app resume (focus doesn't
@@ -266,6 +270,13 @@ export default function TodayScreen() {
                 </Card.Content>
               </Card>
             )}
+          </View>
+        ) : null}
+
+        {data && data.journey !== undefined ? (
+          <View style={styles.section}>
+            <Text variant="titleMedium">Your journey</Text>
+            <JourneyPreview current={data.journey} profile={data.profile} />
           </View>
         ) : null}
 

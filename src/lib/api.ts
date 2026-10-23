@@ -1,5 +1,6 @@
 import { addDays, lastNDays, startOfDay, toDayKey } from '@/lib/dates';
 import { healthSourceName, readDailySteps } from '@/lib/health';
+import { getRoute, progressOn, type Route } from '@/lib/journeys';
 import { supabase } from '@/lib/supabase';
 
 export type Profile = {
@@ -440,6 +441,89 @@ export async function getBlockedUsers(blockerId: string): Promise<BlockedUser[]>
       )
       .order('display_name')
   );
+}
+
+// ---------- Journeys ----------
+
+export type Journey = {
+  id: number;
+  user_id: string;
+  route: string;
+  started_on: string;
+  completed_on: string | null;
+  postcards_seen: number;
+  created_at: string;
+};
+
+export type CurrentJourney = { journey: Journey; route: Route; steps: number };
+
+/**
+ * The latest journey (in progress, or finished and not yet replaced) with the steps walked on it,
+ * or null if there's none. Marks it finished once the steps cover the whole route.
+ */
+export async function getCurrentJourney(userId: string): Promise<CurrentJourney | null> {
+  const journey = unwrap<Journey | null>(
+    await supabase
+      .from('journeys')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  const route = journey ? getRoute(journey.route) : undefined;
+  if (!journey || !route) return null;
+
+  let query = supabase.from('daily_steps').select('steps').eq('user_id', userId).gte('day', journey.started_on);
+  if (journey.completed_on) query = query.lte('day', journey.completed_on);
+  const steps = unwrap<{ steps: number }[]>(await query).reduce((sum, r) => sum + r.steps, 0);
+
+  if (!journey.completed_on && progressOn(route, steps).done) {
+    const completed = unwrap<Journey>(
+      await supabase
+        .from('journeys')
+        .update({ completed_on: toDayKey(new Date()) })
+        .eq('id', journey.id)
+        .select('*')
+        .single()
+    );
+    return { journey: completed, route, steps };
+  }
+  return { journey, route, steps };
+}
+
+/** Finished journeys, most recent first. */
+export async function getCompletedJourneys(userId: string): Promise<Journey[]> {
+  return unwrap<Journey[]>(
+    await supabase
+      .from('journeys')
+      .select('*')
+      .eq('user_id', userId)
+      .not('completed_on', 'is', null)
+      .order('completed_on', { ascending: false })
+  );
+}
+
+/** Starts a route today. Only steps from today on count toward it. */
+export async function startJourney(userId: string, routeKey: string): Promise<Journey> {
+  return unwrap<Journey>(
+    await supabase
+      .from('journeys')
+      .insert({ user_id: userId, route: routeKey, started_on: toDayKey(new Date()) })
+      .select('*')
+      .single()
+  );
+}
+
+export async function markPostcardsSeen(journeyId: number, count: number): Promise<void> {
+  const { error } = await supabase.from('journeys').update({ postcards_seen: count }).eq('id', journeyId);
+  if (error) throw new Error(error.message);
+}
+
+/** Gives up on a journey in progress; its progress is lost. */
+export async function endJourney(journeyId: number): Promise<void> {
+  const { error } = await supabase.from('journeys').delete().eq('id', journeyId);
+  if (error) throw new Error(error.message);
 }
 
 // ---------- Account ----------
