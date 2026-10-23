@@ -15,15 +15,45 @@ import Animated, {
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { Button } from '@/components/button';
-import { formatKm, SKIES, type Route, type Stop } from '@/lib/journeys';
+import type { Motion } from '@/components/character/rig';
+import { JourneyScene } from '@/components/journey-scene';
+import type { Profile } from '@/lib/api';
+import { hashString } from '@/lib/character';
+import { formatKm, SKIES, type Route, type Sky, type Stop } from '@/lib/journeys';
+import type { TimeOfDay } from '@/lib/scene-art';
 import { useAppTheme, withAlpha } from '@/theme';
 
 /** Postcards are 25:16, like the real thing. */
 const ASPECT = 0.64;
 const PAPER = '#FFFDF8';
+/** The paper border round the picture side. */
+const ART_INSET = 6;
 const BACK_PAPER = '#FBF6EA';
 const INK = '#3A2F25';
 const SERIF = Platform.select({ ios: 'Georgia', default: 'serif' });
+
+/** Each postcard keeps the hour its sky colours suggest, so a set of them isn't all midday. */
+const POSTCARD_TIME: Record<Sky, TimeOfDay> = {
+  dawn: 'dawn',
+  noon: 'day',
+  lake: 'day',
+  dusk: 'dusk',
+  forest: 'day',
+  gold: 'dawn',
+  night: 'night',
+  sea: 'day',
+  stone: 'day',
+  maple: 'dusk',
+};
+
+const POSES: Motion[] = ['p-peace', 'p-salute', 'p-crossed', 'p-hips', 'flex'];
+
+/** The pose for a stop's photo: a cheer at the finish, otherwise the next pose along the route, so neighbours differ. */
+function postcardPose(route: Route, stop: Stop): Motion {
+  const index = route.stops.indexOf(stop);
+  if (index === route.stops.length - 1) return 'cheer';
+  return POSES[(index + hashString(route.key)) % POSES.length]!;
+}
 
 function sky(stop: Stop): string {
   const [top, bottom] = SKIES[stop.sky];
@@ -80,16 +110,17 @@ function Postmark({ ink }: { ink: string }) {
 type PostcardProps = {
   route: Route;
   stop: Stop;
-  /** Name in the address block on the back. */
-  recipient: string;
+  /** Posing on the front; their name goes in the address block on the back. */
+  profile: Profile;
   width: number;
 };
 
 /**
- * A full postcard. It lands with a little tilt, the stamp thunks down, the postmark inks in,
- * and a tap flips it over to read the back.
+ * A full postcard: the stop's illustrated place with your character posing for the photo. It
+ * lands with a little tilt, the stamp thunks down, the postmark inks in, and a tap flips it over
+ * to read the back.
  */
-export function Postcard({ route, stop, recipient, width }: PostcardProps) {
+export function Postcard({ route, stop, profile, width }: PostcardProps) {
   const height = Math.round(width * ASPECT);
   const index = route.stops.indexOf(stop);
   const start = route.stops[0]!;
@@ -145,7 +176,16 @@ export function Postcard({ route, stop, recipient, width }: PostcardProps) {
         style={StyleSheet.absoluteFill}>
         <Animated.View style={[styles.face, styles.front, frontStyle]}>
           <View style={styles.art}>
-            <PostcardArt stop={stop} emojiSize={width * 0.19} />
+            {/* Smaller than on the journey screen, so a two-line place name stays clear of their head. */}
+            <JourneyScene
+              profile={profile}
+              stop={stop}
+              motion={postcardPose(route, stop)}
+              time={POSTCARD_TIME[stop.sky]}
+              height={height - ART_INSET * 2}
+              characterSize={0.44}
+              style={styles.scene}
+            />
             <View style={styles.greeting}>
               <Text style={styles.greetingSmall}>GREETINGS FROM</Text>
               <Text
@@ -182,7 +222,7 @@ export function Postcard({ route, stop, recipient, width }: PostcardProps) {
             </View>
             <View style={styles.address}>
               {[
-                recipient,
+                profile.display_name,
                 route.subtitle,
                 stop.km > 0 ? `${formatKm(stop.km)} km from ${start.name}` : 'Day 1. Here we go!',
               ].map((line) => (
@@ -254,13 +294,13 @@ type ModalProps = {
   route: Route;
   /** Shown one after another. */
   stops: Stop[];
-  recipient: string;
+  profile: Profile;
   /** Heading above the card, e.g. "New postcard". The last stop always gets a finish-line heading. */
   title: string;
   onClose: () => void;
 };
 
-export function PostcardModal({ open, route, stops, recipient, title, onClose }: ModalProps) {
+export function PostcardModal({ open, route, stops, profile, title, onClose }: ModalProps) {
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   // Start from the first postcard each time a new set opens.
@@ -282,7 +322,7 @@ export function PostcardModal({ open, route, stops, recipient, title, onClose }:
         <Animated.Text key={`title-${stop.name}`} entering={FadeInDown.duration(300)} style={styles.modalTitle}>
           {finale ? `🏁 You made it to ${stop.name}!` : title}
         </Animated.Text>
-        <Postcard key={`card-${stop.name}`} route={route} stop={stop} recipient={recipient} width={Math.min(width - 32, 400)} />
+        <Postcard key={`card-${stop.name}`} route={route} stop={stop} profile={profile} width={Math.min(width - 32, 400)} />
         <Animated.Text entering={FadeIn.delay(1400)} style={styles.hint}>
           Tap the postcard to turn it over
         </Animated.Text>
@@ -355,8 +395,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     boxShadow: '0 10px 28px rgba(0, 0, 0, 0.35)',
   },
-  front: { backgroundColor: PAPER, padding: 6 },
+  front: { backgroundColor: PAPER, padding: ART_INSET },
   art: { flex: 1, borderRadius: 7, overflow: 'hidden' },
+  // The art clips the corners, so the scene needs none of its own.
+  scene: { borderRadius: 0 },
   emojiSpot: { position: 'absolute', left: '72.7%', top: '48%', alignItems: 'center', justifyContent: 'center' },
   // Clear of the stamp and postmark; long names wrap or shrink.
   greeting: { position: 'absolute', top: 14, left: 16, right: '40%' },
@@ -368,9 +410,10 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 6,
   },
+  // Bottom right, since the character stands on the left.
   caption: {
     position: 'absolute',
-    left: 12,
+    right: 12,
     bottom: 10,
     paddingHorizontal: 8,
     paddingVertical: 3,

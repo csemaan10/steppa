@@ -15,11 +15,14 @@ import {
 } from '@/components/character/entrance';
 import type { Bottom, Expression, Fit, HairStyle, Idle, Pet, Top } from '@/lib/character';
 
+/** Poses struck for a journey postcard. */
+export type PostcardPose = 'p-peace' | 'p-salute' | 'p-crossed' | 'p-hips';
+
 /**
- * A podium idle, 'walk' (the Today screen's walker), or a recap reaction: 'cheer' on the podium,
- * 'sad' off it.
+ * A podium idle, 'walk' (the Today screen's walker), a recap reaction ('cheer' on the podium,
+ * 'sad' off it), an entrance, or a postcard pose.
  */
-export type Motion = Idle | 'walk' | 'cheer' | 'sad' | EntrancePose;
+export type Motion = Idle | 'walk' | 'cheer' | 'sad' | EntrancePose | PostcardPose;
 
 /** The entrances whose motion is a jump (crouch, spring, land), by their rig motion. */
 const JUMP_ENTRANCES: Partial<Record<Motion, EntranceKind>> = {
@@ -138,6 +141,10 @@ type Pose = {
   crossLegged?: boolean;
   /** Sad brows, plus a tear's progress down the cheek (0 → 1). */
   tear?: number;
+  /** Two fingers up in a V from the right hand. */
+  peace?: boolean;
+  /** Hands hidden (tucked under folded arms). */
+  tuckHands?: boolean;
 };
 
 function f(n: number): string {
@@ -964,6 +971,42 @@ function pose(idle: Motion, t: number, seed: number): Pose {
       legL: 0.04, legR: 0.12 + 0.32 * kick, eyes: blink(t, seed), mouth: { w: 4, curve: 1.8 },
     };
   }
+  // Postcard poses: held for the photo, just breathing.
+  if (idle === 'p-peace') {
+    // A peace sign up beside the face (drawn in front, so it isn't lost behind the head), the other
+    // hand on the hip, head tipped toward it.
+    const br = s(0.3);
+    return {
+      angle: 0, bob: 0.25 * br, tilt: 0.1 + 0.02 * br, armsFront: true,
+      armL: { a: 0.75, f: -0.9 }, armR: { a: 2.3, f: 2.75 },
+      legL: 0.12, legR: 0.12, eyes: blink(t, seed), mouth: { w: 5.2, curve: 3 }, peace: true,
+    };
+  }
+  if (idle === 'p-salute') {
+    // Standing tall, the elbow up and out and the hand at the brow, the other arm straight down.
+    return {
+      angle: 0, bob: 0.15 * s(0.3), tilt: -0.02, armsFront: true,
+      armL: { a: 0.08, f: 0.04 }, armR: { a: 2.45, f: 3.53 },
+      legL: 0.05, legR: 0.05, eyes: blink(t, seed), mouth: { w: 3.6, curve: 1.3 },
+    };
+  }
+  if (idle === 'p-crossed') {
+    // Arms folded across the chest: elbows out, forearms level (the left a little higher), hands
+    // tucked away under the arms; feet apart, a smirk.
+    return {
+      angle: 0, bob: 0.2 * s(0.3), tilt: -0.06, armsFront: true, tuckHands: true,
+      armL: { a: 0.35, f: -1.62 }, armR: { a: 0.35, f: -1.5 },
+      legL: 0.18, legR: 0.18, eyes: blink(t, seed), mouth: { w: 3.4, curve: 0.9 },
+    };
+  }
+  if (idle === 'p-hips') {
+    // Hands on hips, chest out (the hero stance, without the cape).
+    return {
+      angle: 0, bob: 0.25 * s(0.3), tilt: 0.04,
+      armL: { a: 0.75, f: -0.9 }, armR: { a: 0.75, f: -0.9 },
+      legL: 0.22, legR: 0.22, eyes: blink(t, seed), mouth: { w: 4.8, curve: 2.4 },
+    };
+  }
   // smile
   const g = grin(t, seed);
   return {
@@ -1412,7 +1455,7 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
     sleevesD += seg(B(sh.x, sh.y), B(sleeveEnd.x, sleeveEnd.y));
     const h = B(hand.x, hand.y);
     hands.push(h);
-    handsD += circlePath(h, 1.95);
+    if (!P.tuckHands) handsD += circlePath(h, 1.95);
     if (P.bicep !== undefined) {
       const mid = limb(sh, sg, arm.a, UPPER * 0.7);
       bicepsD += circlePath(B(mid.x, mid.y - 0.9 - 0.6 * P.bicep), 1.9 + 1.4 * P.bicep);
@@ -1422,6 +1465,24 @@ export function sceneFrame(look: RigLook, t: number, seed: number): Frame {
   F.sleeves = sleevesD;
   F.hands = handsD;
   F.biceps = bicepsD || 'M0 0';
+  // Peace sign: two fingers up from the right hand, spread a little either side of the forearm.
+  let fingersD = '';
+  if (P.peace) {
+    const dx = handR.x - elbowR.x;
+    const dy = handR.y - elbowR.y;
+    const len = Math.hypot(dx, dy) || 1;
+    for (let k = 0; k < 2; k++) {
+      const spread = k === 0 ? -0.3 : 0.3;
+      const ux = (dx * Math.cos(spread) - dy * Math.sin(spread)) / len;
+      const uy = (dx * Math.sin(spread) + dy * Math.cos(spread)) / len;
+      // Three overlapping dots make each finger, from the knuckle to the tip.
+      for (let j = 0; j < 3; j++) {
+        const along = 2.1 + 0.8 * j;
+        fingersD += circlePath(B(handR.x + ux * along, handR.y + uy * along), 0.75);
+      }
+    }
+  }
+  F.fingers = fingersD || 'M0 0';
   F.armsBack = P.armsFront ? 0 : 1;
   F.armsFront = P.armsFront ? 1 : 0;
   F.handLX = hands[0]!.x;

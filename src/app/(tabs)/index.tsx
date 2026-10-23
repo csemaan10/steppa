@@ -15,6 +15,7 @@ import { GlassAction } from '@/components/glass-action';
 import { GroupPreview } from '@/components/group-preview';
 import type { Rect } from '@/components/expanding-card';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
+import { JourneyIntroCard } from '@/components/journey-intro-card';
 import { JourneyPreview } from '@/components/journey-preview';
 import { StreakCard } from '@/components/profile-stats';
 import { ProgressRing } from '@/components/progress-ring';
@@ -206,6 +207,8 @@ export default function TodayScreen() {
         ) : null}
 
         {data ? <CharacterIntroCard profile={data.profile} /> : null}
+        {/* Only while there's no journey (null); undefined means journeys couldn't load. */}
+        {data && data.journey === null ? <JourneyIntroCard profile={data.profile} /> : null}
 
         <View style={styles.hero}>
             {/* Sized so the streak card still fits on screen below the insight tiles. */}

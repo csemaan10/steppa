@@ -205,7 +205,7 @@ export default function JourneyScreen() {
           open={postcards.open}
           route={current.route}
           stops={postcards.stops}
-          recipient={data.profile.display_name}
+          profile={data.profile}
           title={postcards.title}
           onClose={() => setPostcards({ ...postcards, open: false })}
         />

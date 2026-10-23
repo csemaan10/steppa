@@ -139,7 +139,7 @@ function StartCard() {
 
   return (
     <Card mode="contained" style={glassCard(theme)} onPress={() => router.push('/journey')}>
-      <View style={styles.map}>
+      <View style={[styles.map, styles.startMap]}>
         {/* Preview: no traveller, so the whole route draws itself in. */}
         <RouteMap
           route={FEATURED}
@@ -175,6 +175,8 @@ const styles = StyleSheet.create({
   flagText: { fontSize: 22, lineHeight: 28 },
   headerText: { flex: 1 },
   map: { paddingHorizontal: 12 },
+  // With nothing above it, the map needs its own gap from the card's top edge.
+  startMap: { paddingTop: 12 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

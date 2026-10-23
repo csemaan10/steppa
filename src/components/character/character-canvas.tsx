@@ -915,6 +915,7 @@ function drawScene(canvas: SkCanvas, F: Frame, kit: Kit) {
     if (back && kit.idle === 'flex') fill('biceps', P.biceps!);
     if (kit.tee) fill('sleeves', P.sleeves!);
     fill('hands', P.skin!);
+    if (kit.idle === 'p-peace') fill('fingers', P.skin!);
     watch();
     ring();
   };
