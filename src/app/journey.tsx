@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { GlassBackAction } from '@/components/glass-action';
+import { JourneyScene } from '@/components/journey-scene';
 import { PostcardModal, PostcardThumb } from '@/components/postcard';
 import { mapHeightFor, RouteMap, type Traveller } from '@/components/route-map';
 import { SectionHeader } from '@/components/section-header';
@@ -30,6 +31,7 @@ import {
   startJourney,
   type CurrentJourney,
   type Journey,
+  type Profile,
 } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import {
@@ -167,6 +169,7 @@ export default function JourneyScreen() {
             <ActiveJourney
               current={active.current}
               progress={active.progress}
+              profile={data.profile}
               traveller={traveller}
               dailySteps={dailySteps}
               onOpenPostcard={showPostcard}
@@ -175,7 +178,12 @@ export default function JourneyScreen() {
           ) : null}
 
           {current && finished ? (
-            <FinishedJourney current={current} traveller={traveller} onOpenPostcard={showPostcard} />
+            <FinishedJourney
+              current={current}
+              profile={data.profile}
+              traveller={traveller}
+              onOpenPostcard={showPostcard}
+            />
           ) : null}
 
           {!active ? (
@@ -209,13 +217,14 @@ export default function JourneyScreen() {
 type ActiveProps = {
   current: CurrentJourney;
   progress: Progress;
+  profile: Profile;
   traveller?: Traveller;
   dailySteps: number;
   onOpenPostcard: (stop: Stop) => void;
   onEnd: () => void;
 };
 
-function ActiveJourney({ current, progress, traveller, dailySteps, onOpenPostcard, onEnd }: ActiveProps) {
+function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOpenPostcard, onEnd }: ActiveProps) {
   const theme = useAppTheme();
   const { width } = useWindowDimensions();
   const { journey, route, steps } = current;
@@ -224,6 +233,11 @@ function ActiveJourney({ current, progress, traveller, dailySteps, onOpenPostcar
   const next = progress.next;
   const kmToNext = next ? next.km - progress.km : 0;
   const daysLeft = stepsForKm(route.totalKm - progress.km) / Math.max(dailySteps, 1);
+  // Your character waves from where you are: the stop you last reached, or the next one once
+  // you're past halfway to it.
+  const nearNext = next && progress.km >= (progress.last.km + next.km) / 2 ? next : null;
+  const sceneStop = nearNext ?? progress.last;
+  const greeting = nearNext ? `Almost at ${nearNext.name}!` : `Hi from ${progress.last.name}!`;
 
   return (
     <>
@@ -237,6 +251,10 @@ function ActiveJourney({ current, progress, traveller, dailySteps, onOpenPostcar
             Day {day} · {formatSteps(steps)} steps so far
           </Text>
         </View>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(80).springify().damping(18)}>
+        <JourneyScene profile={profile} stop={sceneStop} greeting={greeting} />
       </Animated.View>
 
       <RouteMap
@@ -316,10 +334,12 @@ function ActiveJourney({ current, progress, traveller, dailySteps, onOpenPostcar
 
 function FinishedJourney({
   current,
+  profile,
   traveller,
   onOpenPostcard,
 }: {
   current: CurrentJourney;
+  profile: Profile;
   traveller?: Traveller;
   onOpenPostcard: (stop: Stop) => void;
 }) {
@@ -344,6 +364,7 @@ function FinishedJourney({
           </Text>
         </Card.Content>
       </Card>
+      <JourneyScene profile={profile} stop={progress.last} greeting={`Made it to ${progress.last.name}!`} />
       <RouteMap
         route={route}
         km={route.totalKm}
