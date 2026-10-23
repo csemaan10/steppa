@@ -15,6 +15,7 @@ import { GlassAction } from '@/components/glass-action';
 import { GroupPreview } from '@/components/group-preview';
 import type { Rect } from '@/components/expanding-card';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
+import { JourneyPreview } from '@/components/journey-preview';
 import { StreakCard } from '@/components/profile-stats';
 import { ProgressRing } from '@/components/progress-ring';
 import { RecapPreview } from '@/components/recap/recap-preview';
@@ -23,6 +24,7 @@ import { WeekDetail, type WeekDetailKind } from '@/components/week-detail';
 import { useLoader } from '@/hooks/use-loader';
 import { registerBackgroundSync } from '@/lib/background-sync';
 import {
+  getCurrentJourney,
   getLatestMessageId,
   getLeaderboard,
   getMyGroups,
@@ -72,12 +74,14 @@ export default function TodayScreen() {
   const { data, loading, reload } = useLoader(async () => {
     const { health, syncError } = await connectAndSync(userId);
     await syncTimezone(userId);
-    const [profile, history, groups, lifetime] = await Promise.all([
+    const [profile, history, groups, lifetime, journey] = await Promise.all([
       getProfile(userId),
       // Two weeks: the tiles show the last 7 days, and the detail card compares them with the 7 before.
       getStepHistory(userId, 14),
       getMyGroups(),
       getProfileStats(userId),
+      // undefined (card hidden) rather than failing the whole screen, e.g. before migration 012.
+      getCurrentJourney(userId).catch(() => undefined),
     ]);
     const [previews, recap] = await Promise.all([
       Promise.all(
@@ -92,7 +96,7 @@ export default function TodayScreen() {
       // Extra: if the recap fails to load, the rest of the screen still shows.
       loadRecap(userId, groups).catch(() => null),
     ]);
-    return { profile, history, previews, groupCount: groups.length, lifetime, recap, health, syncError };
+    return { profile, history, previews, groupCount: groups.length, lifetime, journey, recap, health, syncError };
   }, userId);
 
   // The morning recap pops up once a day, the first time Today loads after 5 am.
@@ -311,6 +315,13 @@ export default function TodayScreen() {
                 </Card.Content>
               </Card>
             )}
+          </View>
+        ) : null}
+
+        {data && data.journey !== undefined ? (
+          <View style={styles.section}>
+            <SectionHeader title="Your journey" />
+            <JourneyPreview current={data.journey} profile={data.profile} />
           </View>
         ) : null}
 

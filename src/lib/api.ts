@@ -1,6 +1,7 @@
 import type { CharacterLook } from '@/lib/character';
 import { addDays, lastNDays, startOfDay, toDayKey } from '@/lib/dates';
 import { healthSourceName, readDailySteps } from '@/lib/health';
+import { getRoute, progressOn, type Route } from '@/lib/journeys';
 import { supabase } from '@/lib/supabase';
 
 export type Profile = {
@@ -54,7 +55,13 @@ export type ChatMessage = {
   user_id: string;
   body: string;
   created_at: string;
+  edited_at: string | null;
 };
+
+/** Stored reaction keys; the chat maps them to emoji. Must match the check in migration 011. */
+export type ReactionKey = 'like' | 'love' | 'laugh' | 'fire' | 'shoe' | 'wow';
+
+export type Reaction = { message_id: number; user_id: string; emoji: ReactionKey };
 
 export type DaySteps = { day: string; steps: number };
 
@@ -359,6 +366,41 @@ export async function sendMessage(groupId: string, userId: string, body: string)
   );
 }
 
+export async function editMessage(messageId: number, body: string): Promise<ChatMessage> {
+  return unwrap<ChatMessage>(
+    await supabase.from('group_messages').update({ body: body.trim() }).eq('id', messageId).select('*').single()
+  );
+}
+
+export async function deleteMessage(messageId: number): Promise<void> {
+  const { error } = await supabase.from('group_messages').delete().eq('id', messageId);
+  if (error) throw new Error(error.message);
+}
+
+export async function getReactions(messageIds: number[]): Promise<Reaction[]> {
+  if (!messageIds.length) return [];
+  return unwrap<Reaction[]>(
+    await supabase.from('message_reactions').select('message_id, user_id, emoji').in('message_id', messageIds)
+  );
+}
+
+/** Adds or replaces this user's reaction on a message. */
+export async function setReaction(messageId: number, userId: string, emoji: ReactionKey): Promise<void> {
+  const { error } = await supabase
+    .from('message_reactions')
+    .upsert({ message_id: messageId, user_id: userId, emoji }, { onConflict: 'message_id,user_id' });
+  if (error) throw new Error(error.message);
+}
+
+export async function removeReaction(messageId: number, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('message_reactions')
+    .delete()
+    .eq('message_id', messageId)
+    .eq('user_id', userId);
+  if (error) throw new Error(error.message);
+}
+
 // ---------- Moderation ----------
 
 /** Reports a message for review; it's hidden for the reporter right away (by RLS). */
@@ -406,6 +448,89 @@ export async function getBlockedUsers(blockerId: string): Promise<BlockedUser[]>
   );
 }
 
+// ---------- Journeys ----------
+
+export type Journey = {
+  id: number;
+  user_id: string;
+  route: string;
+  started_on: string;
+  completed_on: string | null;
+  postcards_seen: number;
+  created_at: string;
+};
+
+export type CurrentJourney = { journey: Journey; route: Route; steps: number };
+
+/**
+ * The latest journey (in progress, or finished and not yet replaced) with the steps walked on it,
+ * or null if there's none. Marks it finished once the steps cover the whole route.
+ */
+export async function getCurrentJourney(userId: string): Promise<CurrentJourney | null> {
+  const journey = unwrap<Journey | null>(
+    await supabase
+      .from('journeys')
+      .select('*')
+      .eq('user_id', userId)
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  const route = journey ? getRoute(journey.route) : undefined;
+  if (!journey || !route) return null;
+
+  let query = supabase.from('daily_steps').select('steps').eq('user_id', userId).gte('day', journey.started_on);
+  if (journey.completed_on) query = query.lte('day', journey.completed_on);
+  const steps = unwrap<{ steps: number }[]>(await query).reduce((sum, r) => sum + r.steps, 0);
+
+  if (!journey.completed_on && progressOn(route, steps).done) {
+    const completed = unwrap<Journey>(
+      await supabase
+        .from('journeys')
+        .update({ completed_on: toDayKey(new Date()) })
+        .eq('id', journey.id)
+        .select('*')
+        .single()
+    );
+    return { journey: completed, route, steps };
+  }
+  return { journey, route, steps };
+}
+
+/** Finished journeys, most recent first. */
+export async function getCompletedJourneys(userId: string): Promise<Journey[]> {
+  return unwrap<Journey[]>(
+    await supabase
+      .from('journeys')
+      .select('*')
+      .eq('user_id', userId)
+      .not('completed_on', 'is', null)
+      .order('completed_on', { ascending: false })
+  );
+}
+
+/** Starts a route today. Only steps from today on count toward it. */
+export async function startJourney(userId: string, routeKey: string): Promise<Journey> {
+  return unwrap<Journey>(
+    await supabase
+      .from('journeys')
+      .insert({ user_id: userId, route: routeKey, started_on: toDayKey(new Date()) })
+      .select('*')
+      .single()
+  );
+}
+
+export async function markPostcardsSeen(journeyId: number, count: number): Promise<void> {
+  const { error } = await supabase.from('journeys').update({ postcards_seen: count }).eq('id', journeyId);
+  if (error) throw new Error(error.message);
+}
+
+/** Gives up on a journey in progress; its progress is lost. */
+export async function endJourney(journeyId: number): Promise<void> {
+  const { error } = await supabase.from('journeys').delete().eq('id', journeyId);
+  if (error) throw new Error(error.message);
+}
+
 // ---------- Account ----------
 
 /** Permanently deletes the signed-in user and all their data (see migration 009). */
@@ -416,16 +541,67 @@ export async function deleteMyAccount(): Promise<void> {
 
 let channelCount = 0;
 
-/** Calls `onInsert` for every new message in the group; returns an unsubscribe function. */
-export function subscribeToMessages(groupId: string, onInsert: (m: ChatMessage) => void): () => void {
+type MessageHandlers = {
+  onUpdate?: (m: ChatMessage) => void;
+  onDelete?: (messageId: number) => void;
+};
+
+/**
+ * Calls `onInsert` for every new message in the group (and optionally `onUpdate` for edits and
+ * `onDelete` for deletions); returns an unsubscribe function.
+ */
+export function subscribeToMessages(
+  groupId: string,
+  onInsert: (m: ChatMessage) => void,
+  { onUpdate, onDelete }: MessageHandlers = {}
+): () => void {
+  const filter = `group_id=eq.${groupId}`;
   // Unique name per subscription: the chat and the unread dot can listen to the same group at once.
-  const channel = supabase
+  let channel = supabase
     .channel(`group-chat:${groupId}:${++channelCount}`)
-    .on(
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages', filter }, (payload) =>
+      onInsert(payload.new as ChatMessage)
+    );
+  if (onUpdate) {
+    channel = channel.on(
       'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'group_messages', filter: `group_id=eq.${groupId}` },
-      (payload) => onInsert(payload.new as ChatMessage)
+      { event: 'UPDATE', schema: 'public', table: 'group_messages', filter },
+      (payload) => onUpdate(payload.new as ChatMessage)
+    );
+  }
+  if (onDelete) {
+    // Delete events can't be filtered and carry only the id, so this hears every group's deletions;
+    // callers ignore ids they don't have.
+    channel = channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'group_messages' }, (payload) =>
+      onDelete((payload.old as { id: number }).id)
+    );
+  }
+  channel.subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/** Live reaction changes in the group; returns an unsubscribe function. */
+export function subscribeToReactions(
+  groupId: string,
+  onUpsert: (r: Reaction) => void,
+  onRemove: (messageId: number, userId: string) => void
+): () => void {
+  const filter = `group_id=eq.${groupId}`;
+  const channel = supabase
+    .channel(`group-reactions:${groupId}:${++channelCount}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions', filter }, (payload) =>
+      onUpsert(payload.new as Reaction)
     )
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_reactions', filter }, (payload) =>
+      onUpsert(payload.new as Reaction)
+    )
+    // Unfilterable, and the old row has only the primary key (message_id, user_id).
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, (payload) => {
+      const old = payload.old as { message_id: number; user_id: string };
+      onRemove(old.message_id, old.user_id);
+    })
     .subscribe();
   return () => {
     supabase.removeChannel(channel);

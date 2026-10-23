@@ -71,6 +71,7 @@ function RootNavigator() {
         <Stack.Screen name="group-settings/[id]" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="recap" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="journey" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" options={{ animation: 'none' }} />
