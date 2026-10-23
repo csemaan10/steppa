@@ -302,9 +302,11 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
     hoodie: look.top === 'hoodie',
     longHair: look.hair === 'long' || look.hair === 'longcurly' || look.hair === 'afro',
     bald: look.hair === 'bald',
+    // Every move whose pose sets armsFront must be here, or its arms are never drawn.
     frontArms:
       idle === 'vbset' || idle === 'basket' || idle === 'yoga' || idle === 'boxing' ||
-      idle === 'claws' || idle === 'spell' || idle === 'eyebeam' || idle === 'e-web',
+      idle === 'claws' || idle === 'spell' || idle === 'eyebeam' || idle === 'e-web' ||
+      idle === 'p-peace' || idle === 'p-salute' || idle === 'p-crossed',
     ball: ballRadius(idle),
     horse: look.pets.includes('horse'),
     bird: (() => {
@@ -344,6 +346,8 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
       torsoFlow: makePaint(topColor),
       fold: makePaint(shade(topColor, -0.22), 0.5, 0.7),
       arms: makePaint(armColor, longSleeves && baggyTop ? 4.9 : 3.4),
+      // A darker rim round arms posed across the body, so a sleeve the colour of the top still shows.
+      armEdge: makePaint(shade(armColor, -0.28), (longSleeves && baggyTop ? 4.9 : 3.4) + 1.2),
       biceps: makePaint(armColor),
       sleeves: makePaint(sleeveColor, baggyTop ? 5.6 : 3.9),
       skin: makePaint(skin),
@@ -911,6 +915,7 @@ function drawScene(canvas: SkCanvas, F: Frame, kit: Kit) {
   }
   const armSet = (alpha: number, back: boolean) => {
     if (alpha <= 0) return;
+    if (!back && kit.idle.startsWith('p-')) fill('arms', P.armEdge!);
     fill('arms', P.arms!);
     if (back && kit.idle === 'flex') fill('biceps', P.biceps!);
     if (kit.tee) fill('sleeves', P.sleeves!);
