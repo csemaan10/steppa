@@ -293,6 +293,8 @@ export default function TodayScreen() {
               note={data.groupCount ? `${data.groupCount} ${data.groupCount === 1 ? 'group' : 'groups'}` : undefined}
               onPress={data.groupCount ? () => router.navigate('/groups') : undefined}
             />
+            {/* Yesterday's podium leads the section, above today's group cards. */}
+            {recap?.groups.length ? <RecapPreview recap={recap} /> : null}
             {data.previews.length ? (
               data.previews.map(({ group, rows, latestMessageId }) => (
                 <GroupPreview
@@ -324,8 +326,6 @@ export default function TodayScreen() {
             <JourneyPreview current={data.journey} profile={data.profile} />
           </View>
         ) : null}
-
-        {recap?.groups.length ? <RecapPreview recap={recap} /> : null}
       </ScrollView>
 
       {data && detail ? (
