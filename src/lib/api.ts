@@ -58,8 +58,23 @@ export type ChatMessage = {
   edited_at: string | null;
 };
 
-/** Stored reaction keys; the chat maps them to emoji. Must match the check in migration 011. */
-export type ReactionKey = 'like' | 'love' | 'laugh' | 'fire' | 'shoe' | 'wow';
+/** Stored reaction keys; the chat maps them to emoji. Must match the check in migration 013. */
+export type ReactionKey =
+  | 'like'
+  | 'love'
+  | 'laugh'
+  | 'fire'
+  | 'shoe'
+  | 'wow'
+  | 'clap'
+  | 'party'
+  | 'strong'
+  | 'trophy'
+  | 'hundred'
+  | 'sad'
+  | 'angry'
+  | 'eyes'
+  | 'thanks';
 
 export type Reaction = { message_id: number; user_id: string; emoji: ReactionKey };
 

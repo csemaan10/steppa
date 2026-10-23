@@ -5,11 +5,25 @@ import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { REACTION_EMOJI, REACTION_KEYS } from '@/components/message-reactions';
 import type { ReactionKey } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+import { motion } from '@/theme/motion';
 
 export type MessageAction = { icon: string; label: string; destructive?: boolean; onPress: () => void };
 
-const STAGGER_MS = 30;
+/** Kept short, so the last of the fifteen is in place in about a quarter of a second. */
+const STAGGER_MS = 8;
 const MENU_IN = FadeInDown.duration(200);
+const COLUMNS = 5;
+const BUTTON = 42;
+const PADDING = 6;
+
+// Each emoji pops in on the app's quick release spring (src/theme/motion.ts), a hint of bounce at most.
+const { release } = motion;
+const popIn = (i: number) =>
+  ZoomIn.delay(i * STAGGER_MS)
+    .springify()
+    .stiffness(release.stiffness!)
+    .damping(release.damping!)
+    .energyThreshold(release.energyThreshold!);
 
 type Props = {
   visible: boolean;
@@ -37,7 +51,7 @@ export function MessageActions({ visible, body, current, actions, onReact, onDis
       <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.wrapper}>
         <View style={[styles.picker, { backgroundColor: theme.colors.elevation.level3 }]}>
           {REACTION_KEYS.map((key, i) => (
-            <Animated.View key={key} entering={ZoomIn.delay(i * STAGGER_MS).springify().damping(11).stiffness(240)}>
+            <Animated.View key={key} entering={popIn(i)}>
               <Pressable
                 onPress={() => run(() => onReact(key))}
                 accessibilityRole="button"
@@ -82,17 +96,25 @@ export function MessageActions({ visible, body, current, actions, onReact, onDis
 
 const styles = StyleSheet.create({
   wrapper: { marginHorizontal: 24, gap: 12 },
+  // Three rows of five.
   picker: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     alignSelf: 'center',
-    gap: 2,
-    padding: 6,
-    borderRadius: 32,
+    width: COLUMNS * BUTTON + PADDING * 2,
+    rowGap: 2,
+    padding: PADDING,
+    borderRadius: 28,
   },
-  emojiButton: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  emojiButton: {
+    width: BUTTON,
+    height: BUTTON,
+    borderRadius: BUTTON / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pressed: { transform: [{ scale: 1.2 }] },
-  emoji: { fontSize: 28 },
+  emoji: { fontSize: 26 },
   menu: { borderRadius: 24, paddingVertical: 8, overflow: 'hidden' },
   preview: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
   item: { paddingHorizontal: 8 },

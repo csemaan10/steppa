@@ -14,8 +14,9 @@ import Animated, {
 
 import type { Reaction, ReactionKey } from '@/lib/api';
 import { useAppTheme } from '@/theme';
+import { motion } from '@/theme/motion';
 
-/** Picker order; keys are what the database stores. */
+/** Picker order (three rows of five); keys are what the database stores. */
 export const REACTION_EMOJI: Record<ReactionKey, string> = {
   like: '👍',
   love: '❤️',
@@ -23,13 +24,30 @@ export const REACTION_EMOJI: Record<ReactionKey, string> = {
   fire: '🔥',
   shoe: '👟',
   wow: '😮',
+  clap: '👏',
+  party: '🎉',
+  strong: '💪',
+  trophy: '🏆',
+  hundred: '💯',
+  sad: '😢',
+  angry: '😡',
+  eyes: '👀',
+  thanks: '🙏',
 };
 
 export const REACTION_KEYS = Object.keys(REACTION_EMOJI) as ReactionKey[];
 
-const CHIP_IN = ZoomIn.springify().damping(12).stiffness(260);
-const CHIP_OUT = ZoomOut.duration(160);
-const CHIP_MOVE = LinearTransition.springify().damping(18).stiffness(220);
+// The app's quick Expressive springs: settled in about a fifth of a second, with only a hint of bounce.
+const { release, spatial } = motion;
+const CHIP_IN = ZoomIn.springify()
+  .stiffness(release.stiffness!)
+  .damping(release.damping!)
+  .energyThreshold(release.energyThreshold!);
+const CHIP_OUT = ZoomOut.duration(140);
+const CHIP_MOVE = LinearTransition.springify()
+  .stiffness(spatial.stiffness!)
+  .damping(spatial.damping!)
+  .energyThreshold(spatial.energyThreshold!);
 // The new count rolls up into place.
 const COUNT_IN = new Keyframe({
   0: { opacity: 0, transform: [{ translateY: 6 }] },
@@ -76,7 +94,7 @@ function Chip({ emoji, selected, names, onPress }: ChipProps) {
   const count = names.length;
 
   function press() {
-    scale.set(withSequence(withTiming(1.25, { duration: 90 }), withSpring(1, { damping: 8, stiffness: 320 })));
+    scale.set(withSequence(withTiming(1.2, { duration: 70 }), withSpring(1, motion.release)));
     onPress();
   }
 
