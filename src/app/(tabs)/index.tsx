@@ -12,6 +12,7 @@ import {
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GroupPreview } from '@/components/group-preview';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
+import { RecapSummaryCard } from '@/components/morning-recap';
 import { StreakCard } from '@/components/profile-stats';
 import { ProgressRing } from '@/components/progress-ring';
 import { useLoader } from '@/hooks/use-loader';
@@ -268,6 +269,7 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
+        <RecapSummaryCard userId={userId} />
       </ScrollView>
 
       <Snackbar

@@ -6,7 +6,7 @@ import type { ComponentProps, ReactNode, RefObject } from 'react';
 import { createContext, use, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { LinearTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BUTTON_WIDTH = 74;
@@ -16,6 +16,7 @@ const GAP = 4;
 const PADDING = 7;
 const TAB_BAR_HEIGHT = BUTTON_HEIGHT + PADDING * 2;
 const TAB_BAR_MARGIN = 12;
+const INDICATOR_TRANSITION = LinearTransition.duration(220);
 
 /** Distance from the safe-area bottom to the top of the floating bar (for FABs/snackbars). */
 export const TAB_BAR_OFFSET = TAB_BAR_HEIGHT + TAB_BAR_MARGIN;
@@ -48,11 +49,9 @@ export function FloatingTabBar({ blurTarget, tabs, children }: Props) {
   const insets = useSafeAreaInsets();
   const activeTab = useActiveTab(tabs);
   const activeIndex = Math.max(0, tabs.indexOf(activeTab));
-  const targetX = activeIndex * (BUTTON_WIDTH + GAP);
-
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: withTiming(targetX, { duration: 220 }) }],
-  }));
+  // React owns the pill's position and a layout transition animates the move. An animated transform
+  // lived only on the UI thread, and Android re-commits on resume reset it while the icons stayed right.
+  const indicatorLeft = PADDING + activeIndex * (BUTTON_WIDTH + GAP);
 
   return (
     <View pointerEvents="box-none" style={[styles.wrapper, { bottom: insets.bottom + TAB_BAR_MARGIN }]}>
@@ -67,7 +66,8 @@ export function FloatingTabBar({ blurTarget, tabs, children }: Props) {
             style={StyleSheet.absoluteFill}
           />
           <Animated.View
-            style={[styles.indicator, { backgroundColor: theme.colors.primary }, indicatorStyle]}
+            layout={INDICATOR_TRANSITION}
+            style={[styles.indicator, { left: indicatorLeft, backgroundColor: theme.colors.primary }]}
           />
           <View style={styles.row}>
             <ActiveTabContext value={activeTab}>{children}</ActiveTabContext>
@@ -121,7 +121,6 @@ const styles = StyleSheet.create({
   indicator: {
     position: 'absolute',
     top: PADDING,
-    left: PADDING,
     width: BUTTON_WIDTH,
     height: BUTTON_HEIGHT,
     borderRadius: BUTTON_HEIGHT / 2,

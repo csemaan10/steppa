@@ -4,35 +4,38 @@ import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { FloatingTabBar, TabButton } from '@/components/floating-tab-bar';
+import { RecapProvider } from '@/providers/recap-provider';
 
 export default function TabLayout() {
   // Android blurs only what's inside this target, so the screens live in it and the bar sits outside.
   const blurTarget = useRef<View>(null);
 
   return (
-    <Tabs style={styles.flex}>
-      <BlurTargetView ref={blurTarget} style={styles.flex}>
-        <TabSlot />
-      </BlurTargetView>
+    <RecapProvider>
+      <Tabs style={styles.flex}>
+        <BlurTargetView ref={blurTarget} style={styles.flex}>
+          <TabSlot />
+        </BlurTargetView>
 
-      <FloatingTabBar blurTarget={blurTarget} tabs={['index', 'groups', 'profile']}>
-        <TabTrigger name="index" asChild>
-          <TabButton name="index" icon="walk" activeIcon="walk" label="Today" />
-        </TabTrigger>
-        <TabTrigger name="groups" asChild>
-          <TabButton name="groups" icon="account-group-outline" activeIcon="account-group" label="Groups" />
-        </TabTrigger>
-        <TabTrigger name="profile" asChild>
-          <TabButton name="profile" icon="account-circle-outline" activeIcon="account-circle" label="Profile" />
-        </TabTrigger>
-      </FloatingTabBar>
+        <FloatingTabBar blurTarget={blurTarget} tabs={['index', 'groups', 'profile']}>
+          <TabTrigger name="index" asChild>
+            <TabButton name="index" icon="walk" activeIcon="walk" label="Today" />
+          </TabTrigger>
+          <TabTrigger name="groups" asChild>
+            <TabButton name="groups" icon="account-group-outline" activeIcon="account-group" label="Groups" />
+          </TabTrigger>
+          <TabTrigger name="profile" asChild>
+            <TabButton name="profile" icon="account-circle-outline" activeIcon="account-circle" label="Profile" />
+          </TabTrigger>
+        </FloatingTabBar>
 
-      <TabList style={styles.hidden}>
-        <TabTrigger name="index" href="/" />
-        <TabTrigger name="groups" href="/groups" />
-        <TabTrigger name="profile" href="/profile" />
-      </TabList>
-    </Tabs>
+        <TabList style={styles.hidden}>
+          <TabTrigger name="index" href="/" />
+          <TabTrigger name="groups" href="/groups" />
+          <TabTrigger name="profile" href="/profile" />
+        </TabList>
+      </Tabs>
+    </RecapProvider>
   );
 }
 
