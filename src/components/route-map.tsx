@@ -257,11 +257,17 @@ function MapCanvas({ geo, route, km, width, height, traveller, detailed, delay }
   const done = km >= route.totalKm;
   const dash = `${length} ${length}`;
   const popKm = Math.max(route.totalKm * 0.04, 0.5);
+  // Where the stop names, compass and scale bar go, so the map's own names keep clear of them.
+  const shown = [start, finish, ...(next && next !== finish ? [next] : [])];
+  const reserved: Box[] = [
+    ...shown.map(({ stop, x, y }) => labelBox(x, y, width, next?.stop === stop ? `Next: ${stop.name}` : stop.name)),
+    ...(detailed ? [{ x0: 6, y0: 6, x1: 42, y1: 50 }, { x0: 10, y0: height - 36, x1: 100, y1: height - 6 }] : []),
+  ];
 
   return (
     <>
       <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
-        <Scenery geo={geo} routeKey={route.key} width={width} height={height} detailed={detailed} />
+        <Scenery geo={geo} routeKey={route.key} width={width} height={height} detailed={detailed} reserved={reserved} />
 
         {/* The road, with a dotted trail along it. */}
         <Path d={geo.d} stroke={colors.road} strokeWidth={9} strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -370,10 +376,32 @@ function MapCanvas({ geo, route, km, width, height, traveller, detailed, delay }
   );
 }
 
-type SceneryProps = { geo: Geometry; routeKey: string; width: number; height: number; detailed?: boolean };
+/** A rectangle on the map, for keeping names from landing on each other. */
+type Box = { x0: number; y0: number; x1: number; y1: number };
+
+const overlaps = (a: Box, b: Box, gap: number) =>
+  a.x0 < b.x1 + gap && b.x0 < a.x1 + gap && a.y0 < b.y1 + gap && b.y0 < a.y1 + gap;
+
+/** Roughly where a stop's name pill sits: centred over its dot, above it if there's room (see Label). */
+function labelBox(x: number, y: number, width: number, text: string): Box {
+  const w = text.length * 6.2 + 14;
+  const left = Math.min(Math.max(x - w / 2, 4), width - w - 4);
+  const top = y - 38 >= 2 ? y - 38 : y + 16;
+  return { x0: left, y0: top, x1: left + w, y1: top + 18 };
+}
+
+type SceneryProps = {
+  geo: Geometry;
+  routeKey: string;
+  width: number;
+  height: number;
+  detailed?: boolean;
+  /** Taken by stop names and controls; the map's own names stay out of these. */
+  reserved: Box[];
+};
 
 /** Everything under the route: grid, water, islands, rivers, borders, hills, woods, names, scale. */
-function Scenery({ geo, routeKey, width, height, detailed }: SceneryProps) {
+function Scenery({ geo, routeKey, width, height, detailed, reserved }: SceneryProps) {
   const theme = useAppTheme();
   const colors = theme.dark ? MAP_COLORS.dark : MAP_COLORS.light;
   const geography = GEOGRAPHY[routeKey];
@@ -417,14 +445,23 @@ function Scenery({ geo, routeKey, width, height, detailed }: SceneryProps) {
       ];
     });
 
-    // Names whose middle is comfortably inside the map; compact maps only name the big water.
+    // Names that fit inside the map without touching another name, a stop's name or the controls;
+    // compact maps only name the big water. Big names claim their space first, minor ones after.
+    const fontSize = detailed ? 11 : 9;
+    const placed: Box[] = [...reserved];
     const labels = (geography?.labels ?? [])
       .filter((l) => detailed || (l.kind === 'water' && !l.minor))
-      .map((l) => {
+      .sort((a, b) => Number(!!a.minor) - Number(!!b.minor))
+      .flatMap((l) => {
         const [x, y] = geo.toXY(l.at[0], l.at[1]);
-        return { ...l, x, y };
-      })
-      .filter(({ x, y }) => x > 36 && x < width - 36 && y > 12 && y < height - 8);
+        const size = l.kind === 'water' ? fontSize : fontSize - 1.5;
+        const w = l.kind === 'water' ? l.text.length * size * 0.55 : l.text.length * (size * 0.68 + 2);
+        const box = { x0: x - w / 2, y0: y - size, x1: x + w / 2, y1: y + 2 };
+        if (box.x0 < 4 || box.x1 > width - 4 || box.y0 < 2 || box.y1 > height - 2) return [];
+        if (placed.some((p) => overlaps(p, box, 6))) return [];
+        placed.push(box);
+        return [{ ...l, x, y }];
+      });
 
     // Scale bar: the longest round distance that fits in about 80 px.
     const scaleKm = SCALE_STEPS_KM.filter((kmStep) => kmStep * geo.pxPerKm <= 80).pop() ?? SCALE_STEPS_KM[0]!;
@@ -440,7 +477,7 @@ function Scenery({ geo, routeKey, width, height, detailed }: SceneryProps) {
       labels,
       scale: { km: scaleKm, px: scaleKm * geo.pxPerKm },
     };
-  }, [geo, geography, width, height, detailed]);
+  }, [geo, geography, width, height, detailed, reserved]);
 
   const labelSize = detailed ? 11 : 9;
 

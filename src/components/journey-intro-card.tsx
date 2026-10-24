@@ -52,7 +52,7 @@ export function JourneyIntroCard({ profile }: { profile: Profile }) {
   return (
     <Card mode="contained" style={glassCard(theme)}>
       <View style={styles.scene}>
-        <JourneyScene profile={profile} stop={route.stops[0]!} greeting="Let's go on a journey!" height={140} />
+        <JourneyScene people={[profile]} stop={route.stops[0]!} greeting="Let's go on a journey!" height={140} />
       </View>
       <Card.Content style={styles.text}>
         <Text variant="titleMedium">Go on a journey</Text>

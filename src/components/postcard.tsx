@@ -16,8 +16,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { Button } from '@/components/button';
 import type { Motion } from '@/components/character/rig';
-import { JourneyScene } from '@/components/journey-scene';
-import type { Profile } from '@/lib/api';
+import { JourneyScene, type Person } from '@/components/journey-scene';
 import { hashString } from '@/lib/character';
 import { formatKm, SKIES, type Route, type Sky, type Stop } from '@/lib/journeys';
 import type { TimeOfDay } from '@/lib/scene-art';
@@ -48,11 +47,14 @@ const POSTCARD_TIME: Record<Sky, TimeOfDay> = {
 
 const POSES: Motion[] = ['p-peace', 'p-salute', 'p-crossed', 'p-hips', 'flex'];
 
-/** The pose for a stop's photo: a cheer at the finish, otherwise the next pose along the route, so neighbours differ. */
-function postcardPose(route: Route, stop: Stop): Motion {
+/**
+ * The pose for a stop's photo: everyone cheers at the finish; otherwise the next pose along the
+ * route, so neighbouring postcards differ, and in a group photo each person strikes a different one.
+ */
+function postcardPose(route: Route, stop: Stop, person: number): Motion {
   const index = route.stops.indexOf(stop);
   if (index === route.stops.length - 1) return 'cheer';
-  return POSES[(index + hashString(route.key)) % POSES.length]!;
+  return POSES[(index + person + hashString(route.key)) % POSES.length]!;
 }
 
 function sky(stop: Stop): string {
@@ -110,17 +112,21 @@ function Postmark({ ink }: { ink: string }) {
 type PostcardProps = {
   route: Route;
   stop: Stop;
-  /** Posing on the front; their name goes in the address block on the back. */
-  profile: Profile;
+  /** Posing on the front: you on your own, or the whole group. */
+  people: Person[];
+  /** Front and centre in a group photo. */
+  you?: string;
+  /** The name in the address block on the back: yours, or the group's. */
+  recipient: string;
   width: number;
 };
 
 /**
- * A full postcard: the stop's illustrated place with your character posing for the photo. It
+ * A full postcard: the stop's illustrated place with you (or your group) posing for the photo. It
  * lands with a little tilt, the stamp thunks down, the postmark inks in, and a tap flips it over
  * to read the back.
  */
-export function Postcard({ route, stop, profile, width }: PostcardProps) {
+export function Postcard({ route, stop, people, you, recipient, width }: PostcardProps) {
   const height = Math.round(width * ASPECT);
   const index = route.stops.indexOf(stop);
   const start = route.stops[0]!;
@@ -178,9 +184,10 @@ export function Postcard({ route, stop, profile, width }: PostcardProps) {
           <View style={styles.art}>
             {/* Smaller than on the journey screen, so a two-line place name stays clear of their head. */}
             <JourneyScene
-              profile={profile}
+              people={people}
+              you={you}
               stop={stop}
-              motion={postcardPose(route, stop)}
+              motion={(person) => postcardPose(route, stop, person)}
               time={POSTCARD_TIME[stop.sky]}
               height={height - ART_INSET * 2}
               characterSize={0.44}
@@ -222,7 +229,7 @@ export function Postcard({ route, stop, profile, width }: PostcardProps) {
             </View>
             <View style={styles.address}>
               {[
-                profile.display_name,
+                recipient,
                 route.subtitle,
                 stop.km > 0 ? `${formatKm(stop.km)} km from ${start.name}` : 'Day 1. Here we go!',
               ].map((line) => (
@@ -294,13 +301,15 @@ type ModalProps = {
   route: Route;
   /** Shown one after another. */
   stops: Stop[];
-  profile: Profile;
+  people: Person[];
+  you?: string;
+  recipient: string;
   /** Heading above the card, e.g. "New postcard". The last stop always gets a finish-line heading. */
   title: string;
   onClose: () => void;
 };
 
-export function PostcardModal({ open, route, stops, profile, title, onClose }: ModalProps) {
+export function PostcardModal({ open, route, stops, people, you, recipient, title, onClose }: ModalProps) {
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   // Start from the first postcard each time a new set opens.
@@ -322,7 +331,7 @@ export function PostcardModal({ open, route, stops, profile, title, onClose }: M
         <Animated.Text key={`title-${stop.name}`} entering={FadeInDown.duration(300)} style={styles.modalTitle}>
           {finale ? `🏁 You made it to ${stop.name}!` : title}
         </Animated.Text>
-        <Postcard key={`card-${stop.name}`} route={route} stop={stop} profile={profile} width={Math.min(width - 32, 400)} />
+        <Postcard key={`card-${stop.name}`} route={route} stop={stop} people={people} you={you} recipient={recipient} width={Math.min(width - 32, 400)} />
         <Animated.Text entering={FadeIn.delay(1400)} style={styles.hint}>
           Tap the postcard to turn it over
         </Animated.Text>

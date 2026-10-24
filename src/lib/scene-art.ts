@@ -4,7 +4,7 @@
 // runs along the bottom, with its top edge around y = 166; landmarks sit on y = 160, mostly to the
 // right, leaving the left third clear for the character.
 
-export type Ground = 'grass' | 'sand' | 'stone' | 'path';
+export type Ground = 'grass' | 'sand' | 'stone' | 'path' | 'desert';
 
 export type Feature =
   // Backdrops
@@ -38,7 +38,20 @@ export type Feature =
   | 'lighthouse'
   | 'boat'
   | 'gondola'
-  | 'cross';
+  | 'cross'
+  // Group routes
+  | 'greatwall'
+  | 'pagoda'
+  | 'mesas'
+  | 'cactus'
+  | 'wheat'
+  | 'elevator'
+  | 'arch'
+  | 'pier'
+  | 'balloons'
+  | 'cadillacs'
+  | 'canyon'
+  | 'diner';
 
 /** A stop's place: what the character stands on, then what's around them, drawn back to front. */
 export type Scene = readonly [Ground, ...Feature[]];
@@ -103,6 +116,15 @@ function ellipse(cx: number, cy: number, rx: number, ry: number): string {
 }
 
 const circle = (cx: number, cy: number, r: number) => ellipse(cx, cy, r, r);
+
+/** A ring `w` thick: the inner circle winds the other way, so it's cut out of the fill. */
+function ring(cx: number, cy: number, r: number, w: number): string {
+  const inner = r - w;
+  return (
+    `M${n(cx - r)} ${n(cy)}a${n(r)} ${n(r)} 0 1 0 ${n(2 * r)} 0a${n(r)} ${n(r)} 0 1 0 ${n(-2 * r)} 0Z` +
+    `M${n(cx - inner)} ${n(cy)}a${n(inner)} ${n(inner)} 0 1 1 ${n(2 * inner)} 0a${n(inner)} ${n(inner)} 0 1 1 ${n(-2 * inner)} 0Z`
+  );
+}
 
 function poly(...pts: number[]): string {
   let d = '';
@@ -619,7 +641,203 @@ function cross(p: Painter) {
   p.fill(rect(250, 56, 16, 3.2) + rect(256.4, 47, 3.2, 20), '#3B3B3B');
 }
 
+// ---------- Group routes: Canada's prairies, Route 66, the Great Wall ----------
+
+/** Where the near mountain range's crest is at x (the ridge `mountains` draws in front). */
+function nearRidge(x: number): number {
+  const pts = [0, 156, 44, 126, 92, 146, 150, 114, 206, 150, 262, 124, 318, 146, 360, 130];
+  for (let i = 0; i < pts.length - 2; i += 2) {
+    const [x0, y0, x1, y1] = [pts[i]!, pts[i + 1]!, pts[i + 2]!, pts[i + 3]!];
+    if (x <= x1) return y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
+  }
+  return pts[pts.length - 1]!;
+}
+
+/** The Great Wall riding the crest of the mountains, with watchtowers on the peaks. */
+function greatwall(p: Painter) {
+  const top: number[] = [];
+  const bottom: number[] = [];
+  for (let x = 0; x <= W; x += 4) {
+    const y = nearRidge(x);
+    top.push(x, y - 6);
+    bottom.unshift(x, y + 2);
+  }
+  p.fill(poly(...top, ...bottom), '#B9A98C');
+  const merlons: string[] = [];
+  for (let x = 2; x < W; x += 6) merlons.push(rect(x, nearRidge(x) - 8.5, 3, 3));
+  p.fill(merlons.join(''), '#A8987B');
+  for (const x of [44, 150, 262]) {
+    const y = nearRidge(x);
+    p.fill(rect(x - 8, y - 24, 16, 20), '#AE9E80');
+    const crenels: string[] = [];
+    for (let cx = x - 8; cx < x + 8; cx += 4) crenels.push(rect(cx, y - 27, 2.4, 3));
+    p.fill(crenels.join(''), '#AE9E80');
+    p.window(arch(x - 2, y - 18, 4, 7));
+  }
+  p.flushWindows('#5E5040');
+}
+
+/** A Chinese gate tower: a stone base with an arched gate, red halls and upturned roofs. */
+function pagoda(p: Painter) {
+  p.fill(rect(226, 128, 108, 32), '#A99C86');
+  p.fill(arch(270, 138, 20, 22), '#4D4436');
+  p.fill(rect(244, 104, 72, 24), '#B23A2E');
+  p.fill(rect(256, 80, 48, 18), '#B23A2E');
+  const roof = '#3D4D49';
+  p.fill('M228 109Q236 104 242 97H318Q324 104 332 109Q280 103 228 109Z', roof);
+  p.fill('M246 84Q252 80 258 73H302Q308 80 314 84Q280 79 246 84Z', roof);
+  p.fill(rect(262, 70, 36, 3), roof);
+  for (let x = 250; x < 314; x += 10) p.window(rect(x, 110, 5, 12));
+  for (let x = 262; x < 300; x += 10) p.window(rect(x, 86, 5, 9));
+  p.flushWindows('#5A2420');
+}
+
+/** Flat-topped desert buttes in bands of red, orange and cream (the Painted Desert, Zhangye). */
+function mesas(p: Painter) {
+  p.fill('M0 150C60 140 120 146 180 140S300 132 360 140V200H0Z', '#E3B693');
+  const shapes: [number, number, number, number][] = [
+    [150, 112, 82, 160],
+    [250, 100, 96, 160],
+    [40, 130, 60, 156],
+  ];
+  for (const [x, top, w, base] of shapes) {
+    p.fill(poly(x, base, x + 8, top, x + w - 8, top, x + w, base), '#C66A48');
+    p.fill(poly(x + 3.5, top + 14, x + w - 3.5, top + 14, x + w - 2, top + 22, x + 2, top + 22), '#E4A06A');
+    p.fill(poly(x + 1.5, top + 30, x + w - 1.5, top + 30, x + w - 0.5, top + 36, x + 0.5, top + 36), '#F1D2A5');
+    p.fill(poly(x + 8, top, x + w - 8, top, x + w - 9, top + 4, x + 9, top + 4), '#A9512F');
+  }
+}
+
+/** Saguaro cacti standing up out of the desert. */
+function cactus(p: Painter) {
+  for (const [x, h] of [[188, 46], [256, 34], [338, 54]] as const) {
+    const green = '#4C8A4A';
+    p.fill(rect(x - 3, BASE - h, 6, h + 4) + circle(x, BASE - h, 3), green);
+    p.fill(rect(x - 11, BASE - h * 0.62, 5, h * 0.3) + rect(x - 11, BASE - h * 0.38, 9, 4) + circle(x - 8.5, BASE - h * 0.62, 2.5), green);
+    p.fill(rect(x + 6, BASE - h * 0.75, 5, h * 0.32) + rect(x + 2, BASE - h * 0.48, 9, 4) + circle(x + 8.5, BASE - h * 0.75, 2.5), green);
+  }
+}
+
+/** Golden wheat fields in rows, out to the horizon. */
+function wheat(p: Painter) {
+  p.fill('M0 138C90 132 180 138 270 133S340 130 360 134V200H0Z', '#E9CA6B');
+  p.fill('M0 150C90 144 200 152 280 146S340 144 360 148V200H0Z', '#DDB24E');
+  const rows: string[] = [];
+  for (let y = 140; y < 166; y += 4) rows.push(rect(0, y, W, 0.8));
+  p.fill(rows.join(''), '#C99A3A', 0.45);
+}
+
+/** A red wooden prairie grain elevator, with its annex. */
+function elevator(p: Painter) {
+  p.fill(rect(304, 112, 28, 48), '#9E3A28');
+  p.fill(rect(270, 70, 34, 90), '#B5452F');
+  p.fill(poly(268, 70, 287, 54, 306, 70), '#7E2F22');
+  p.fill(rect(282, 44, 10, 12), '#B5452F');
+  p.fill(poly(280, 44, 287, 38, 294, 44), '#7E2F22');
+  p.fill(rect(273, 80, 28, 6), '#F3EBD8');
+  p.window(rect(284, 96, 6, 8));
+  p.flushWindows('#5B2419');
+}
+
+/** The Gateway Arch over St. Louis: a stainless-steel arch as wide as it is tall. */
+function gatewayArch(p: Painter) {
+  p.fill('M204 160Q270 -112 336 160L327 160Q270 -90 213 160Z', '#C9D2DC');
+  p.fill('M210 160Q270 -104 330 160L328 160Q270 -98 212 160Z', '#EEF3F8', 0.7);
+}
+
+/** Santa Monica Pier: the deck on its pilings and the Ferris wheel, lit up after dark. */
+function pier(p: Painter) {
+  const pilings: string[] = [];
+  for (let x = 176; x < W; x += 12) pilings.push(rect(x, 150, 2, 14));
+  p.fill(pilings.join(''), '#6E5A48');
+  p.fill(rect(170, 146, 190, 5), '#8C7560');
+  const cx = 300;
+  const cy = 100;
+  const r = 34;
+  p.fill(poly(cx - 3, cy, cx + 3, cy, cx + 14, 146, cx - 14, 146), '#D9D3C7');
+  p.fill(ring(cx, cy, r, 2.4), '#ECE6DA');
+  const spokes: string[] = [];
+  const cars: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const [dx, dy] = [Math.cos(a), Math.sin(a)];
+    spokes.push(poly(cx - dy * 0.5, cy + dx * 0.5, cx + dx * r - dy * 0.5, cy + dy * r + dx * 0.5, cx + dx * r + dy * 0.5, cy + dy * r - dx * 0.5, cx + dy * 0.5, cy - dx * 0.5));
+    cars.push(circle(cx + dx * r, cy + dy * r + 3, 2.6));
+  }
+  p.fill(spokes.join(''), '#ECE6DA', 0.9);
+  p.fill(cars.join(''), '#E8505B');
+  if (p.night || p.dusk) p.light(ring(cx, cy, r, 1.6), '#FF6FB5');
+}
+
+/** A sky full of hot air balloons. */
+function balloons(p: Painter) {
+  const colors = [
+    ['#E8505B', '#F9D56E'],
+    ['#4F9DE8', '#FFFFFF'],
+    ['#8F6BD8', '#F3A35C'],
+    ['#14B1AB', '#F9D56E'],
+    ['#F3A35C', '#E8505B'],
+  ];
+  for (let i = 0; i < 5; i++) {
+    const x = 150 + i * 44 + p.between(-10, 10);
+    const y = p.between(28, 96);
+    const r = p.between(8, 15);
+    const [a, b] = colors[i]!;
+    p.fill(circle(x, y, r) + poly(x - r * 0.95, y + r * 0.3, x + r * 0.95, y + r * 0.3, x + r * 0.25, y + r * 1.45, x - r * 0.25, y + r * 1.45), a);
+    p.fill(rect(x - r * 0.28, y - r, r * 0.56, r * 2.3), b, 0.9);
+    p.fill(rect(x - r * 0.22, y + r * 1.6, r * 0.44, r * 0.32), '#7A5636');
+  }
+}
+
+/** Cadillac Ranch: old cars buried nose-first in a field, sprayed every colour. */
+function cadillacs(p: Painter) {
+  const colors = ['#E8505B', '#F9D56E', '#14B1AB', '#F3ECC2', '#8F6BD8', '#4F9DE8'];
+  for (let i = 0; i < 6; i++) {
+    const x = 172 + i * 30;
+    p.fill(poly(x, BASE + 2, x + 13, BASE + 2, x + 22, BASE - 26, x + 9, BASE - 28), colors[i]!);
+    p.fill(poly(x + 9, BASE - 28, x + 11, BASE - 34, x + 13, BASE - 27.5) + poly(x + 22, BASE - 26, x + 24, BASE - 32, x + 20, BASE - 26.5), colors[i]!);
+    p.fill(poly(x + 3, BASE - 6, x + 15, BASE - 6, x + 18, BASE - 16, x + 6, BASE - 17), '#2E3440', 0.55);
+  }
+}
+
+/** The Grand Canyon from its rim: banded cliffs stepping down to a thread of river. */
+function canyon(p: Painter) {
+  p.fill(rect(0, 100, W, 22), '#E7B98A');
+  p.fill(poly(0, 122, 360, 122, 360, 132, 300, 136, 250, 128, 200, 138, 140, 130, 80, 140, 0, 134), '#D98C5F');
+  p.fill(poly(0, 134, 80, 140, 140, 130, 200, 138, 250, 128, 300, 136, 360, 132, 360, 150, 290, 146, 230, 156, 170, 146, 110, 156, 0, 150), '#C7704A');
+  p.fill(poly(0, 150, 110, 156, 170, 146, 230, 156, 290, 146, 360, 150, 360, 170, 0, 170), '#9E5238');
+  p.fill('M0 162C80 158 160 164 240 160S330 157 360 160V164C300 162 240 166 160 168C80 166 40 166 0 166Z', '#5BA2D2');
+}
+
+/** A chrome roadside diner with a neon sign that glows after dark. */
+function diner(p: Painter) {
+  p.fill(rect(200, 130, 108, 30) + circle(200, 145, 15) + circle(308, 145, 15), '#D3D9DF');
+  p.fill(rect(192, 147, 124, 4), '#D64545');
+  for (let x = 206; x < 304; x += 14) p.window(rect(x, 135, 9, 9));
+  p.flushWindows('#5D6A78');
+  p.fill(rect(330, 92, 4, 68), '#5A5A64');
+  p.fill(rect(310, 76, 44, 18), '#2B2B33');
+  if (p.night || p.dusk) {
+    p.light(ring(332, 85, 6, 1.4) + rect(314, 79, 36, 1.4) + rect(314, 91, 36, 1.4), '#FF4F8B');
+    p.light(circle(332, 85, 18), '#FF4F8B', 0.2);
+  } else {
+    p.fill(rect(314, 80, 36, 10), '#D64545');
+  }
+}
+
 const FEATURES: Record<Feature, (p: Painter, index: number) => void> = {
+  greatwall,
+  pagoda,
+  mesas,
+  cactus,
+  wheat,
+  elevator,
+  arch: gatewayArch,
+  pier,
+  balloons,
+  cadillacs,
+  canyon,
+  diner,
   hills,
   crags,
   mountains,
@@ -661,6 +879,14 @@ function ground(p: Painter, kind: Ground) {
     p.fill('M0 164C80 158 160 168 240 163S330 158 360 163V170H0Z', '#FFFFFF', 0.55);
     p.fill(top, '#EED7A1');
     p.fill(low, '#E3C789');
+    return;
+  }
+  if (kind === 'desert') {
+    p.fill(top, '#E8C58F');
+    p.fill(low, '#DDB47A');
+    const stones: string[] = [];
+    for (let i = 0; i < 14; i++) stones.push(ellipse(p.between(0, W), p.between(174, 198), p.between(1.5, 3), p.between(1, 1.8)));
+    p.fill(stones.join(''), '#B98F5E', 0.7);
     return;
   }
   if (kind === 'stone') {

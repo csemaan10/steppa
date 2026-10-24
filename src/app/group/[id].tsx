@@ -13,7 +13,7 @@ import { GlassAction, GlassBackAction } from '@/components/glass-action';
 import { GroupAvatar } from '@/components/group-avatar';
 import { UserAvatar } from '@/components/user-avatar';
 import { GroupChat } from '@/components/group-chat';
-import { GroupRace } from '@/components/group-race';
+import { GroupJourney } from '@/components/group-journey';
 import { TrophyCabinet } from '@/components/trophy-cabinet';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { Podium } from '@/components/podium';
@@ -35,9 +35,9 @@ import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
 import { liftedCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
-type GroupView = 'board' | 'chat' | 'race' | 'trophies';
+type GroupView = 'board' | 'chat' | 'journey' | 'trophies';
 /** The tabs in page order, left to right. */
-const VIEWS: GroupView[] = ['board', 'chat', 'race', 'trophies'];
+const VIEWS: GroupView[] = ['board', 'chat', 'journey', 'trophies'];
 const PAGE_MS = 240;
 
 export default function GroupScreen() {
@@ -281,7 +281,7 @@ export default function GroupScreen() {
                   activeIcon: 'chat',
                   badge: unreadChat,
                 },
-                { value: 'race', label: 'Race', icon: 'flag-checkered' },
+                { value: 'journey', label: 'Journey', icon: 'map-marker-path' },
                 {
                   value: 'trophies',
                   label: 'Trophies',
@@ -401,7 +401,14 @@ export default function GroupScreen() {
                   ) : null}
                 </View>
                 <View style={{ width: pageWidth }}>
-                  {visited.has('race') ? <GroupRace groupId={id} userId={userId} /> : null}
+                  {visited.has('journey') && data ? (
+                    <GroupJourney
+                      group={data.group}
+                      userId={userId}
+                      members={data.leaderboard}
+                      active={view === 'journey'}
+                    />
+                  ) : null}
                 </View>
                 <View style={{ width: pageWidth }}>
                   {visited.has('trophies') ? (

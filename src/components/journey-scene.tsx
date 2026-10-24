@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -6,8 +6,8 @@ import Svg, { Path } from 'react-native-svg';
 
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import type { Motion } from '@/components/character/rig';
-import type { Profile } from '@/lib/api';
-import { hashString, normalizeLook } from '@/lib/character';
+import { hashString, normalizeLook, type CharacterLook } from '@/lib/character';
+import { arrange, type CrowdSpot } from '@/lib/crowd';
 import type { Stop } from '@/lib/journeys';
 import { drawScene, SCENE_HEIGHT, SCENE_WIDTH, timeOfDay, type TimeOfDay } from '@/lib/scene-art';
 
@@ -16,54 +16,80 @@ const FPS = 30;
 const INK = '#3A2F25';
 const PAPER = '#FFFDF8';
 
+/** Someone in the scene: anyone with an id and a saved character (a profile or a leaderboard row). */
+export type Person = { id: string; podium_character?: CharacterLook | null };
+
 type Props = {
-  profile: Profile;
+  /** One person stands on their own on the left; more make a group photo. */
+  people: Person[];
+  /** Who stands front and centre in a group, and is the only one animating (the rest hold still). */
+  you?: string;
   stop: Stop;
   /** Said in a speech bubble over the character's head; no bubble without it. */
   greeting?: string;
-  /** What the character does: a wave unless told otherwise (postcards pose for the photo). */
-  motion?: Motion;
+  /** What everyone does, or what each does by their place in `people`: a wave unless told otherwise. */
+  motion?: Motion | ((index: number) => Motion);
   /** The hour to draw; the phone's own unless told otherwise. */
   time?: TimeOfDay;
-  /** Panel height; the character and their spacing scale with it. */
+  /** Panel height; the characters and their spacing scale with it. */
   height?: number;
-  /** How tall the character stands, as a share of the height. */
+  /** How tall a character stands on their own, as a share of the height (a group is a bit smaller). */
   characterSize?: number;
+  /** False to hold everyone still, e.g. while the screen it's on is hidden. */
+  animate?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
+type Spot = CrowdSpot<Person>;
+
 /**
- * Your podium character in an illustration of a stop (a city, a forest, a beach...), waving by
- * default, at the time of day it is for you, with an optional speech bubble. The scene's bottom
- * edge is kept when it's cropped, so the character's feet stay on the ground whatever the width.
+ * Characters in an illustration of a stop (a city, a forest, a beach...), waving by default, at the
+ * time of day it is for you, with an optional speech bubble. One person stands in the left third;
+ * a group stands together in up to three rows sized to the width (17 fit on a phone), with any
+ * beyond that counted in a chip. The scene's bottom edge is kept when it's cropped, so feet stay on
+ * the ground whatever the width.
  */
 export function JourneyScene({
-  profile,
+  people,
+  you,
   stop,
   greeting,
   motion = 'wave',
   time: timeOverride,
   height = 200,
   characterSize = 0.54,
+  animate = true,
   style,
 }: Props) {
   const reduceMotion = useReducedMotion();
-  const look = useMemo(() => normalizeLook(profile.podium_character, profile.id), [profile.podium_character, profile.id]);
-  const seed = (hashString(profile.id) % 1000) / 1000;
   const time = timeOverride ?? timeOfDay();
   const art = useMemo(() => drawScene(stop.scene, time, stop.name), [stop.scene, stop.name, time]);
-  // At the full 200: a 108-tall character standing 18 up, with the bubble 14 from the top.
-  const characterHeight = Math.round(height * characterSize);
+  const [width, setWidth] = useState(0);
+  const motionFor = (index: number) => (typeof motion === 'function' ? motion(index) : motion);
+  const ground = Math.round(height * 0.09);
+
+  // One expression rather than reassigning: React Compiler makes destructured locals read-only.
+  const { spots, hidden }: { spots: Spot[]; hidden: number } =
+    people.length === 1
+      ? // A percentage needs no measuring, so a lone character is in place on the first frame.
+        {
+          spots: [{ person: people[0]!, index: 0, x: null, bottom: ground, size: Math.round(height * characterSize) }],
+          hidden: 0,
+        }
+      : width > 0
+        ? arrange(people, you, width, height * characterSize * 0.78, ground)
+        : { spots: [], hidden: 0 };
 
   return (
     <View
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       style={[
         styles.scene,
         { height, experimental_backgroundImage: `linear-gradient(180deg, ${art.sky[0]} 0%, ${art.sky[1]} 100%)` },
         style,
       ]}
       accessible={!!greeting}
-      accessibilityLabel={greeting ? `Your character waving. ${greeting}` : undefined}>
+      accessibilityLabel={greeting ? `${people.length > 1 ? 'Your group' : 'Your character'} waving. ${greeting}` : undefined}>
       <Svg
         width="100%"
         height="100%"
@@ -74,19 +100,22 @@ export function JourneyScene({
           <Path key={i} d={s.d} fill={s.fill} opacity={s.opacity} />
         ))}
       </Svg>
-      {/* On the ground in the left third, which every scene keeps clear. */}
-      <View
-        style={[styles.character, { marginLeft: -characterHeight, bottom: Math.round(height * 0.09) }]}
-        pointerEvents="none">
-        <CharacterCanvas
-          look={look}
-          seed={seed}
-          width={characterHeight * 2}
-          motion={motion}
-          animate={!reduceMotion}
-          fps={FPS}
+      {spots.map((spot) => (
+        <Figure
+          key={spot.person.id}
+          spot={spot}
+          group={people.length > 1}
+          motion={motionFor(spot.index)}
+          animate={animate && !reduceMotion && (people.length === 1 || spot.person.id === you)}
         />
-      </View>
+      ))}
+      {hidden > 0 ? (
+        <View style={[styles.more, { bottom: ground }]}>
+          <Text variant="labelMedium" style={styles.moreText}>
+            +{hidden}
+          </Text>
+        </View>
+      ) : null}
       {/* Over the character's head, in the open sky on that side. */}
       {greeting ? (
         <View style={[styles.bubble, { top: Math.round(height * 0.07) }]} pointerEvents="none">
@@ -100,9 +129,37 @@ export function JourneyScene({
   );
 }
 
+function Figure({ spot, group, motion, animate }: { spot: Spot; group: boolean; motion: Motion; animate: boolean }) {
+  const { person, x, bottom, size } = spot;
+  // Pets would crowd a group photo, so only someone on their own brings theirs.
+  const look = useMemo(() => {
+    const own = normalizeLook(person.podium_character, person.id);
+    return group ? { ...own, pets: [] } : own;
+  }, [person.podium_character, person.id, group]);
+  const seed = (hashString(person.id) % 1000) / 1000;
+
+  return (
+    // Each canvas is twice as wide as the character (room for pets), centred on where they stand.
+    <View
+      style={[styles.character, x === null ? { left: '30%', marginLeft: -size } : { left: x - size }, { bottom }]}
+      pointerEvents="none">
+      <CharacterCanvas look={look} seed={seed} width={size * 2} motion={motion} animate={animate} fps={FPS} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   scene: { borderRadius: 20, overflow: 'hidden' },
-  character: { position: 'absolute', left: '30%' },
+  character: { position: 'absolute' },
+  more: {
+    position: 'absolute',
+    right: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  moreText: { color: '#FFFFFF', fontWeight: '700' },
   bubble: {
     position: 'absolute',
     left: '30%',

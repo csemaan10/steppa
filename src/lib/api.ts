@@ -546,6 +546,85 @@ export async function endJourney(journeyId: number): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+// ---------- Group journeys ----------
+
+export type GroupJourney = {
+  id: number;
+  group_id: string;
+  route: string;
+  started_on: string;
+  started_by: string | null;
+  completed_on: string | null;
+  created_at: string;
+};
+
+export type GroupJourneyStatus = {
+  journey: GroupJourney;
+  route: Route;
+  /** Everyone's steps added up. */
+  steps: number;
+  /** Each current member's steps toward it, most first. */
+  members: { user_id: string; steps: number }[];
+};
+
+/**
+ * The group's latest journey (in progress, or finished and not yet replaced) with everyone's steps
+ * toward it, or null if it hasn't had one. Marks it finished once the steps cover the whole route.
+ */
+export async function getGroupJourney(groupId: string): Promise<GroupJourneyStatus | null> {
+  const journey = unwrap<GroupJourney | null>(
+    await supabase
+      .from('group_journeys')
+      .select('*')
+      .eq('group_id', groupId)
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  const route = journey ? getRoute(journey.route) : undefined;
+  if (!journey || !route) return null;
+
+  const rows = unwrap<{ user_id: string; steps: number }[]>(
+    await supabase.rpc('group_journey_steps', {
+      gid: groupId,
+      from_day: journey.started_on,
+      to_day: journey.completed_on,
+    })
+  );
+  const members = rows.map((r) => ({ user_id: r.user_id, steps: Number(r.steps) })).sort((a, b) => b.steps - a.steps);
+  const steps = members.reduce((sum, m) => sum + m.steps, 0);
+
+  if (!journey.completed_on && progressOn(route, steps).done) {
+    const completed = unwrap<GroupJourney>(
+      await supabase
+        .from('group_journeys')
+        .update({ completed_on: toDayKey(new Date()) })
+        .eq('id', journey.id)
+        .select('*')
+        .single()
+    );
+    return { journey: completed, route, steps, members };
+  }
+  return { journey, route, steps, members };
+}
+
+/** Starts a group on a route today (owner only). Only steps from today on count toward it. */
+export async function startGroupJourney(groupId: string, routeKey: string): Promise<GroupJourney> {
+  return unwrap<GroupJourney>(
+    await supabase
+      .from('group_journeys')
+      .insert({ group_id: groupId, route: routeKey, started_on: toDayKey(new Date()) })
+      .select('*')
+      .single()
+  );
+}
+
+/** Gives up on the group's journey (owner only); its progress is lost. */
+export async function endGroupJourney(journeyId: number): Promise<void> {
+  const { error } = await supabase.from('group_journeys').delete().eq('id', journeyId);
+  if (error) throw new Error(error.message);
+}
+
 // ---------- Account ----------
 
 /** Permanently deletes the signed-in user and all their data (see migration 009). */

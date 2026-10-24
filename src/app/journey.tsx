@@ -2,21 +2,14 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, Card, Text } from 'react-native-paper';
-import Animated, {
-  BounceIn,
-  Easing,
-  FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { BounceIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { GlassBackAction } from '@/components/glass-action';
+import { Chip, PostcardCollection, ProgressBar } from '@/components/journey-parts';
 import { JourneyScene } from '@/components/journey-scene';
-import { PostcardModal, PostcardThumb } from '@/components/postcard';
+import { PostcardModal } from '@/components/postcard';
 import { mapHeightFor, RouteMap, type Traveller } from '@/components/route-map';
 import { SectionHeader } from '@/components/section-header';
 import { useCountUp } from '@/hooks/use-count-up';
@@ -205,7 +198,9 @@ export default function JourneyScreen() {
           open={postcards.open}
           route={current.route}
           stops={postcards.stops}
-          profile={data.profile}
+          people={[data.profile]}
+          you={data.profile.id}
+          recipient={data.profile.display_name}
           title={postcards.title}
           onClose={() => setPostcards({ ...postcards, open: false })}
         />
@@ -254,7 +249,7 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(80).springify().damping(18)}>
-        <JourneyScene profile={profile} stop={sceneStop} greeting={greeting} />
+        <JourneyScene people={[profile]} stop={sceneStop} greeting={greeting} />
       </Animated.View>
 
       <RouteMap
@@ -364,7 +359,7 @@ function FinishedJourney({
           </Text>
         </Card.Content>
       </Card>
-      <JourneyScene profile={profile} stop={progress.last} greeting={`Made it to ${progress.last.name}!`} />
+      <JourneyScene people={[profile]} stop={progress.last} greeting={`Made it to ${progress.last.name}!`} />
       <RouteMap
         route={route}
         km={route.totalKm}
@@ -374,31 +369,6 @@ function FinishedJourney({
       />
       <PostcardCollection route={route} progress={progress} onOpen={onOpenPostcard} />
     </>
-  );
-}
-
-function PostcardCollection({
-  route,
-  progress,
-  onOpen,
-}: {
-  route: Route;
-  progress: Progress;
-  onOpen: (stop: Stop) => void;
-}) {
-  return (
-    <View style={styles.section}>
-      <SectionHeader title="Postcards" note={`${progress.reached} of ${route.stops.length}`} />
-      <View style={styles.grid}>
-        {route.stops.map((stop, i) =>
-          i < progress.reached ? (
-            <PostcardThumb key={stop.name} route={route} stop={stop} index={i} onPress={() => onOpen(stop)} />
-          ) : (
-            <PostcardThumb key={stop.name} route={route} stop={stop} index={i} kmAway={stop.km - progress.km} />
-          )
-        )}
-      </View>
-    </View>
   );
 }
 
@@ -507,35 +477,6 @@ function Passport({ journeys }: { journeys: Journey[] }) {
   );
 }
 
-function Chip({ text }: { text: string }) {
-  const theme = useAppTheme();
-  return (
-    <View style={[styles.chip, { backgroundColor: theme.colors.secondaryContainer }]}>
-      <Text variant="labelMedium" style={{ color: theme.colors.onSecondaryContainer }}>
-        {text}
-      </Text>
-    </View>
-  );
-}
-
-/** Fills from empty when it first appears, then follows new progress. */
-function ProgressBar({ fraction }: { fraction: number }) {
-  const theme = useAppTheme();
-  const fill = useSharedValue(0);
-
-  useEffect(() => {
-    fill.set(withDelay(250, withTiming(fraction, { duration: 1400, easing: Easing.out(Easing.cubic) })));
-  }, [fill, fraction]);
-
-  const style = useAnimatedStyle(() => ({ width: `${Math.max(fill.value, 0.02) * 100}%` }));
-
-  return (
-    <View style={[styles.track, { backgroundColor: theme.colors.surfaceVariant }]}>
-      <Animated.View style={[styles.fill, { backgroundColor: theme.colors.primary }, style]} />
-    </View>
-  );
-}
-
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -555,8 +496,6 @@ const styles = StyleSheet.create({
   heroFlag: { fontSize: 36, lineHeight: 44 },
   progressCard: { gap: 10, paddingVertical: 16 },
   kmRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  track: { height: 10, borderRadius: 5, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 5 },
   tiles: { flexDirection: 'row', gap: 12 },
   tile: { flex: 1 },
   tileContent: { gap: 2, paddingVertical: 14 },
@@ -570,7 +509,6 @@ const styles = StyleSheet.create({
   },
   stopEmoji: { fontSize: 20, lineHeight: 26 },
   section: { gap: 12 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 14 },
   endButton: { alignSelf: 'center' },
   finished: { alignItems: 'center', gap: 6, paddingVertical: 20 },
   trophy: { fontSize: 56, lineHeight: 68 },
@@ -580,7 +518,6 @@ const styles = StyleSheet.create({
   pickerFlag: { fontSize: 28, lineHeight: 36 },
   doneMark: { fontSize: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   startButton: { alignSelf: 'flex-start' },
   passport: { gap: 14, paddingVertical: 16 },
   passportRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
