@@ -872,11 +872,32 @@ const FEATURES: Record<Feature, (p: Painter, index: number) => void> = {
 
 // ---------- Ground ----------
 
-function ground(p: Painter, kind: Ground) {
+/** About where the ground the characters stand on begins (its top edge, y). */
+export const GROUND_TOP = 166;
+
+const GROUND_COLOR: Record<Ground, string> = {
+  grass: '#6FB062',
+  path: '#6FB062',
+  sand: '#EED7A1',
+  desert: '#E8C58F',
+  stone: '#CDBFA9',
+};
+
+function ground(p: Painter, kind: Ground, rise: number) {
   const top = 'M0 168C80 160 160 172 240 166S330 160 360 166V200H0Z';
   const low = 'M0 186C90 180 200 190 360 182V200H0Z';
+  // A group photo's back rows stand higher up, so the ground rises behind them to meet their feet,
+  // over the near edge of any water or landscape. The usual ground then draws over its foot.
+  const edge = (y: number) => `M0 ${n(y + 4)}C90 ${n(y - 3)} 200 ${n(y + 3)} 270 ${n(y - 1)}S340 ${n(y)} 360 ${n(y + 2)}`;
+  if (rise > 0) {
+    const y = GROUND_TOP - rise;
+    // Surf just above the raised sand's edge, which the sand then draws up to.
+    if (kind === 'sand') p.fill(`${edge(y - 3)}V${n(y + 6)}H0Z`, '#FFFFFF', 0.55);
+    p.fill(`${edge(y)}V200H0Z`, GROUND_COLOR[kind]);
+  }
   if (kind === 'sand') {
-    p.fill('M0 164C80 158 160 168 240 163S330 158 360 163V170H0Z', '#FFFFFF', 0.55);
+    // The surf line sits where the sand meets the water: on the rise, if there is one.
+    if (rise <= 0) p.fill('M0 164C80 158 160 168 240 163S330 158 360 163V170H0Z', '#FFFFFF', 0.55);
     p.fill(top, '#EED7A1');
     p.fill(low, '#E3C789');
     return;
@@ -920,8 +941,11 @@ function ground(p: Painter, kind: Ground) {
   p.fill(tufts.join(''), '#4F8E47', 0.8);
 }
 
-/** The scene for a place at a time of day. `name` seeds the variation, so each stop keeps its own look. */
-export function drawScene(scene: Scene, time: TimeOfDay, name: string): SceneArt {
+/**
+ * The scene for a place at a time of day. `name` seeds the variation, so each stop keeps its own
+ * look. `rise` lifts the ground behind a group photo by that much, so its back rows stand on it.
+ */
+export function drawScene(scene: Scene, time: TimeOfDay, name: string, rise = 0): SceneArt {
   // The sky draws from its own random stream (night has stars, day has clouds), so the place itself
   // comes out the same at every hour.
   const p = new Painter(time, seeded(hash(`${name}:sky`)));
@@ -936,6 +960,6 @@ export function drawScene(scene: Scene, time: TimeOfDay, name: string): SceneArt
     FEATURES[f](p, index);
     p.flushWindows(STONE_WINDOW);
   }
-  ground(p, kind);
+  ground(p, kind, rise);
   return { sky: SKY[time], shapes: [...p.shapes, ...p.lights] };
 }

@@ -2,7 +2,7 @@ import 'expo-sqlite/localStorage/install';
 import { useEffect, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Card, Text } from 'react-native-paper';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -46,6 +46,9 @@ type Props = {
 };
 
 type PostcardView = { stops: Stop[]; title: string; open: boolean };
+
+/** How many walkers a long group shows before 'Show all'. */
+const COLLAPSED_WALKERS = 5;
 
 /** How many of a group journey's postcards this phone has shown (each member sees their own). */
 function seenCount(journeyId: number): number {
@@ -265,6 +268,12 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
   const greeting = nearNext ? `Almost at ${nearNext.name}!` : `Hi from ${progress.last.name}!`;
   const names = new Map(members.map((m) => [m.user_id, m]));
   const top = status.members[0]?.steps ?? 0;
+  // A long group folds down to its top walkers (and you), with a button to show everyone.
+  const [expanded, setExpanded] = useState(false);
+  const foldable = status.members.length > COLLAPSED_WALKERS + 1;
+  const shownWalkers = foldable && !expanded ? status.members.slice(0, COLLAPSED_WALKERS) : status.members;
+  const me = status.members.find((m) => m.user_id === userId);
+  const myRank = me ? status.members.indexOf(me) + 1 : 0;
   const muted = { color: theme.colors.onSurfaceVariant };
 
   return (
@@ -343,47 +352,37 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
         <SectionHeader title="Carrying the group" note={`${status.members.length} walking`} />
         <Card mode="contained" style={glassCard(theme)}>
           <Card.Content style={styles.walkers}>
-            {status.members.map((m, i) => {
-              const row = names.get(m.user_id);
-              const share = steps ? Math.round((m.steps / steps) * 100) : 0;
-              const mine = m.user_id === userId;
-              // Relative to whoever has walked furthest, so the top walker's bar is full.
-              const meter = top ? m.steps / top : 0;
-              return (
-                <View key={m.user_id} style={styles.walker}>
-                  <Text variant="labelLarge" style={[styles.rank, muted]}>
-                    {i + 1}
-                  </Text>
-                  <UserAvatar
-                    name={row?.display_name ?? '?'}
-                    color={row?.avatar_color ?? theme.colors.outline}
-                    icon={row?.avatar_icon}
-                    size={32}
-                  />
-                  <View style={styles.walkerName}>
-                    <Text variant="bodyLarge" numberOfLines={1} style={mine && styles.bold}>
-                      {mine ? 'You' : (row?.display_name ?? 'Member')}
-                    </Text>
-                    <View style={[styles.meter, { backgroundColor: withAlpha(theme.colors.onSurface, 0.1) }]}>
-                      <View
-                        style={[
-                          styles.meterFill,
-                          { width: `${Math.max(meter, 0.03) * 100}%`, backgroundColor: theme.colors.primary },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.end}>
-                    <Text variant="titleSmall" style={styles.bold}>
-                      {formatKm(kmFromSteps(m.steps))} km
-                    </Text>
-                    <Text variant="labelSmall" style={muted}>
-                      {share}% of the way
-                    </Text>
-                  </View>
+            {shownWalkers.map((m) => (
+              <Walker
+                key={m.user_id}
+                rank={status.members.indexOf(m) + 1}
+                steps={m.steps}
+                groupSteps={steps}
+                top={top}
+                row={names.get(m.user_id)}
+                mine={m.user_id === userId}
+              />
+            ))}
+            {/* Folded away: you still show, after a gap, if you're further down. */}
+            {me && !expanded && myRank > COLLAPSED_WALKERS ? (
+              <>
+                <View style={styles.gap}>
+                  {[0, 1, 2].map((i) => (
+                    <View key={i} style={[styles.dot, { backgroundColor: theme.colors.outlineVariant }]} />
+                  ))}
                 </View>
-              );
-            })}
+                <Walker rank={myRank} steps={me.steps} groupSteps={steps} top={top} row={names.get(userId)} mine />
+              </>
+            ) : null}
+            {foldable ? (
+              <Button
+                icon={expanded ? 'chevron-up' : 'chevron-down'}
+                compact
+                onPress={() => setExpanded(!expanded)}
+                style={styles.showAll}>
+                {expanded ? 'Show less' : `Show all ${status.members.length}`}
+              </Button>
+            ) : null}
           </Card.Content>
         </Card>
       </View>
@@ -396,6 +395,57 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
         </Button>
       ) : null}
     </>
+  );
+}
+
+type WalkerProps = {
+  rank: number;
+  steps: number;
+  /** Everyone's steps added up, for this walker's share of the way. */
+  groupSteps: number;
+  /** The top walker's steps: their meter is full, and everyone else's is measured against it. */
+  top: number;
+  row?: LeaderboardRow;
+  mine: boolean;
+};
+
+/** One walker in "Carrying the group": rank, avatar, name with a meter, distance and share. */
+function Walker({ rank, steps, groupSteps, top, row, mine }: WalkerProps) {
+  const theme = useAppTheme();
+  const muted = { color: theme.colors.onSurfaceVariant };
+  const share = groupSteps ? Math.round((steps / groupSteps) * 100) : 0;
+  const meter = top ? steps / top : 0;
+
+  return (
+    <Animated.View entering={FadeIn.duration(160)} style={styles.walker}>
+      <Text variant="labelLarge" style={[styles.rank, muted]}>
+        {rank}
+      </Text>
+      <UserAvatar
+        name={row?.display_name ?? '?'}
+        color={row?.avatar_color ?? theme.colors.outline}
+        icon={row?.avatar_icon}
+        size={32}
+      />
+      <View style={styles.walkerName}>
+        <Text variant="bodyLarge" numberOfLines={1} style={mine && styles.bold}>
+          {mine ? 'You' : (row?.display_name ?? 'Member')}
+        </Text>
+        <View style={[styles.meter, { backgroundColor: withAlpha(theme.colors.onSurface, 0.1) }]}>
+          <View
+            style={[styles.meterFill, { width: `${Math.max(meter, 0.03) * 100}%`, backgroundColor: theme.colors.primary }]}
+          />
+        </View>
+      </View>
+      <View style={styles.end}>
+        <Text variant="titleSmall" style={styles.bold}>
+          {formatKm(kmFromSteps(steps))} km
+        </Text>
+        <Text variant="labelSmall" style={muted}>
+          {share}% of the way
+        </Text>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -484,6 +534,9 @@ const styles = StyleSheet.create({
   walkerName: { flex: 1, gap: 4 },
   meter: { height: 4, borderRadius: 2, overflow: 'hidden' },
   meterFill: { height: '100%', borderRadius: 2 },
+  gap: { flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  dot: { width: 4, height: 4, borderRadius: 2 },
+  showAll: { alignSelf: 'center' },
   rank: { width: 18, textAlign: 'center' },
   end: { alignItems: 'flex-end' },
   endButton: { alignSelf: 'center' },

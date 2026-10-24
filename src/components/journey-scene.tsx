@@ -7,7 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import type { Motion } from '@/components/character/rig';
 import { hashString, normalizeLook, type CharacterLook } from '@/lib/character';
-import { arrange, type CrowdSpot } from '@/lib/crowd';
+import { arrange, groundRise, type CrowdSpot } from '@/lib/crowd';
 import type { Stop } from '@/lib/journeys';
 import { drawScene, SCENE_HEIGHT, SCENE_WIDTH, timeOfDay, type TimeOfDay } from '@/lib/scene-art';
 
@@ -63,7 +63,6 @@ export function JourneyScene({
 }: Props) {
   const reduceMotion = useReducedMotion();
   const time = timeOverride ?? timeOfDay();
-  const art = useMemo(() => drawScene(stop.scene, time, stop.name), [stop.scene, stop.name, time]);
   const [width, setWidth] = useState(0);
   const motionFor = (index: number) => (typeof motion === 'function' ? motion(index) : motion);
   const ground = Math.round(height * 0.09);
@@ -79,6 +78,10 @@ export function JourneyScene({
       : width > 0
         ? arrange(people, you, width, height * characterSize * 0.78, ground)
         : { spots: [], hidden: 0 };
+  // A group's back rows stand higher, so the ground rises to meet them.
+  const rise = people.length > 1 ? groundRise(spots, width, height) : 0;
+  // React Compiler memoizes this; a manual useMemo over values derived from the layout trips it up.
+  const art = drawScene(stop.scene, time, stop.name, rise);
 
   return (
     <View
