@@ -22,6 +22,7 @@ import {
   type GroupJourneyStatus,
   type LeaderboardRow,
 } from '@/lib/api';
+import { groupPose } from '@/lib/crowd';
 import { formatSteps } from '@/lib/dates';
 import {
   formatDuration,
@@ -201,6 +202,7 @@ export function GroupJourney({ group, userId, members, active }: Props) {
               people={people}
               you={userId}
               stop={status.route.stops[status.route.stops.length - 1]!}
+              motion={(i) => groupPose(people[i]!.id, "finish")}
               greeting="We made it!"
               height={230}
               animate={active}
@@ -290,7 +292,15 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
         </View>
       </Animated.View>
 
-      <JourneyScene people={people} you={userId} stop={sceneStop} greeting={greeting} height={230} animate={active} />
+      <JourneyScene
+        people={people}
+        you={userId}
+        stop={sceneStop}
+        greeting={greeting}
+        motion={(i) => groupPose(people[i]!.id, sceneStop.name)}
+        height={230}
+        animate={active}
+      />
 
       <RouteMap
         route={route}

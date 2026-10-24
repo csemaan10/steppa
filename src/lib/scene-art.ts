@@ -58,7 +58,8 @@ export type Scene = readonly [Ground, ...Feature[]];
 
 export type TimeOfDay = 'dawn' | 'day' | 'dusk' | 'night';
 
-export type Shape = { d: string; fill: string; opacity?: number };
+/** A filled path; `lift` moves it up by that much (the place behind a group photo, see drawScene). */
+export type Shape = { d: string; fill: string; opacity?: number; lift?: number };
 
 export type SceneArt = { sky: readonly [string, string]; shapes: Shape[] };
 
@@ -887,7 +888,7 @@ function ground(p: Painter, kind: Ground, rise: number) {
   const top = 'M0 168C80 160 160 172 240 166S330 160 360 166V200H0Z';
   const low = 'M0 186C90 180 200 190 360 182V200H0Z';
   // A group photo's back rows stand higher up, so the ground rises behind them to meet their feet,
-  // over the near edge of any water or landscape. The usual ground then draws over its foot.
+  // filling in under the place (which drawScene lifts by the same). The usual ground draws over its foot.
   const edge = (y: number) => `M0 ${n(y + 4)}C90 ${n(y - 3)} 200 ${n(y + 3)} 270 ${n(y - 1)}S340 ${n(y)} 360 ${n(y + 2)}`;
   if (rise > 0) {
     const y = GROUND_TOP - rise;
@@ -943,7 +944,8 @@ function ground(p: Painter, kind: Ground, rise: number) {
 
 /**
  * The scene for a place at a time of day. `name` seeds the variation, so each stop keeps its own
- * look. `rise` lifts the ground behind a group photo by that much, so its back rows stand on it.
+ * look. `rise` raises the ground behind a group photo by that much, so its back rows stand on it,
+ * and lifts the place behind by the same, so nothing is buried.
  */
 export function drawScene(scene: Scene, time: TimeOfDay, name: string, rise = 0): SceneArt {
   // The sky draws from its own random stream (night has stars, day has clouds), so the place itself
@@ -960,6 +962,11 @@ export function drawScene(scene: Scene, time: TimeOfDay, name: string, rise = 0)
     FEATURES[f](p, index);
     p.flushWindows(STONE_WINDOW);
   }
+  // For a group photo the whole place moves up by the rise, so landmarks keep their full height
+  // standing behind the raised ground rather than being buried by it.
+  const lift = (shapes: Shape[]) => (rise > 0 ? shapes.map((shape) => ({ ...shape, lift: rise })) : shapes);
+  const place = lift(p.shapes.splice(0));
+  const placeLights = lift(p.lights.splice(0));
   ground(p, kind, rise);
-  return { sky: SKY[time], shapes: [...p.shapes, ...p.lights] };
+  return { sky: SKY[time], shapes: [...place, ...p.shapes, ...placeLights, ...p.lights] };
 }

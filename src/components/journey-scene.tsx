@@ -100,7 +100,7 @@ export function JourneyScene({
         preserveAspectRatio="xMidYMax slice"
         style={StyleSheet.absoluteFill}>
         {art.shapes.map((s, i) => (
-          <Path key={i} d={s.d} fill={s.fill} opacity={s.opacity} />
+          <Path key={i} d={s.d} fill={s.fill} opacity={s.opacity} transform={s.lift ? `translate(0 ${-s.lift})` : undefined} />
         ))}
       </Svg>
       {spots.map((spot) => (
