@@ -12,7 +12,8 @@ import { glassCard } from '@/theme';
 
 const SEEN_KEY = 'steppa:character-intro-seen';
 
-function readSeen(): boolean {
+/** Whether this phone has dismissed or opened the card (Today holds other invites back until then). */
+export function characterIntroSeen(): boolean {
   try {
     return localStorage.getItem(SEEN_KEY) === '1';
   } catch {
@@ -28,11 +29,11 @@ function markSeen() {
 
 /**
  * One-time Today card announcing podium characters: shows once on each phone after the update,
- * until it's dismissed or opened.
+ * until it's dismissed or opened. `onDone` hears when it goes.
  */
-export function CharacterIntroCard({ profile }: { profile: Profile }) {
+export function CharacterIntroCard({ profile, onDone }: { profile: Profile; onDone?: () => void }) {
   const theme = useTheme();
-  const [seen, setSeen] = useState(readSeen);
+  const [seen, setSeen] = useState(characterIntroSeen);
   const look = useMemo(() => normalizeLook(profile.podium_character, profile.id), [profile.podium_character, profile.id]);
 
   if (seen) return null;
@@ -41,6 +42,7 @@ export function CharacterIntroCard({ profile }: { profile: Profile }) {
   function dismiss() {
     markSeen();
     setSeen(true);
+    onDone?.();
   }
 
   function customize() {

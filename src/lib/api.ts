@@ -3,6 +3,7 @@ import { addDays, lastNDays, startOfDay, toDayKey } from '@/lib/dates';
 import { healthSourceName, readDailySteps } from '@/lib/health';
 import { getRoute, progressOn, type Route } from '@/lib/journeys';
 import { supabase } from '@/lib/supabase';
+import type { SavedPicks, WorldKind } from '@/lib/world';
 
 export type Profile = {
   id: string;
@@ -622,6 +623,59 @@ export async function startGroupJourney(groupId: string, routeKey: string): Prom
 /** Gives up on the group's journey (owner only); its progress is lost. */
 export async function endGroupJourney(journeyId: number): Promise<void> {
   const { error } = await supabase.from('group_journeys').delete().eq('id', journeyId);
+  if (error) throw new Error(error.message);
+}
+
+// ---------- Worlds ----------
+
+export type World = {
+  user_id: string;
+  kind: WorldKind;
+  picks: SavedPicks;
+  started_on: string;
+  /** Milestones already celebrated: levels below this one. */
+  celebrated: number;
+  created_at: string;
+};
+
+export type WorldStatus = { world: World; steps: number };
+
+/** Your world and the steps it has grown with, or null before you've chosen one. */
+export async function getWorld(userId: string): Promise<WorldStatus | null> {
+  const world = unwrap<World | null>(await supabase.from('worlds').select('*').eq('user_id', userId).maybeSingle());
+  if (!world) return null;
+  const steps = unwrap<number>(await supabase.rpc('world_steps'));
+  return { world, steps: Number(steps) };
+}
+
+/** Whether you've adopted a pet yet, without adding up its steps (for Today's invite card). */
+export async function hasWorld(userId: string): Promise<boolean> {
+  const row = unwrap<{ user_id: string } | null>(
+    await supabase.from('worlds').select('user_id').eq('user_id', userId).maybeSingle()
+  );
+  return !!row;
+}
+
+/**
+ * Starts growing a world today, with the choices made while setting it up (so the first milestone,
+ * level 0, counts as celebrated). Only steps from today on count.
+ */
+export async function startWorld(userId: string, kind: WorldKind, picks: SavedPicks): Promise<World> {
+  return unwrap<World>(
+    await supabase
+      .from('worlds')
+      .insert({ user_id: userId, kind, picks, started_on: toDayKey(new Date()), celebrated: 1 })
+      .select('*')
+      .single()
+  );
+}
+
+/** Saves choices or records celebrated milestones. */
+export async function updateWorld(
+  userId: string,
+  patch: Partial<Pick<World, 'kind' | 'picks' | 'celebrated'>>
+): Promise<void> {
+  const { error } = await supabase.from('worlds').update(patch).eq('user_id', userId);
   if (error) throw new Error(error.message);
 }
 

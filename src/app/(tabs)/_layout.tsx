@@ -15,12 +15,15 @@ export default function TabLayout() {
         <TabSlot />
       </BlurTargetView>
 
-      <FloatingTabBar blurTarget={blurTarget} tabs={['index', 'groups', 'profile']}>
+      <FloatingTabBar blurTarget={blurTarget} tabs={['index', 'groups', 'pet', 'profile']}>
         <TabTrigger name="index" asChild>
           <TabButton name="index" icon="walk" activeIcon="walk" label="Today" />
         </TabTrigger>
         <TabTrigger name="groups" asChild>
           <TabButton name="groups" icon="account-group-outline" activeIcon="account-group" label="Groups" />
+        </TabTrigger>
+        <TabTrigger name="pet" asChild>
+          <TabButton name="pet" icon="paw-outline" activeIcon="paw" label="Pet" />
         </TabTrigger>
         <TabTrigger name="profile" asChild>
           <TabButton name="profile" icon="account-circle-outline" activeIcon="account-circle" label="Profile" />
@@ -30,6 +33,7 @@ export default function TabLayout() {
       <TabList style={styles.hidden}>
         <TabTrigger name="index" href="/" />
         <TabTrigger name="groups" href="/groups" />
+        <TabTrigger name="pet" href="/pet" />
         <TabTrigger name="profile" href="/profile" />
       </TabList>
     </Tabs>

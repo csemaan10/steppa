@@ -77,7 +77,7 @@ export function timeOfDay(date: Date = new Date()): TimeOfDay {
   return 'dusk';
 }
 
-const SKY: Record<TimeOfDay, readonly [string, string]> = {
+export const SKY: Record<TimeOfDay, readonly [string, string]> = {
   dawn: ['#7194DA', '#FFC79C'],
   day: ['#4EA6F2', '#C4E5FF'],
   dusk: ['#3D3A88', '#F49364'],
@@ -89,7 +89,7 @@ const SKY: Record<TimeOfDay, readonly [string, string]> = {
  * takes on the hour's colour. Mixing rather than laying a dark sheet over it keeps the moon and
  * stars bright behind the hills.
  */
-const TINT: Record<TimeOfDay, { color: string; amount: number } | null> = {
+export const TINT: Record<TimeOfDay, { color: string; amount: number } | null> = {
   dawn: { color: '#FF9C6B', amount: 0.12 },
   day: null,
   dusk: { color: '#4B2F86', amount: 0.24 },
@@ -97,7 +97,7 @@ const TINT: Record<TimeOfDay, { color: string; amount: number } | null> = {
 };
 
 /** Blends one `#RRGGBB` colour toward another by `amount` (0–1). */
-function mix(color: string, toward: string, amount: number): string {
+export function mix(color: string, toward: string, amount: number): string {
   const a = parseInt(color.slice(1), 16);
   const b = parseInt(toward.slice(1), 16);
   const channel = (shift: number) => Math.round(((a >> shift) & 255) * (1 - amount) + ((b >> shift) & 255) * amount);
@@ -106,20 +106,20 @@ function mix(color: string, toward: string, amount: number): string {
 
 // ---------- Geometry helpers ----------
 
-const n = (v: number) => Math.round(v * 10) / 10;
+export const n = (v: number) => Math.round(v * 10) / 10;
 
-function rect(x: number, y: number, w: number, h: number): string {
+export function rect(x: number, y: number, w: number, h: number): string {
   return `M${n(x)} ${n(y)}h${n(w)}v${n(h)}h${n(-w)}Z`;
 }
 
-function ellipse(cx: number, cy: number, rx: number, ry: number): string {
+export function ellipse(cx: number, cy: number, rx: number, ry: number): string {
   return `M${n(cx - rx)} ${n(cy)}a${n(rx)} ${n(ry)} 0 1 0 ${n(2 * rx)} 0a${n(rx)} ${n(ry)} 0 1 0 ${n(-2 * rx)} 0Z`;
 }
 
-const circle = (cx: number, cy: number, r: number) => ellipse(cx, cy, r, r);
+export const circle = (cx: number, cy: number, r: number) => ellipse(cx, cy, r, r);
 
 /** A ring `w` thick: the inner circle winds the other way, so it's cut out of the fill. */
-function ring(cx: number, cy: number, r: number, w: number): string {
+export function ring(cx: number, cy: number, r: number, w: number): string {
   const inner = r - w;
   return (
     `M${n(cx - r)} ${n(cy)}a${n(r)} ${n(r)} 0 1 0 ${n(2 * r)} 0a${n(r)} ${n(r)} 0 1 0 ${n(-2 * r)} 0Z` +
@@ -127,26 +127,26 @@ function ring(cx: number, cy: number, r: number, w: number): string {
   );
 }
 
-function poly(...pts: number[]): string {
+export function poly(...pts: number[]): string {
   let d = '';
   for (let i = 0; i < pts.length; i += 2) d += `${i ? 'L' : 'M'}${n(pts[i]!)} ${n(pts[i + 1]!)}`;
   return `${d}Z`;
 }
 
 /** A window with a round top, like a church or a palazzo. */
-function arch(x: number, y: number, w: number, h: number): string {
+export function arch(x: number, y: number, w: number, h: number): string {
   const r = w / 2;
   return `M${n(x)} ${n(y + h)}V${n(y + r)}a${n(r)} ${n(r)} 0 0 1 ${n(w)} 0V${n(y + h)}Z`;
 }
 
-function hash(text: string): number {
+export function hash(text: string): number {
   let h = 2166136261;
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
   return h >>> 0;
 }
 
 /** Deterministic, so a stop always looks the same (mulberry32). */
-function seeded(seed: number): () => number {
+export function seeded(seed: number): () => number {
   let a = seed;
   return () => {
     a = (a + 0x6d2b79f5) | 0;

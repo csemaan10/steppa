@@ -4,7 +4,7 @@ import { Navigator } from 'expo-router';
 import type { TabTriggerSlotProps } from 'expo-router/ui';
 import type { ComponentProps, ReactNode, RefObject } from 'react';
 import { createContext, use, useEffect } from 'react';
-import { AppState, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Animated, {
   ReduceMotion,
@@ -60,6 +60,15 @@ function useActiveTab(tabs: string[]): string {
 }
 
 const ActiveTabContext = createContext<string>('index');
+const ButtonWidthContext = createContext(BUTTON_WIDTH);
+
+/** Space kept either side of the bar; on a narrow phone the buttons slim down to keep it. */
+const SIDE_MARGIN = 16;
+
+function buttonWidthFor(screenWidth: number, count: number): number {
+  const room = screenWidth - SIDE_MARGIN * 2 - PADDING * 2 - GAP * (count - 1);
+  return Math.min(BUTTON_WIDTH, Math.floor(room / count));
+}
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -68,28 +77,29 @@ type Props = { blurTarget: RefObject<View | null>; tabs: string[]; children: Rea
 export function FloatingTabBar({ blurTarget, tabs, children }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const buttonWidth = buttonWidthFor(useWindowDimensions().width, tabs.length);
   const activeTab = useActiveTab(tabs);
   const activeIndex = Math.max(0, tabs.indexOf(activeTab));
-  const targetX = activeIndex * (BUTTON_WIDTH + GAP);
+  const targetX = activeIndex * (buttonWidth + GAP);
 
   // Slide to the active tab, stretching on the way (M3 Expressive, as in Fooda): the edge in front
   // leads on a quick spring and the one behind follows on a slower one, so the pill grows long
   // mid-flight and snaps back to size as it lands. A slide cut short while the app is in the
   // background can freeze halfway, so the highlight snaps into place whenever the app comes back.
   const left = useSharedValue(targetX);
-  const right = useSharedValue(targetX + BUTTON_WIDTH);
+  const right = useSharedValue(targetX + buttonWidth);
   useEffect(() => {
     const forward = targetX > left.get();
     left.set(withSpring(targetX, forward ? TRAILING_SPRING : LEADING_SPRING));
-    right.set(withSpring(targetX + BUTTON_WIDTH, forward ? LEADING_SPRING : TRAILING_SPRING));
+    right.set(withSpring(targetX + buttonWidth, forward ? LEADING_SPRING : TRAILING_SPRING));
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         left.set(targetX);
-        right.set(targetX + BUTTON_WIDTH);
+        right.set(targetX + buttonWidth);
       }
     });
     return () => sub.remove();
-  }, [left, right, targetX]);
+  }, [left, right, targetX, buttonWidth]);
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: left.value }],
@@ -112,7 +122,9 @@ export function FloatingTabBar({ blurTarget, tabs, children }: Props) {
             style={[styles.indicator, { backgroundColor: theme.colors.primary }, indicatorStyle]}
           />
           <View style={styles.row}>
-            <ActiveTabContext value={activeTab}>{children}</ActiveTabContext>
+            <ButtonWidthContext value={buttonWidth}>
+              <ActiveTabContext value={activeTab}>{children}</ActiveTabContext>
+            </ButtonWidthContext>
           </View>
         </View>
       </View>
@@ -130,13 +142,14 @@ type TabButtonProps = TabTriggerSlotProps & {
 export function TabButton({ name, icon, activeIcon, label, isFocused: _stale, ...props }: TabButtonProps) {
   const theme = useTheme();
   const isFocused = use(ActiveTabContext) === name;
+  const width = use(ButtonWidthContext);
   return (
     <Pressable
       {...props}
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: isFocused }}
-      style={styles.button}>
+      style={[styles.button, { width }]}>
       <MaterialCommunityIcons
         name={isFocused ? activeIcon : icon}
         size={ICON_SIZE}

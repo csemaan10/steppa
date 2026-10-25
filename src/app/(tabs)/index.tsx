@@ -9,7 +9,7 @@ import {
 } from 'react-native-paper';
 
 import { Button } from '@/components/button';
-import { CharacterIntroCard } from '@/components/character/character-intro-card';
+import { CharacterIntroCard, characterIntroSeen } from '@/components/character/character-intro-card';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GlassAction } from '@/components/glass-action';
 import { GroupPreview } from '@/components/group-preview';
@@ -17,6 +17,7 @@ import type { Rect } from '@/components/expanding-card';
 import { GoalSegments, InsightTile } from '@/components/insight-tile';
 import { JourneyIntroCard } from '@/components/journey-intro-card';
 import { JourneyPreview } from '@/components/journey-preview';
+import { PetIntroCard } from '@/components/pet-intro-card';
 import { StreakCard } from '@/components/profile-stats';
 import { ProgressRing } from '@/components/progress-ring';
 import { RecapPreview } from '@/components/recap/recap-preview';
@@ -32,6 +33,7 @@ import {
   getProfile,
   getProfileStats,
   getStepHistory,
+  hasWorld,
   summarize,
   syncSteps,
   syncTimezone,
@@ -70,12 +72,14 @@ export default function TodayScreen() {
   const userId = useUserId();
   const tabBarSpace = useTabBarSpace();
   const [dismissedError, setDismissedError] = useState<string | null>(null);
+  // The pet invite waits for the character card to be dealt with (made, dismissed or opened).
+  const [characterIntroDone, setCharacterIntroDone] = useState(characterIntroSeen);
 
   // Syncs from the phone's health store on focus and on app resume, then reads from Supabase.
   const { data, loading, reload } = useLoader(async () => {
     const { health, syncError } = await connectAndSync(userId);
     await syncTimezone(userId);
-    const [profile, history, groups, lifetime, journey] = await Promise.all([
+    const [profile, history, groups, lifetime, journey, hasPet] = await Promise.all([
       getProfile(userId),
       // Two weeks: the tiles show the last 7 days, and the detail card compares them with the 7 before.
       getStepHistory(userId, 14),
@@ -83,6 +87,8 @@ export default function TodayScreen() {
       getProfileStats(userId),
       // undefined (card hidden) rather than failing the whole screen, e.g. before migration 012.
       getCurrentJourney(userId).catch(() => undefined),
+      // Likewise: if it can't tell, it doesn't invite them to adopt one.
+      hasWorld(userId).catch(() => true),
     ]);
     const [previews, recap] = await Promise.all([
       Promise.all(
@@ -97,7 +103,7 @@ export default function TodayScreen() {
       // Extra: if the recap fails to load, the rest of the screen still shows.
       loadRecap(userId, groups).catch(() => null),
     ]);
-    return { profile, history, previews, groupCount: groups.length, lifetime, journey, recap, health, syncError };
+    return { profile, history, previews, groupCount: groups.length, lifetime, journey, hasPet, recap, health, syncError };
   }, userId);
 
   // The morning recap pops up once a day, the first time Today loads after 5 am.
@@ -159,8 +165,11 @@ export default function TodayScreen() {
   const tileSize = {
     minHeight: tileHeight || undefined,
     onLayout: (e: LayoutChangeEvent) => {
-      const height = Math.ceil(e.nativeEvent.layout.height);
-      setTileHeight((t) => Math.max(t, height));
+      const height = e.nativeEvent.layout.height;
+      // Only a real difference counts. Snapped to the screen's pixels, a tile can measure a hair over
+      // its minimum; growing to that (or rounding up) each time stretched the tiles a little more on
+      // every layout, without end.
+      setTileHeight((t) => (height > t + 1 ? height : t));
     },
   };
 
@@ -206,9 +215,13 @@ export default function TodayScreen() {
           </Card>
         ) : null}
 
-        {data ? <CharacterIntroCard profile={data.profile} /> : null}
+        {data ? <CharacterIntroCard profile={data.profile} onDone={() => setCharacterIntroDone(true)} /> : null}
         {/* Only while there's no journey (null); undefined means journeys couldn't load. */}
         {data && data.journey === null ? <JourneyIntroCard profile={data.profile} /> : null}
+        {/* One thing at a time: the pet invite waits until they've made their character or set it aside. */}
+        {data && !data.hasPet && (data.profile.podium_character || characterIntroDone) ? (
+          <PetIntroCard profile={data.profile} />
+        ) : null}
 
         <View style={styles.hero}>
             {/* Sized so the streak card still fits on screen below the insight tiles. */}
