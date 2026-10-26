@@ -2,6 +2,7 @@ import 'expo-sqlite/localStorage/install';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { createContext, use, useState, type PropsWithChildren } from 'react';
 
+import { forgetPushToken } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -50,9 +51,13 @@ export function AppLockProvider({ children }: PropsWithChildren) {
     return null;
   }
 
+  // A locked phone keeps its pushes (it's still that person's); signing out for real stops them.
   async function signOut() {
     if (enabled) setLock(true);
-    else await supabase.auth.signOut();
+    else {
+      await forgetPushToken();
+      await supabase.auth.signOut();
+    }
   }
 
   async function signInWithBiometrics() {
@@ -63,6 +68,7 @@ export function AppLockProvider({ children }: PropsWithChildren) {
 
   async function forget() {
     setLock(false);
+    await forgetPushToken();
     await supabase.auth.signOut();
   }
 

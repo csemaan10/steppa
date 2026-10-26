@@ -29,6 +29,7 @@ import {
   getDayLeaderboard,
   getMessages,
   getReactions,
+  isRecapReleased,
   removeReaction,
   reportMessage,
   sendMessage,
@@ -281,11 +282,14 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
     ];
   }
 
-  // Yesterday's top three (people with steps only), shown as a card at the start of today.
+  // Yesterday's top three (people with steps only), shown as a card at the start of today, once the
+  // group's results are out (until then someone elsewhere may still be walking yesterday).
   useEffect(() => {
     let active = true;
-    getDayLeaderboard(groupId, yesterday)
-      .then((rows) => active && setPodium(rows.filter((r) => r.total_steps > 0 && r.rank <= 3).slice(0, 3)))
+    Promise.all([getDayLeaderboard(groupId, yesterday), isRecapReleased(groupId, yesterday)])
+      .then(([rows, released]) => {
+        if (active) setPodium(released ? rows.filter((r) => r.total_steps > 0 && r.rank <= 3).slice(0, 3) : []);
+      })
       .catch(() => {});
     return () => {
       active = false;

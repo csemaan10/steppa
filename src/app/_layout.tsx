@@ -1,14 +1,17 @@
 import { Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 
+import { useNotificationRoutes } from '@/hooks/use-notification-routes';
 import { AppLockProvider, useAppLock } from '@/providers/app-lock-provider';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
 import { ThemeChoiceProvider, useThemeChoice } from '@/providers/theme-provider';
+// Sets how pushes show while Steppa is open.
+import '@/lib/notifications';
 import { applyUpdateOnLaunch } from '@/lib/updates';
 import { buildTheme, toNavigationTheme } from '@/theme';
 
@@ -47,11 +50,17 @@ function RootNavigator() {
   const { session } = useAuth();
   const { locked } = useAppLock();
   const signedIn = !!session && !locked;
+  const [launched, setLaunched] = useState(false);
 
   // The splash stays up while a new update is checked for, so a restart into it is never seen.
   useEffect(() => {
-    applyUpdateOnLaunch().finally(() => SplashScreen.hideAsync());
+    applyUpdateOnLaunch().finally(() => {
+      SplashScreen.hideAsync();
+      setLaunched(true);
+    });
   }, []);
+
+  useNotificationRoutes(launched && signedIn);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

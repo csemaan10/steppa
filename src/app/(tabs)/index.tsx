@@ -45,7 +45,9 @@ import {
   openHealthSettings,
   requestHealthPermission,
 } from '@/lib/health';
-import { loadRecap, markRecapSeen, recapUnseen } from '@/lib/recap';
+import { syncPushToken } from '@/lib/notifications';
+import { notifyPetMilestone } from '@/lib/pet-milestones';
+import { firstUnseenGroup, isRecapShowing, loadRecap, markRecapSeen } from '@/lib/recap';
 import { useUserId } from '@/providers/auth-provider';
 import { glassCard, ringTrack, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
@@ -79,6 +81,9 @@ export default function TodayScreen() {
   const { data, loading, reload } = useLoader(async () => {
     const { health, syncError } = await connectAndSync(userId);
     await syncTimezone(userId);
+    // In the background: neither blocks the screen, and both do nothing without permission.
+    syncPushToken(userId);
+    notifyPetMilestone(userId);
     const [profile, history, groups, lifetime, journey, hasPet] = await Promise.all([
       getProfile(userId),
       // Two weeks: the tiles show the last 7 days, and the detail card compares them with the 7 before.
@@ -106,12 +111,15 @@ export default function TodayScreen() {
     return { profile, history, previews, groupCount: groups.length, lifetime, journey, hasPet, recap, health, syncError };
   }, userId);
 
-  // The morning recap pops up once a day, the first time Today loads after 5 am.
+  // The recap pops up when Today loads with a group's results out that this phone hasn't shown yet:
+  // usually once in the morning, again later for a group whose day ended later (another time zone).
   const recap = data?.recap;
   useEffect(() => {
-    if (!recap?.groups.length || !recapUnseen(recap.day)) return;
-    markRecapSeen(recap.day);
-    router.push('/recap');
+    if (!recap || isRecapShowing()) return;
+    const first = firstUnseenGroup(recap);
+    if (first < 0) return;
+    markRecapSeen(recap);
+    router.push({ pathname: '/recap', params: { group: String(first) } });
   }, [recap]);
 
   // Keep today's count live while this tab is on screen: re-sync on app resume (focus doesn't

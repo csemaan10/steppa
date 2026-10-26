@@ -18,33 +18,64 @@ import { Confetti } from '@/components/recap/celebration';
 import { RecapPlacement, placementOf } from '@/components/recap/recap-placement';
 import { RecapPodium } from '@/components/recap/recap-podium';
 import { useLoader } from '@/hooks/use-loader';
-import { cachedRecap, loadRecap, markRecapSeen, recapDay, recapDayLabel, type GroupRecap } from '@/lib/recap';
+import { askForPushOnce } from '@/lib/notifications';
+import {
+  cachedRecap,
+  loadRecap,
+  markRecapSeen,
+  recapDay,
+  recapDayLabel,
+  setRecapShowing,
+  type GroupRecap,
+} from '@/lib/recap';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, useAppTheme } from '@/theme';
 
-/** Morning recap: yesterday's final podium in each group, one page per group. */
+/**
+ * Morning recap: yesterday's final podium in each group whose results are out, one page per group.
+ * Opens on page `group`, or on group `groupId` of day `day` (from the results notification).
+ */
 export default function RecapScreen() {
   const theme = useAppTheme();
   const userId = useUserId();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { group } = useLocalSearchParams<{ group?: string }>();
-  const day = recapDay();
+  const params = useLocalSearchParams<{ group?: string; groupId?: string; day?: string }>();
+  const currentDay = recapDay();
+  const day = params.day ?? currentDay;
   const cached = cachedRecap(day);
   const { data } = useLoader(() => (cached ? Promise.resolve(cached) : loadRecap(userId, undefined, day)), `${userId}:${day}`);
   const recap = data ?? cached;
   const pages = recap?.groups ?? [];
-  const [page, setPage] = useState(() => Number(group) || 0);
+  // The pager only mounts once the pages are in, so the starting page can come from them.
+  const [picked, setPage] = useState<number | null>(null);
+  const start = params.groupId
+    ? Math.max(0, pages.findIndex((g) => g.group.id === params.groupId))
+    : Number(params.group) || 0;
+  const page = picked ?? start;
   const pager = useRef<ScrollView>(null);
 
-  useEffect(() => markRecapSeen(day), [day]);
+  useEffect(() => {
+    setRecapShowing(true);
+    return () => setRecapShowing(false);
+  }, []);
+  // An older day (a notification held overnight) isn't today's recap, so it doesn't count as seen.
+  useEffect(() => {
+    if (recap && day === currentDay) markRecapSeen(recap);
+  }, [recap, day, currentDay]);
+
+  function close() {
+    // Right after watching is when being told next time makes sense.
+    askForPushOnce(userId);
+    router.back();
+  }
 
   function onScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
     setPage(Math.round(e.nativeEvent.contentOffset.x / width));
   }
 
   function next() {
-    if (page >= pages.length - 1) return router.back();
+    if (page >= pages.length - 1) return close();
     pager.current?.scrollTo({ x: (page + 1) * width, animated: true });
     setPage(page + 1);
   }
@@ -62,7 +93,7 @@ export default function RecapScreen() {
             Final results · {date}
           </Text>
         </View>
-        <GlassAction icon="close" onPress={() => router.back()} accessibilityLabel="Close" />
+        <GlassAction icon="close" onPress={close} accessibilityLabel="Close" />
       </View>
 
       {!recap ? (

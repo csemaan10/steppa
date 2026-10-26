@@ -1,13 +1,17 @@
-// The morning podium recap: yesterday's final standings in each group, shown once a day from 5 am.
+// The morning podium recap: yesterday's final standings in each group. A group's results come out at
+// 5 am wherever in the group the day ends last (see isRecapReleased), so a member in Japan with
+// friends in Ottawa sees them in the evening, once Ottawa's day is over too.
 
 import 'expo-sqlite/localStorage/install';
 
-import { getDayLeaderboard, getMyGroups, type GroupWithCount, type LeaderboardRow } from '@/lib/api';
+import { getDayLeaderboard, getMyGroups, isRecapReleased, type GroupWithCount, type LeaderboardRow } from '@/lib/api';
 import { addDays, startOfDay, toDayKey } from '@/lib/dates';
 
-/** Local hour the new recap becomes available (and pops up). */
+/** Local hour the new recap day starts (results then come out group by group). */
 export const RECAP_HOUR = 5;
-const SEEN_KEY = 'steppa:recap-seen-day';
+const SEEN_KEY = 'steppa:recap-seen';
+/** Before groups were tracked one by one: the day whose recap was seen in full. */
+const LEGACY_SEEN_KEY = 'steppa:recap-seen-day';
 
 export type GroupRecap = {
   group: GroupWithCount;
@@ -38,12 +42,13 @@ export function recapDayLabel(day: string): string {
 
 let cache: Recap | null = null;
 
-/** Loads the recap for every group that had steps that day; cached for the recap screen. */
+/** Loads the recap for every group whose results are out and that had steps that day; cached for the recap screen. */
 export async function loadRecap(userId: string, myGroups?: GroupWithCount[], day = recapDay()): Promise<Recap> {
   const groups = myGroups ?? (await getMyGroups());
   const all = await Promise.all(
-    groups.map(async (group): Promise<GroupRecap> => {
-      const rows = await getDayLeaderboard(group.id, day);
+    groups.map(async (group): Promise<GroupRecap | null> => {
+      const [rows, released] = await Promise.all([getDayLeaderboard(group.id, day), isRecapReleased(group.id, day)]);
+      if (!released) return null;
       return {
         group,
         rows,
@@ -52,7 +57,7 @@ export async function loadRecap(userId: string, myGroups?: GroupWithCount[], day
       };
     })
   );
-  cache = { day, groups: all.filter((g) => g.podium.length > 0) };
+  cache = { day, groups: all.filter((g): g is GroupRecap => !!g && g.podium.length > 0) };
   return cache;
 }
 
@@ -60,17 +65,39 @@ export function cachedRecap(day = recapDay()): Recap | null {
   return cache?.day === day ? cache : null;
 }
 
-/** True when this day's recap hasn't been shown on this phone yet. */
-export function recapUnseen(day: string): boolean {
+function seenGroups(day: string): Set<string> | 'all' {
   try {
-    return localStorage.getItem(SEEN_KEY) !== day;
+    if (localStorage.getItem(LEGACY_SEEN_KEY) === day) return 'all';
+    const seen = JSON.parse(localStorage.getItem(SEEN_KEY) ?? 'null') as { day: string; groups: string[] } | null;
+    return new Set(seen?.day === day ? seen.groups : []);
   } catch {
-    return false;
+    return 'all';
   }
 }
 
-export function markRecapSeen(day: string) {
+/** The first group whose results this phone hasn't shown yet, or -1. Groups come out at different times. */
+export function firstUnseenGroup(recap: Recap): number {
+  const seen = seenGroups(recap.day);
+  if (seen === 'all') return -1;
+  return recap.groups.findIndex((g) => !seen.has(g.group.id));
+}
+
+export function markRecapSeen(recap: Recap) {
+  const seen = seenGroups(recap.day);
+  if (seen === 'all') return;
+  for (const g of recap.groups) seen.add(g.group.id);
   try {
-    localStorage.setItem(SEEN_KEY, day);
+    localStorage.setItem(SEEN_KEY, JSON.stringify({ day: recap.day, groups: [...seen] }));
   } catch {}
+}
+
+let showing = false;
+
+/** Set while the recap screen is open, so the Today screen doesn't open a second one over it. */
+export function setRecapShowing(open: boolean) {
+  showing = open;
+}
+
+export function isRecapShowing(): boolean {
+  return showing;
 }

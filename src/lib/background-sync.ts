@@ -10,6 +10,7 @@ import {
   hasHealthPermission,
   onStepsChanged,
 } from '@/lib/health';
+import { notifyPetMilestone } from '@/lib/pet-milestones';
 import { supabase } from '@/lib/supabase';
 
 const TASK_NAME = 'steppa-step-sync';
@@ -45,6 +46,7 @@ function syncRecentSteps(): Promise<boolean> {
       // sync with the phone unlocked picks up everything.
       if (!canReadHealthNow()) return true;
       await syncSteps(userId, DAYS);
+      await notifyPetMilestone(userId);
       return true;
     } catch (e) {
       // Common on iOS while the phone is locked: Health data is unreadable until it's unlocked.

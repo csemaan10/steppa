@@ -20,6 +20,8 @@ import { useScreenFocused } from '@/hooks/use-screen-focused';
 import { useWorldEditor } from '@/hooks/use-world-editor';
 import { getStepHistory, getWorld, startWorld, syncSteps, updateWorld, type World } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
+import { askForPushOnce } from '@/lib/notifications';
+import { markPetMilestoneShown } from '@/lib/pet-milestones';
 import { timeOfDay } from '@/lib/scene-art';
 import {
   describeUnlock,
@@ -54,6 +56,7 @@ export default function PetScreen() {
     // Catch up on today's steps first; a failed read still shows what's saved.
     await syncSteps(userId, 2).catch(() => {});
     const [status, history] = await Promise.all([getWorld(userId), getStepHistory(userId, 14)]);
+    if (status) markPetMilestoneShown(userId, levelOf(status.steps));
     return { status, history };
   }, userId);
   const editor = useWorldEditor(userId, data?.status?.world ?? null);
@@ -79,6 +82,8 @@ export default function PetScreen() {
       if (editor.world) await updateWorld(userId, { kind: 'pet', picks: saved, celebrated: 1 });
       else await startWorld(userId, 'pet', saved);
       await reload();
+      // A new pet is when being told it's growing makes sense.
+      askForPushOnce(userId);
     } catch (e) {
       Alert.alert('Something went wrong', e instanceof Error ? e.message : String(e));
     } finally {

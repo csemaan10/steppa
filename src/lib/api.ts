@@ -14,6 +14,8 @@ export type Profile = {
   /** Podium character as stored; read it through normalizeLook (src/lib/character.ts). */
   podium_character?: CharacterLook | null;
   daily_goal: number;
+  /** Push when a group's daily results are in (migration 017; missing before it, which means on). */
+  recap_push?: boolean;
   created_at: string;
 };
 
@@ -223,7 +225,9 @@ export async function getProfile(id: string): Promise<Profile> {
 
 export async function updateProfile(
   id: string,
-  patch: Partial<Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon' | 'podium_character'>>
+  patch: Partial<
+    Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon' | 'podium_character' | 'recap_push'>
+  >
 ): Promise<Profile> {
   return unwrap<Profile>(
     await supabase.from('profiles').update(patch).eq('id', id).select('*').single()
@@ -237,6 +241,15 @@ export async function syncTimezone(userId: string): Promise<void> {
   if (!tz || localStorage.getItem(key) === tz) return;
   const { error } = await supabase.from('profiles').update({ timezone: tz }).eq('id', userId);
   if (!error) localStorage.setItem(key, tz);
+}
+
+/** Ties this phone's push token to the signed-in account (moving it from any other). */
+export async function registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void> {
+  unwrap(await supabase.rpc('register_push_token', { push_token: token, push_platform: platform }));
+}
+
+export async function unregisterPushToken(token: string): Promise<void> {
+  unwrap(await supabase.rpc('unregister_push_token', { push_token: token }));
 }
 
 export type ProfileStats = {
@@ -334,6 +347,16 @@ export async function getLeaderboard(groupId: string, period: Period): Promise<L
 /** Leaderboard for a single day (`YYYY-MM-DD`), e.g. yesterday's podium. */
 export async function getDayLeaderboard(groupId: string, day: string): Promise<LeaderboardRow[]> {
   return leaderboardBetween(groupId, day, day);
+}
+
+/**
+ * Whether a group's results for `day` are out: from 5 am the next morning wherever in the group that
+ * comes last, once the day is over for everyone. True if it can't tell (e.g. before migration 017).
+ */
+export async function isRecapReleased(groupId: string, day: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('recap_released_at', { gid: groupId, d: day });
+  if (error || !data) return true;
+  return new Date(data as string).getTime() <= Date.now();
 }
 
 async function leaderboardBetween(groupId: string, from: string, to: string): Promise<LeaderboardRow[]> {
