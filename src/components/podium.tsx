@@ -151,7 +151,7 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
   return (
     <Pressable
       style={[styles.spot, { zIndex: z }]}
-      onPress={isMe ? undefined : onPress}
+      onPress={onPress}
       accessibilityLabel={`${place + 1}: ${row.display_name}, ${formatSteps(row.total_steps)} steps`}>
       <Animated.View style={[styles.head, headStyle]}>
         {place === 0 ? <MaterialCommunityIcons name="crown" size={28} color="#E3B341" /> : null}

@@ -648,6 +648,17 @@ export async function getWorld(userId: string): Promise<WorldStatus | null> {
   return { world, steps: Number(steps) };
 }
 
+/**
+ * A group mate's pet and the steps it has grown with, for their profile; null if they haven't one
+ * or you can't see it (no shared group, or before migration 016).
+ */
+export async function getMateWorld(userId: string): Promise<WorldStatus | null> {
+  const world = unwrap<World | null>(await supabase.from('worlds').select('*').eq('user_id', userId).maybeSingle());
+  if (!world) return null;
+  const steps = unwrap<number>(await supabase.rpc('world_steps', { uid: userId }));
+  return { world, steps: Number(steps) };
+}
+
 /** Whether you've adopted a pet yet, without adding up its steps (for Today's invite card). */
 export async function hasWorld(userId: string): Promise<boolean> {
   const row = unwrap<{ user_id: string } | null>(

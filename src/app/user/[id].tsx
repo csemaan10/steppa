@@ -4,12 +4,14 @@ import { ActivityIndicator, Appbar, Card, Divider, Text } from 'react-native-pap
 
 import { ProfileCharacter } from '@/components/character/profile-character';
 import { GlassBackAction } from '@/components/glass-action';
+import { PetProfileCard } from '@/components/pet-profile-card';
 import { TrophyCase } from '@/components/trophy-case';
 import { UserAvatar } from '@/components/user-avatar';
 import { WeekChart } from '@/components/week-chart';
 import { useLoader } from '@/hooks/use-loader';
-import { getProfile, getProfileStats, getStepHistory, summarize } from '@/lib/api';
+import { getMateWorld, getProfile, getProfileStats, getStepHistory, getWorld, summarize } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
+import { WORLDS } from '@/lib/world';
 import { useUserId } from '@/providers/auth-provider';
 import { glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
@@ -17,16 +19,20 @@ export default function UserScreen() {
   const theme = useAppTheme();
   const myId = useUserId();
   const { id } = useLocalSearchParams<{ id: string }>();
+  // Your own profile (tapped in a group): what your group sees, without comparing you with yourself.
+  const self = id === myId;
 
   const { data, error } = useLoader(async () => {
-    const [me, them, myHistory, theirHistory, theirStats] = await Promise.all([
+    const [me, them, myHistory, theirHistory, theirStats, theirPet] = await Promise.all([
       getProfile(myId),
-      getProfile(id),
+      self ? undefined : getProfile(id),
       getStepHistory(myId, 30),
-      getStepHistory(id, 30),
+      self ? undefined : getStepHistory(id, 30),
       getProfileStats(id),
+      // Extra: no pet card rather than no profile if it can't load (someone else's needs migration 016).
+      (self ? getWorld(myId) : getMateWorld(id)).catch(() => null),
     ]);
-    return { me, them, myHistory, theirHistory, theirStats };
+    return { me, them: them ?? me, myHistory, theirHistory: theirHistory ?? myHistory, theirStats, theirPet };
   }, `${myId}:${id}`);
 
   if (!data) {
@@ -42,7 +48,7 @@ export default function UserScreen() {
     );
   }
 
-  const { me, them, myHistory, theirHistory, theirStats } = data;
+  const { me, them, myHistory, theirHistory, theirStats, theirPet } = data;
   const mine7 = summarize(myHistory.slice(-7));
   const theirs7 = summarize(theirHistory.slice(-7));
   const mine30 = summarize(myHistory);
@@ -71,72 +77,90 @@ export default function UserScreen() {
     <View style={[styles.flex, screenBackground(theme)]}>
       <Appbar.Header mode="small" style={transparentHeader}>
         <GlassBackAction onPress={() => router.back()} />
-        <Appbar.Content title={them.display_name} />
+        <Appbar.Content title={self ? 'You' : them.display_name} />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.content}>
         <ProfileCharacter profile={them} />
 
-        <View style={styles.versus}>
-          <View style={styles.person}>
-            <UserAvatar name={me.display_name} color={me.avatar_color} icon={me.avatar_icon} size={64} />
-            <Text variant="titleSmall">You</Text>
-          </View>
-          <View style={styles.score}>
-            <Text variant="displaySmall">
-              {wins} – {losses}
-            </Text>
-            <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              {duels.length === 0
-                ? 'No shared days yet'
-                : wins > losses
-                  ? "You're ahead"
-                  : wins < losses
-                    ? `${them.display_name} leads`
-                    : 'Neck and neck'}
-            </Text>
-            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              Daily wins · last 30 days
+        {self ? (
+          <View style={styles.self}>
+            <Text variant="headlineSmall">{them.display_name}</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              @{them.username} · how your groups see you
             </Text>
           </View>
-          <View style={styles.person}>
-            <UserAvatar name={them.display_name} color={them.avatar_color} icon={them.avatar_icon} size={64} />
-            <Text variant="titleSmall" numberOfLines={1}>
-              @{them.username}
-            </Text>
+        ) : null}
+
+        {/* Only pets: a row left from testing the dropped worlds has nothing to draw. */}
+        {theirPet && WORLDS[theirPet.world.kind] ? (
+          <PetProfileCard status={theirPet} owner={self ? null : them.display_name} />
+        ) : null}
+
+        {self ? null : (
+          <View style={styles.versus}>
+            <View style={styles.person}>
+              <UserAvatar name={me.display_name} color={me.avatar_color} icon={me.avatar_icon} size={64} />
+              <Text variant="titleSmall">You</Text>
+            </View>
+            <View style={styles.score}>
+              <Text variant="displaySmall">
+                {wins} – {losses}
+              </Text>
+              <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                {duels.length === 0
+                  ? 'No shared days yet'
+                  : wins > losses
+                    ? "You're ahead"
+                    : wins < losses
+                      ? `${them.display_name} leads`
+                      : 'Neck and neck'}
+              </Text>
+              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                Daily wins · last 30 days
+              </Text>
+            </View>
+            <View style={styles.person}>
+              <UserAvatar name={them.display_name} color={them.avatar_color} icon={them.avatar_icon} size={64} />
+              <Text variant="titleSmall" numberOfLines={1}>
+                @{them.username}
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
 
         <TrophyCase stats={theirStats} />
 
-        <Card mode="contained" style={glassCard(theme)}>
-          <Card.Content>
-            {rows.map((row, i) => (
-              <View key={row.label}>
-                {i > 0 ? <Divider /> : null}
-                <View style={styles.compareRow}>
-                  <Text
-                    variant="titleMedium"
-                    style={[styles.value, row.mine > row.theirs && { color: theme.colors.primary }]}>
-                    {formatSteps(row.mine)}
-                  </Text>
-                  <Text variant="labelMedium" style={[styles.metric, { color: theme.colors.onSurfaceVariant }]}>
-                    {row.label}
-                  </Text>
-                  <Text
-                    variant="titleMedium"
-                    style={[
-                      styles.value,
-                      styles.valueRight,
-                      row.theirs > row.mine && { color: theme.colors.tertiary },
-                    ]}>
-                    {formatSteps(row.theirs)}
-                  </Text>
+        {self ? null : (
+          <Card mode="contained" style={glassCard(theme)}>
+            <Card.Content>
+              {rows.map((row, i) => (
+                <View key={row.label}>
+                  {i > 0 ? <Divider /> : null}
+                  <View style={styles.compareRow}>
+                    <Text
+                      variant="titleMedium"
+                      style={[styles.value, row.mine > row.theirs && { color: theme.colors.primary }]}>
+                      {formatSteps(row.mine)}
+                    </Text>
+                    <Text variant="labelMedium" style={[styles.metric, { color: theme.colors.onSurfaceVariant }]}>
+                      {row.label}
+                    </Text>
+                    <Text
+                      variant="titleMedium"
+                      style={[
+                        styles.value,
+                        styles.valueRight,
+                        row.theirs > row.mine && { color: theme.colors.tertiary },
+                      ]}>
+                      {formatSteps(row.theirs)}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </Card.Content>
-        </Card>
+              ))}
+            </Card.Content>
+          </Card>
+        )}
 
         <Card mode="contained" style={glassCard(theme)}>
           <Card.Title title="Last 7 days" />
@@ -144,8 +168,11 @@ export default function UserScreen() {
             <WeekChart
               series={[
                 { name: 'You', color: theme.colors.primary, data: myHistory.slice(-7) },
-                { name: them.display_name, color: theme.colors.tertiary, data: theirHistory.slice(-7) },
+                ...(self
+                  ? []
+                  : [{ name: them.display_name, color: theme.colors.tertiary, data: theirHistory.slice(-7) }]),
               ]}
+              goal={self ? me.daily_goal : undefined}
             />
           </Card.Content>
         </Card>
@@ -158,6 +185,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: 16, gap: 16 },
+  self: { alignItems: 'center', gap: 2, marginTop: -8 },
   versus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   person: { alignItems: 'center', gap: 6, width: 96 },
   score: { alignItems: 'center' },

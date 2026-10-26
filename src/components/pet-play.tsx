@@ -29,7 +29,8 @@ type Effect =
   | { id: number; kind: 'heart'; dx: number }
   | { id: number; kind: 'bubble'; text: string }
   | { id: number; kind: 'treat'; emoji: string }
-  | { id: number; kind: 'ball' };
+  | { id: number; kind: 'ball' }
+  | { id: number; kind: 'sparkles' };
 /** An effect before it has an id (each kind keeps its own fields). */
 type NewEffect<E = Effect> = E extends Effect ? Omit<E, 'id'> : never;
 
@@ -101,7 +102,7 @@ export function usePetPlay(spot: PetSpot | undefined) {
 
   function jump(height: number) {
     hop.set(
-      withSequence(withTiming(height, { duration: 170, easing: UP }), withTiming(0, { duration: 210, easing: DOWN }))
+      withSequence(withTiming(height, { duration: LEAP_UP, easing: UP }), withTiming(0, { duration: 210, easing: DOWN }))
     );
   }
 
@@ -157,7 +158,7 @@ export function usePetPlay(spot: PetSpot | undefined) {
     later(1300, holdEnd);
   }
 
-  /** A treat drops in from above and lands on its head; it gobbles it up. */
+  /** A treat drops in from above, right into its mouth; it gobbles it up. */
   function treat() {
     if (!spot) return;
     add({ kind: 'treat', emoji: spot.treat });
@@ -169,17 +170,30 @@ export function usePetPlay(spot: PetSpot | undefined) {
     });
   }
 
-  /** A ball tossed up over its head; it watches it, then leaps for the catch. */
+  /**
+   * Fetch: a ball is thrown in from the side and bounces twice on the way. The pet leans toward it,
+   * crouches, and leaps to catch it at the top of its jump; the ball pops into sparkles.
+   */
   function play() {
     if (!spot) return;
+    const { dir } = fetchPath(spot);
     add({ kind: 'ball' });
     tilt.set(
-      withSequence(withTiming(-5, { duration: 300, easing: SWING }), withTiming(0, { duration: 300, easing: SWING }))
+      withSequence(
+        withTiming(dir * 6, { duration: 350, easing: SWING }),
+        withDelay(FETCH - 900, withTiming(0, { duration: 250, easing: SWING }))
+      )
     );
-    later(BALL_FLIGHT - 160, () => {
-      jump(spot.box[3] * 0.18);
+    later(FETCH - LEAP_UP - 150, () =>
+      squish.set(
+        withSequence(withTiming(0.8, { duration: 150, easing: STANDARD }), withTiming(0, { duration: 110, easing: UP }))
+      )
+    );
+    later(FETCH - LEAP_UP, () => jump(spot.box[3] * CATCH_LEAP));
+    later(FETCH, () => {
+      add({ kind: 'sparkles' });
       cheer(900);
-      say('Yay!');
+      say('Got it!');
       hearts(2);
     });
   }
@@ -234,7 +248,7 @@ export function PetTarget({ play, spot, scale }: { play: PetPlay; spot: PetSpot;
       delayLongPress={280}
       accessibilityRole="button"
       accessibilityLabel="Your pet"
-      accessibilityHint="Tap to play, or hold to stroke it"
+      accessibilityHint="Tap to play, or hold to pet it"
       style={{
         position: 'absolute',
         left: (x - pad) * scale,
@@ -260,7 +274,9 @@ export function PetEffects({ play, spot, scale }: { play: PetPlay; spot: PetSpot
           case 'treat':
             return <FallingTreat key={effect.id} spot={spot} emoji={effect.emoji} scale={scale} onDone={done} />;
           case 'ball':
-            return <TossedBall key={effect.id} spot={spot} scale={scale} onDone={done} />;
+            return <FetchBall key={effect.id} spot={spot} scale={scale} onDone={done} />;
+          case 'sparkles':
+            return <CatchSparkles key={effect.id} spot={spot} scale={scale} onDone={done} />;
         }
       })}
     </View>
@@ -353,7 +369,7 @@ function SpeechBubble({
   );
 }
 
-/** How long a treat takes to drop onto the pet's head. */
+/** How long a treat takes to drop into the pet's mouth. */
 const TREAT_FALL = 520;
 
 function FallingTreat({
@@ -377,7 +393,7 @@ function FallingTreat({
     const eaten = v > land ? (v - land) / (1 - land) : 0;
     return {
       opacity: 1 - eaten,
-      transform: [{ translateY: -(1 - fall * fall) * (spot.head[1] + 30) * scale }, { scale: 1 - eaten * 0.7 }],
+      transform: [{ translateY: -(1 - fall * fall) * (spot.mouth[1] + 30) * scale }, { scale: 1 - eaten * 0.7 }],
     };
   });
   return (
@@ -385,7 +401,7 @@ function FallingTreat({
       style={[
         styles.effect,
         styles.center,
-        { left: spot.head[0] * scale - size, top: spot.head[1] * scale - size, width: size * 2, height: size * 2 },
+        { left: spot.mouth[0] * scale - size, top: spot.mouth[1] * scale - size, width: size * 2, height: size * 2 },
         style,
       ]}>
       <NativeText style={{ fontSize: size }}>{emoji}</NativeText>
@@ -393,45 +409,137 @@ function FallingTreat({
   );
 }
 
-/** How long the ball is in the air. */
-const BALL_FLIGHT = 760;
+/** How long fetch takes, from the throw to the catch. */
+const FETCH = 1400;
+/** How long a leap takes to reach its top. */
+const LEAP_UP = 170;
+/** How high the pet leaps for the catch, as a share of its height. */
+const CATCH_LEAP = 0.2;
+const BALL_RADIUS = 9;
+/** When the ball touches the ground, as shares of the flight. */
+const FIRST_BOUNCE = 0.34;
+const SECOND_BOUNCE = 0.62;
 
-function TossedBall({ spot, scale, onDone }: { spot: PetSpot; scale: number; onDone: () => void }) {
-  const p = useProgress(BALL_FLIGHT + 220, onDone);
-  const land = BALL_FLIGHT / (BALL_FLIGHT + 220);
-  const size = 20 * scale;
-  // As high as there's sky for above a big pet's head.
-  const rise = Math.max(30, Math.min(70, spot.head[1] - 24));
+/**
+ * Fetch's path in scene units: thrown in from the side with more room, at about head height, it
+ * lands well out from the pet, bounces in closer, then bounces up into the pet's mouth at the top
+ * of its leap.
+ */
+function fetchPath(spot: PetSpot) {
+  const [x, y, w, h] = spot.box;
+  const centre = x + w / 2;
+  const dir = centre < WORLD_WIDTH / 2 ? 1 : -1;
+  const clampX = (v: number) => Math.min(WORLD_WIDTH - 16, Math.max(16, v));
+  return {
+    dir,
+    start: [dir > 0 ? WORLD_WIDTH + 20 : -20, Math.max(24, spot.head[1] - 30)] as const,
+    bounces: [clampX(centre + dir * (w / 2 + 70)), clampX(centre + dir * (w / 2 + 26))] as const,
+    ground: y + h - BALL_RADIUS,
+    catch: [centre, spot.mouth[1] - h * CATCH_LEAP] as const,
+  };
+}
+
+/** A red rubber ball with a white band, drawn rather than an emoji so it looks the same everywhere. */
+function Ball({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20">
+      <Path d="M10 0a10 10 0 1 1 0 20a10 10 0 1 1 0-20Z" fill="#FF6F61" />
+      <Path d="M10 20a10 10 0 0 1-10-10h20a10 10 0 0 1-10 10Z" fill="#E85A4F" opacity={0.6} />
+      <Path d="M0.7 7.3C6 9.6 14 9.6 19.3 7.3L19.9 10.9C14 13.4 6 13.4 0.1 10.9Z" fill="#FFFFFF" />
+      <Path d="M5 5.5a2.2 1.5-35 1 1 3-2.2a2.2 1.5-35 1 1-3 2.2Z" fill="#FFFFFF" opacity={0.55} />
+    </Svg>
+  );
+}
+
+function FetchBall({ spot, scale, onDone }: { spot: PetSpot; scale: number; onDone: () => void }) {
+  const total = FETCH + 120;
+  const p = useProgress(total, onDone);
+  const caught = FETCH / total;
+  const size = BALL_RADIUS * 2 * scale;
+  const {
+    start: [sx, sy],
+    bounces: [b1, b2],
+    ground,
+    catch: [cx, cy],
+  } = fetchPath(spot);
+
   const style = useAnimatedStyle(() => {
     const v = p.get();
-    const flight = Math.min(1, v / land);
-    const gone = v > land ? (v - land) / (1 - land) : 0;
+    let x = cx;
+    let y = cy;
+    if (v < FIRST_BOUNCE) {
+      // Thrown flat, falling faster and faster to the first bounce.
+      const t = v / FIRST_BOUNCE;
+      x = sx + (b1 - sx) * t;
+      y = sy + (ground - sy) * t * t;
+    } else if (v < SECOND_BOUNCE) {
+      const t = (v - FIRST_BOUNCE) / (SECOND_BOUNCE - FIRST_BOUNCE);
+      x = b1 + (b2 - b1) * t;
+      y = ground - 46 * 4 * t * (1 - t);
+    } else if (v < caught) {
+      // The last bounce arcs up and over into the catch.
+      const t = (v - SECOND_BOUNCE) / (caught - SECOND_BOUNCE);
+      x = b2 + (cx - b2) * t;
+      y = ground + (cy - ground) * t - 34 * 4 * t * (1 - t);
+    }
+    // Squashed for a moment as it hits the ground, then gulped down.
+    const hit = Math.max(0, 1 - Math.min(Math.abs(v - FIRST_BOUNCE), Math.abs(v - SECOND_BOUNCE)) / 0.035);
+    const gone = v > caught ? (v - caught) / (1 - caught) : 0;
     return {
       opacity: 1 - gone,
-      // Up and back down in an arc, like a ball thrown straight up.
-      transform: [{ translateY: -Math.sin(flight * Math.PI) * rise * scale }, { rotate: `${flight * 540}deg` }],
+      transform: [
+        { translateX: x * scale - size / 2 },
+        { translateY: y * scale - size / 2 },
+        { scaleX: (1 + hit * 0.18) * (1 - gone * 0.6) },
+        { scaleY: (1 - hit * 0.24) * (1 - gone * 0.6) },
+        // Rolls as it travels.
+        { rotate: `${((x - sx) / BALL_RADIUS) * (180 / Math.PI)}deg` },
+      ],
     };
+  });
+
+  return (
+    <Animated.View style={[styles.effect, styles.origin, { width: size, height: size }, style]}>
+      <Ball size={size} />
+    </Animated.View>
+  );
+}
+
+/** A little burst of sparkles where the ball is caught. */
+function CatchSparkles({ spot, scale, onDone }: { spot: PetSpot; scale: number; onDone: () => void }) {
+  const p = useProgress(520, onDone, UP);
+  const [cx, cy] = fetchPath(spot).catch;
+  const size = 48 * scale;
+  const style = useAnimatedStyle(() => {
+    const v = p.get();
+    return { opacity: 1 - v * v, transform: [{ scale: 0.4 + v }, { rotate: `${v * 40}deg` }] };
   });
   return (
     <Animated.View
-      style={[
-        styles.effect,
-        styles.center,
-        {
-          left: spot.head[0] * scale - size,
-          top: (spot.head[1] - 8) * scale - size,
-          width: size * 2,
-          height: size * 2,
-        },
-        style,
-      ]}>
-      <NativeText style={{ fontSize: size }}>🎾</NativeText>
+      style={[styles.effect, { left: cx * scale - size / 2, top: cy * scale - size / 2, width: size, height: size }, style]}>
+      <Svg width={size} height={size} viewBox="0 0 48 48">
+        {Array.from({ length: 6 }, (_, i) => {
+          const a = (i * Math.PI) / 3;
+          const x = 24 + Math.cos(a) * 15;
+          const y = 24 + Math.sin(a) * 15;
+          const r = i % 2 ? 3.2 : 4.4;
+          return (
+            <Path
+              key={i}
+              d={`M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z`}
+              fill={i % 2 ? '#FFFFFF' : '#FFD54F'}
+            />
+          );
+        })}
+      </Svg>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   effect: { position: 'absolute' },
+  /** Placed entirely by its transform. */
+  origin: { left: 0, top: 0 },
   center: { alignItems: 'center', justifyContent: 'center' },
   bubble: {
     paddingHorizontal: 10,

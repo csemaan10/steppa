@@ -187,7 +187,7 @@ function PetHome({
         </Button>
       </View>
       <Text variant="labelMedium" style={[styles.hint, muted]}>
-        Tap your pet, or hold to give it a stroke
+        Tap your pet, or hold to pet it
       </Text>
 
       {world.celebrated <= level && level > 0 ? (

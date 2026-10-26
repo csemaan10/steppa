@@ -1382,6 +1382,8 @@ function petSpot(art: Art, look: Look, feet: number, s: number, hb: number): Pet
   return {
     box: [n(PET_X - half), n(top - 2), n(half * 2), n(bottom - top + 2)],
     head: [PET_X, n(head.at(0, -84)[1])],
+    // The pony's mouth is lower down its long muzzle.
+    mouth: [PET_X, n(head.at(0, look.species === 'horse' ? -38 : -45)[1])],
     sounds: SOUNDS[look.species],
     treat: TREATS[look.species],
   };

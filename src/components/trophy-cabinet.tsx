@@ -104,7 +104,7 @@ const Shelf = memo(function Shelf({ row, isMe, animate, onPressUser }: ShelfProp
       mode="contained"
       // Yours is picked out by a primary rim; a solid fill would stop it reading as glass.
       style={[glassCard(theme), isMe && { borderColor: theme.colors.primary }]}
-      onPress={isMe ? undefined : () => onPressUser(row.user_id)}
+      onPress={() => onPressUser(row.user_id)}
       accessibilityLabel={`${row.display_name}: ${row.gold} gold, ${row.silver} silver, ${row.bronze} bronze`}>
       <View style={styles.row}>
         <View style={[styles.character, twoCats && styles.characterWide]}>

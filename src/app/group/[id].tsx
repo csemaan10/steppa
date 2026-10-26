@@ -353,7 +353,7 @@ export default function GroupScreen() {
                         <Card
                           mode="contained"
                           style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
-                          onPress={isMe ? undefined : () => openUser(item.user_id)}
+                          onPress={() => openUser(item.user_id)}
                         >
                           <View style={styles.row}>
                             <Text variant="titleMedium" style={styles.rank}>

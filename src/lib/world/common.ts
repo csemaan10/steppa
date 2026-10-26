@@ -132,8 +132,10 @@ export type Layer = {
 export type PetSpot = {
   /** The box to tap or hold, at the pet's current size. */
   box: readonly [number, number, number, number];
-  /** The top of its head: hearts float up from here, and treats land here. */
+  /** The top of its head: hearts float up from here. */
   head: readonly [number, number];
+  /** Its mouth: treats and the fetch ball end up here. */
+  mouth: readonly [number, number];
   /** What it says, taken in turn ("Purr!", "Mrrp?"...). */
   sounds: readonly string[];
   /** Its favourite treat, as an emoji (🐟 for a cat, 🦴 for a dog). */
