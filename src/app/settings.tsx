@@ -50,6 +50,16 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const scroller = useRef<ScrollView>(null);
   const scrolledToFocus = useRef(false);
+  const scrollY = useRef(0);
+  /** Where the character editor starts in the scrolling content. */
+  const characterY = useRef(0);
+
+  // Opening or closing one of the character editor's sections can leave you far down the page (a long
+  // section like Clothes folds away under you), so come back up to the character if it's gone off the top.
+  function backToCharacter() {
+    const top = Math.max(0, characterY.current - 8);
+    if (scrollY.current > top) scroller.current?.scrollTo({ y: top, animated: true });
+  }
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [goal, setGoal] = useState(String(profile.daily_goal));
   const [color, setColor] = useState(profile.avatar_color);
@@ -101,7 +111,11 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
         <Appbar.Content title="Settings" />
       </Appbar.Header>
 
-      <ScrollView ref={scroller} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
+      <ScrollView
+        ref={scroller}
+        onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={32}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.preview}>
           <UserAvatar name={displayName || profile.display_name} color={color} icon={icon} size={88} />
           <Text variant="titleLarge" numberOfLines={1}>
@@ -191,11 +205,12 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
 
         <View
           onLayout={(e) => {
+            characterY.current = e.nativeEvent.layout.y;
             if (focus !== 'character' || scrolledToFocus.current) return;
             scrolledToFocus.current = true;
             scroller.current?.scrollTo({ y: e.nativeEvent.layout.y - 8, animated: true });
           }}>
-          <CharacterEditorCard key={profile.id} profile={profile} />
+          <CharacterEditorCard key={profile.id} profile={profile} onSectionToggle={backToCharacter} />
         </View>
 
         <ThemePicker />

@@ -35,11 +35,15 @@ import {
 } from '@/lib/character';
 import { glassCard } from '@/theme';
 
-type Props = { profile: Profile };
+type Props = {
+  profile: Profile;
+  /** A section opened or closed, which changes the card's height under the person scrolling. */
+  onSectionToggle?: () => void;
+};
 type SectionKey = 'move' | 'entrance' | 'body' | 'face' | 'clothes' | 'watch' | 'pets';
 
 /** Settings card for designing your podium character. Each change saves immediately. */
-export function CharacterEditorCard({ profile }: Props) {
+export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
   const theme = useTheme();
   const [look, setLook] = useState<CharacterLook>(() => normalizeLook(profile.podium_character, profile.id));
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +51,10 @@ export function CharacterEditorCard({ profile }: Props) {
   // One section open at a time keeps the card short; all start closed.
   const [open, setOpen] = useState<SectionKey | null>(null);
   const seed = (hashString(profile.id) % 1000) / 1000;
-  const toggle = (key: SectionKey) => setOpen((current) => (current === key ? null : key));
+  const toggle = (key: SectionKey) => {
+    setOpen((current) => (current === key ? null : key));
+    onSectionToggle?.();
+  };
 
   // Save each change right away; roll back if the server rejects it.
   function change(patch: Partial<CharacterLook>) {
