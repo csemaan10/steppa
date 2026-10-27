@@ -80,6 +80,12 @@ export type Slot = { id: string; title: string; level: number; choices: Choice[]
 /** Chosen option id for each unlocked slot. Draw functions only ever see complete, valid picks. */
 export type Picks = Record<string, string>;
 
+/**
+ * Something brought home from a trip rather than unlocked by walking: a choice for `slot`, earned
+ * by first visiting `from` (a destination in src/lib/pet-adventures.ts). Wearable at any level.
+ */
+export type Souvenir = { from: string; slot: string; choice: Choice };
+
 export type WorldDef = {
   kind: WorldKind;
   /** "Pet", "City"... */
@@ -90,6 +96,8 @@ export type WorldDef = {
   /** What it's called at each stage, smallest first. */
   stages: readonly [string, string, string, string, string, string];
   slots: Slot[];
+  /** Kept apart from the slots' own choices, so milestones never list them. */
+  souvenirs?: Souvenir[];
   /**
    * `steps` lets a world keep growing between milestones (the city adds buildings as you walk);
    * `mood` is how the pet feels today (a calm, wide-awake pet without one).

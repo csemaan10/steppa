@@ -24,13 +24,27 @@ const HEART = '#FF6F91';
 
 /** The tap reactions, taken in turn. */
 const REACTIONS = ['hop', 'wiggle', 'turn'] as const;
+/** What it says on trying on something new, in turn. */
+const DRESS_UP_LINES = ['Ooh!', 'Fancy!', 'Love it!', 'So me!', 'Ta-da!'];
+
+/** Things it gets up to on its own, taken in turn. */
+const IDLE = ['tail', 'dig', 'pounce', 'butterfly'] as const;
+/** After you've played with it, it waits this long before doing anything on its own. */
+const IDLE_AFTER = 6000;
 
 type Effect =
   | { id: number; kind: 'heart'; dx: number }
   | { id: number; kind: 'bubble'; text: string }
   | { id: number; kind: 'treat'; emoji: string }
   | { id: number; kind: 'ball' }
-  | { id: number; kind: 'sparkles' };
+  | { id: number; kind: 'sparkles' }
+  /** A puff kicked up at its feet, `x` across the scene. */
+  | { id: number; kind: 'dust'; x: number }
+  /** Earth flying out behind it as it digs, toward `dir`. */
+  | { id: number; kind: 'dirt'; dir: number }
+  | { id: number; kind: 'butterfly' }
+  /** A fish blowing bubbles. */
+  | { id: number; kind: 'bubbles' };
 /** An effect before it has an id (each kind keeps its own fields). */
 type NewEffect<E = Effect> = E extends Effect ? Omit<E, 'id'> : never;
 
@@ -72,6 +86,10 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
   const nextId = useRef(0);
   const taps = useRef(0);
   const said = useRef(0);
+  const dressed = useRef(0);
+  const idled = useRef(0);
+  /** Until when it's busy with something you asked for, so it doesn't wander off mid-trick. */
+  const busyUntil = useRef(0);
   const stroking = useRef<ReturnType<typeof setInterval> | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -122,8 +140,14 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
     );
   }
 
+  /** Something's happening for about `ms`: idle moments wait until well after. */
+  function busy(ms = 1500) {
+    busyUntil.current = Math.max(busyUntil.current, Date.now() + ms);
+  }
+
   function tap() {
     if (!spot) return;
+    busy();
     const count = taps.current++;
     if (tricks.length && count % 4 === 3) {
       showOff(tricks[Math.floor(count / 4) % tricks.length]!);
@@ -158,6 +182,7 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
   /** Starts stroking it: it settles down happily, purrs, and hearts keep floating up. */
   function holdStart() {
     if (!spot || stroking.current) return;
+    busy(3000);
     squish.set(withTiming(1, { duration: 220, easing: STANDARD }));
     joy.set(withTiming(1, { duration: 120 }));
     say(spot.sounds[0]);
@@ -185,6 +210,7 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
    */
   function treat(lesson?: Lesson) {
     if (!spot) return;
+    busy(lesson ? 4000 : 1500);
     add({ kind: 'treat', emoji: spot.treat });
     later(TREAT_FALL, () => {
       jump(spot.box[3] * 0.08);
@@ -206,6 +232,7 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
   /** A trick it knows, done properly, with a cheer at the end. */
   function showOff(trick: TrickId, line?: string) {
     const ms = perform(trick, 1);
+    busy(ms + 800);
     later(ms, () => {
       add({ kind: 'sparkles' });
       cheer(900);
@@ -336,11 +363,34 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
   }
 
   /**
+   * Trying on a new look: it hops up and twirls round twice to show it off, sparkles go off, and it
+   * says what it thinks.
+   */
+  function dressUp() {
+    if (!spot) return;
+    busy(1500);
+    jump(spot.box[3] * 0.16);
+    turn.set(
+      withSequence(
+        withTiming(-1, { duration: 130, easing: SWING }),
+        withTiming(1, { duration: 130, easing: SWING }),
+        withTiming(-1, { duration: 130, easing: SWING }),
+        withTiming(1, { duration: 130, easing: SWING })
+      )
+    );
+    later(320, () => add({ kind: 'sparkles' }));
+    cheer(1100);
+    later(420, () => say(DRESS_UP_LINES[dressed.current++ % DRESS_UP_LINES.length]));
+    hearts(2);
+  }
+
+  /**
    * Fetch: a ball is thrown in from the side and bounces twice on the way. The pet leans toward it,
    * crouches, and leaps to catch it at the top of its jump; the ball pops into sparkles.
    */
   function play() {
     if (!spot) return;
+    busy(FETCH + 800);
     const { dir } = fetchPath(spot);
     add({ kind: 'ball' });
     tilt.set(
@@ -361,6 +411,165 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
       say('Got it!');
       hearts(2);
     });
+  }
+
+  /**
+   * Goal zoomies: it tears round the yard, edge to edge and back twice, kicking up dust, then
+   * celebrates. A fish does loop-the-loops in its bowl, blowing bubbles.
+   */
+  function zoomies() {
+    if (!spot) return;
+    const [x, , w, h] = spot.box;
+    busy(3600);
+    say('Goal!!');
+    cheer(3000);
+    if (spot.bowl) {
+      roll.set(
+        withSequence(
+          withTiming(360, { duration: 700, easing: STANDARD }),
+          withTiming(720, { duration: 700, easing: STANDARD }),
+          withTiming(0, { duration: 0 })
+        )
+      );
+      add({ kind: 'bubbles' });
+      later(700, () => add({ kind: 'bubbles' }));
+      later(1500, () => {
+        add({ kind: 'sparkles' });
+        hearts(3);
+      });
+      return;
+    }
+    // As far as each edge of the yard, leaving a little room.
+    const right = WORLD_WIDTH - 14 - (x + w);
+    const left = -(x - 14);
+    const run = { easing: SWING };
+    const legs = [
+      { to: right, ms: 480 },
+      { to: left, ms: 820 },
+      { to: right, ms: 820 },
+      { to: 0, ms: 480 },
+    ];
+    slide.set(withSequence(...legs.map((leg) => withTiming(leg.to, { duration: leg.ms, ...run }))));
+    // Turns round at the end of each run.
+    turn.set(withSequence(...legs.map((leg, i) => withDelay(leg.ms - 60, withTiming(i % 2 ? 1 : -1, { duration: 60 })))));
+    // Little bounding hops all the way, and a puff of dust where it lands.
+    const centre = x + w / 2;
+    const total = legs.reduce((sum, leg) => sum + leg.ms, 0);
+    let start = 0;
+    let from = 0;
+    for (const leg of legs) {
+      for (let t = 0; t < leg.ms; t += 170) {
+        const p = t / leg.ms;
+        const eased = p < 0.5 ? 2 * p * p : 1 - 2 * (1 - p) * (1 - p);
+        const px = centre + from + (leg.to - from) * eased;
+        later(start + t, () => {
+          jump(h * 0.05);
+          add({ kind: 'dust', x: px });
+        });
+      }
+      start += leg.ms;
+      from = leg.to;
+    }
+    later(total + 80, () => {
+      add({ kind: 'sparkles' });
+      say('Zoom zoom!');
+      hearts(4);
+    });
+  }
+
+  /**
+   * Something it does by itself when you've left it be for a while: chases its tail, digs, pounces
+   * on something only it can see, or watches a butterfly. Nothing if you've just been playing.
+   */
+  function idle() {
+    if (!spot || Date.now() < busyUntil.current + IDLE_AFTER) return;
+    const moment = IDLE[idled.current++ % IDLE.length]!;
+    const h = spot.box[3];
+    const small = spot.bowl ? 0.5 : 1;
+    const dir = spot.box[0] + spot.box[2] / 2 < WORLD_WIDTH / 2 ? 1 : -1;
+    busy(2600);
+    switch (moment) {
+      case 'tail': {
+        // Round and round after its own tail.
+        const flips = 6;
+        turn.set(
+          withSequence(
+            ...Array.from({ length: flips }, (_, i) => withTiming(i % 2 ? 1 : -1, { duration: 150, easing: SWING })),
+            withTiming(1, { duration: 150, easing: SWING })
+          )
+        );
+        tilt.set(
+          withSequence(
+            ...Array.from({ length: flips }, (_, i) => withTiming((i % 2 ? -1 : 1) * 6, { duration: 150, easing: SWING })),
+            withTiming(0, { duration: 150, easing: SWING })
+          )
+        );
+        for (let i = 0; i < flips; i += 2) later(i * 150, () => jump(h * 0.04 * small));
+        say('?!');
+        later(flips * 150 + 200, () => cheer(500));
+        return;
+      }
+      case 'dig':
+        if (spot.bowl) {
+          add({ kind: 'bubbles' });
+          later(900, () => say('Blub!'));
+          return;
+        }
+        // Nose down, paws going, earth flying out behind.
+        tilt.set(
+          withSequence(
+            withTiming(dir * 12, { duration: 200, easing: STANDARD }),
+            ...Array.from({ length: 6 }, (_, i) => withTiming(dir * (i % 2 ? 12 : 16), { duration: 120, easing: SWING })),
+            withTiming(0, { duration: 240, easing: STANDARD })
+          )
+        );
+        squish.set(
+          withSequence(withTiming(0.5, { duration: 200, easing: STANDARD }), withDelay(720, withTiming(0, { duration: 240, easing: STANDARD })))
+        );
+        for (let i = 0; i < 4; i++) later(220 + i * 180, () => add({ kind: 'dirt', dir: -dir }));
+        later(1250, () => {
+          jump(h * 0.06);
+          say(['A bone?', 'Hmm…', 'Ooh!'][idled.current % 3]);
+        });
+        return;
+      case 'pounce': {
+        // Crouches, wiggles, and springs at nothing at all.
+        const far = 34 * (spot.bowl ? 0.15 : 1);
+        squish.set(
+          withSequence(withTiming(0.9, { duration: 260, easing: STANDARD }), withDelay(440, withTiming(0, { duration: 120, easing: UP })))
+        );
+        tilt.set(
+          withSequence(
+            withDelay(260, withTiming(3, { duration: 90, easing: SWING })),
+            withTiming(-3, { duration: 90, easing: SWING }),
+            withTiming(3, { duration: 90, easing: SWING }),
+            withTiming(0, { duration: 90, easing: SWING })
+          )
+        );
+        later(700, () => {
+          jump(h * 0.2 * small);
+          slide.set(
+            withSequence(
+              withTiming(dir * far, { duration: 380, easing: STANDARD }),
+              withDelay(500, withTiming(0, { duration: 600, easing: STANDARD }))
+            )
+          );
+        });
+        later(1150, () => say('Got it!'));
+        return;
+      }
+      case 'butterfly':
+        // It flutters round its head; the pet looks up and tries to catch it.
+        add({ kind: 'butterfly' });
+        later(900, () => tilt.set(withSequence(withTiming(-dir * 6, { duration: 300, easing: SWING }), withDelay(900, withTiming(0, { duration: 300, easing: SWING })))));
+        later(1300, () => jump(h * 0.12 * small));
+        later(1900, () => jump(h * 0.16 * small));
+        later(2300, () => {
+          say('Aww…');
+          cheer(500);
+        });
+        return;
+    }
   }
 
   function remove(id: number) {
@@ -386,6 +595,9 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
     showOff,
     say,
     bounce,
+    dressUp,
+    zoomies,
+    idle,
   };
 }
 
@@ -467,6 +679,14 @@ export function PetEffects({ play, spot, scale }: { play: PetPlay; spot: PetSpot
             return <FetchBall key={effect.id} spot={spot} scale={scale} onDone={done} />;
           case 'sparkles':
             return <CatchSparkles key={effect.id} spot={spot} scale={scale} onDone={done} />;
+          case 'dust':
+            return <Dust key={effect.id} spot={spot} x={effect.x} scale={scale} onDone={done} />;
+          case 'dirt':
+            return <Dirt key={effect.id} spot={spot} dir={effect.dir} scale={scale} onDone={done} />;
+          case 'butterfly':
+            return <Butterfly key={effect.id} spot={spot} scale={scale} onDone={done} />;
+          case 'bubbles':
+            return <Bubbles key={effect.id} spot={spot} scale={scale} onDone={done} />;
         }
       })}
     </View>
@@ -726,8 +946,162 @@ function CatchSparkles({ spot, scale, onDone }: { spot: PetSpot; scale: number; 
   );
 }
 
+/** Where its feet touch the ground. */
+const groundOf = (spot: PetSpot) => spot.box[1] + spot.box[3] - 3;
+
+/** A puff of dust where it lands mid-run: three soft blobs that spread and fade. */
+function Dust({ spot, x, scale, onDone }: { spot: PetSpot; x: number; scale: number; onDone: () => void }) {
+  const p = useProgress(520, onDone, UP);
+  const size = 30 * scale;
+  const style = useAnimatedStyle(() => {
+    const v = p.get();
+    return { opacity: 0.7 * (1 - v), transform: [{ scale: 0.4 + v * 0.9 }, { translateY: -v * 4 * scale }] };
+  });
+  return (
+    <Animated.View
+      style={[styles.effect, { left: x * scale - size / 2, top: groundOf(spot) * scale - size * 0.6, width: size, height: size * 0.6 }, style]}>
+      <Svg width={size} height={size * 0.6} viewBox="0 0 30 18">
+        <Path
+          d="M2 12a6 6 0 1 0 12 0a6 6 0 1 0 -12 0ZM9 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0ZM19 12a5 5 0 1 0 10 0a5 5 0 1 0 -10 0Z"
+          fill="#E9E1D3"
+        />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** Clods of earth thrown up behind it while it digs, arcing out and falling. */
+function Dirt({ spot, dir, scale, onDone }: { spot: PetSpot; dir: number; scale: number; onDone: () => void }) {
+  const p = useProgress(620, onDone);
+  const [x, , w] = spot.box;
+  const from = x + w / 2 + dir * w * 0.25;
+  const ground = groundOf(spot);
+  return (
+    <>
+      {[0, 1, 2, 3].map((i) => (
+        <Clod key={i} p={p} index={i} from={from} ground={ground} dir={dir} scale={scale} />
+      ))}
+    </>
+  );
+}
+
+function Clod({
+  p,
+  index,
+  from,
+  ground,
+  dir,
+  scale,
+}: {
+  p: SharedValue<number>;
+  index: number;
+  from: number;
+  ground: number;
+  dir: number;
+  scale: number;
+}) {
+  const size = (3 + (index % 2) * 1.6) * scale;
+  const reach = 16 + index * 7;
+  const lift = 18 + (index % 3) * 6;
+  const style = useAnimatedStyle(() => {
+    const v = p.get();
+    return {
+      opacity: v < 0.8 ? 1 : (1 - v) / 0.2,
+      transform: [
+        { translateX: (from + dir * reach * v) * scale - size / 2 },
+        { translateY: (ground - lift * 4 * v * (1 - v)) * scale - size },
+      ],
+    };
+  });
+  return <Animated.View style={[styles.effect, styles.origin, styles.clod, { width: size, height: size, borderRadius: size / 2 }, style]} />;
+}
+
+const BUTTERFLY = 2600;
+
+/**
+ * A butterfly drifts in from the far side, loops twice round the pet's head just out of reach, and
+ * flutters away up and out of the scene.
+ */
+function Butterfly({ spot, scale, onDone }: { spot: PetSpot; scale: number; onDone: () => void }) {
+  const p = useProgress(BUTTERFLY, onDone);
+  const size = 16 * scale;
+  const [hx, hy] = spot.head;
+  const dir = hx < WORLD_WIDTH / 2 ? 1 : -1;
+  const start = [dir > 0 ? WORLD_WIDTH + 20 : -20, hy - 60] as const;
+  const out = [hx - dir * 90, -30] as const;
+  const r = 30;
+  const style = useAnimatedStyle(() => {
+    const v = p.get();
+    let x: number;
+    let y: number;
+    if (v < 0.25) {
+      const t = v / 0.25;
+      x = start[0] + (hx + r - start[0]) * t;
+      y = start[1] + (hy - 24 - start[1]) * t;
+    } else if (v < 0.78) {
+      const a = ((v - 0.25) / 0.53) * Math.PI * 4;
+      x = hx + Math.cos(a) * r;
+      y = hy - 24 - Math.sin(a) * r * 0.45;
+    } else {
+      const t = (v - 0.78) / 0.22;
+      x = hx + r + (out[0] - hx - r) * t;
+      y = hy - 24 + (out[1] - hy + 24) * t;
+    }
+    // A little up-and-down as it flaps, and the wings closing and opening.
+    y += Math.sin(v * 60) * 2;
+    return {
+      transform: [
+        { translateX: x * scale - size / 2 },
+        { translateY: y * scale - size / 2 },
+        { scaleX: 0.25 + 0.75 * Math.abs(Math.sin(v * 48)) },
+      ],
+    };
+  });
+  return (
+    <Animated.View style={[styles.effect, styles.origin, { width: size, height: size }, style]}>
+      <Svg width={size} height={size} viewBox="0 0 16 16">
+        <Path d="M8 8C5 2 0 2 1 6C1.5 8 4 9 8 8ZM8 8C11 2 16 2 15 6C14.5 8 12 9 8 8Z" fill="#FF9EC4" />
+        <Path d="M8 8C5 13 1.5 13 2 10.5C2.5 9 5 8.5 8 8ZM8 8C11 13 14.5 13 14 10.5C13.5 9 11 8.5 8 8Z" fill="#C9A8FF" />
+        <Path d="M7.4 4.5h1.2v8h-1.2Z" fill="#4A3A5C" />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** A few bubbles rising from a fish's mouth and fading near the top of the water. */
+function Bubbles({ spot, scale, onDone }: { spot: PetSpot; scale: number; onDone: () => void }) {
+  const p = useProgress(1300, onDone);
+  return (
+    <>
+      {[0, 1, 2, 3].map((i) => (
+        <Bubble key={i} p={p} index={i} spot={spot} scale={scale} />
+      ))}
+    </>
+  );
+}
+
+function Bubble({ p, index, spot, scale }: { p: SharedValue<number>; index: number; spot: PetSpot; scale: number }) {
+  const size = (5 + (index % 2) * 2.5) * scale;
+  const [mx, my] = spot.mouth;
+  const style = useAnimatedStyle(() => {
+    const v = Math.min(1, Math.max(0, (p.get() - index * 0.12) / 0.6));
+    return {
+      opacity: v === 0 ? 0 : 1 - v,
+      transform: [
+        { translateX: (mx + 8 + Math.sin(v * 9 + index) * 3) * scale - size / 2 },
+        { translateY: (my - v * 40) * scale - size / 2 },
+      ],
+    };
+  });
+  return (
+    <Animated.View style={[styles.effect, styles.origin, styles.bubbleRing, { width: size, height: size, borderRadius: size / 2 }, style]} />
+  );
+}
+
 const styles = StyleSheet.create({
   effect: { position: 'absolute' },
+  clod: { backgroundColor: '#8A6A48' },
+  bubbleRing: { borderWidth: 1.4, borderColor: 'rgba(255, 255, 255, 0.85)', backgroundColor: 'rgba(255, 255, 255, 0.2)' },
   /** Placed entirely by its transform. */
   origin: { left: 0, top: 0 },
   center: { alignItems: 'center', justifyContent: 'center' },

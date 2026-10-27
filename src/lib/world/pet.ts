@@ -726,11 +726,111 @@ const HATS: Record<string, (head: Pen) => void> = {
     head.fill(circle(9.5, -89, 1.9) + circle(12.5, -89, 1.9) + circle(11, -91.6, 1.9) + circle(11, -86.4, 1.9), '#FF9EC4');
     head.fill(circle(11, -89, 1.3), '#FFFFFF');
   },
+
+  // Souvenirs, brought home from trips (see `souvenirs` below).
+  guard(head) {
+    // A royal guard's bearskin: tall, black and furry, with a red plume and a gold band.
+    head.fill('M-19 -74C-22 -96 -16 -121 0 -122C16 -121 22 -96 19 -74Z', '#1F1B24');
+    head.fill('M-11 -112C-13 -100 -12 -86 -10 -76L-6 -76C-8 -88 -8 -102 -6 -114Z', '#3A3443', 0.8);
+    head.fill(ellipse(17.5, -97, 3.2, 9), '#E5484D');
+    head.fill(roundRect(-19.5, -78, 39, 4, 2), '#F2C14E');
+  },
+  toque(head) {
+    // A red toque with a maple leaf on its band.
+    head.fill('M-27 -72C-27 -98 27 -98 27 -72Z', '#E5484D');
+    head.fill(rect(-14, -91, 2.4, 18) + rect(-4, -94, 2.4, 21) + rect(6, -93, 2.4, 20) + rect(16, -89, 2.4, 16), darker('#E5484D', 0.1));
+    head.fill(roundRect(-29, -76, 58, 9.5, 4.7), '#FFFFFF');
+    head.fill(star(0, -71.8, 3.9, 5, 0.5) + rect(-0.4, -70, 0.8, 3), '#E5484D');
+    head.fill(circle(0, -98, 6.4), '#FFFFFF');
+  },
+  rose(head) {
+    // A flamenco rose tucked in on one side.
+    head.fill(ellipse(-27, -75, 6, 2.6) + ellipse(-15, -76, 6, 2.6), '#3E8E4B');
+    head.fill(circle(-21, -80, 8), '#D7263D');
+    head.fill(circle(-21, -80, 5.2), '#B81D33');
+    head.fill('M-24.5 -82Q-21 -87 -17 -81Q-21 -78.5 -24.5 -82Z', '#E9485F');
+    head.fill(circle(-21.5, -80.5, 1.8), '#8E1426');
+  },
+  boater(head) {
+    // A gondolier's straw boater with a red ribbon, its ends trailing.
+    head.fill(ellipse(0, -77, 31, 5.5), '#E2B95A');
+    head.fill(roundRect(-17, -94, 34, 18, 3), '#EDC96C');
+    head.fill(rect(-15, -91, 30, 0.9) + rect(-15, -88, 30, 0.9), darker('#EDC96C', 0.12), 0.7);
+    head.fill(ellipse(0, -94, 17, 3), '#F2D27E');
+    head.fill(rect(-17, -84.5, 34, 5), '#D7263D');
+    head.fill('M14 -82L22 -71.5L18.5 -70.5L12.5 -79Z', '#D7263D');
+  },
+  cowboy(head) {
+    // A cowboy hat: a dented crown and a brim that curls up at the ends.
+    head.fill('M-17 -78C-19 -94 -12 -101 -5 -97Q0 -93 5 -97C12 -101 19 -94 17 -78Z', '#C98B4E');
+    head.fill(rect(-17.4, -84, 34.8, 4), '#6B4426');
+    head.fill('M-38 -77Q-34 -70 -20 -73Q0 -77 20 -73Q34 -70 38 -77Q36 -82 26 -80Q0 -84 -26 -80Q-36 -82 -38 -77Z', '#B5793F');
+  },
+  panda(head) {
+    // A headband with round panda ears.
+    head.fill(circle(-21, -87, 9.5) + circle(21, -87, 9.5), '#2B2B30');
+    head.fill(circle(-21, -87, 4.8) + circle(21, -87, 4.8), '#4A4A55');
+    head.fill('M-28 -72C-26 -93 26 -93 28 -72L24 -72C22 -88 -22 -88 -24 -72Z', '#2B2B30');
+  },
+  cupcake(head) {
+    // A cupcake: pleated wrapper, pink frosting, sprinkles and a cherry.
+    head.fill(poly(-12, -76, 12, -76, 16, -90, -16, -90), '#F3A65A');
+    head.fill(rect(-9, -88, 1.4, 11) + rect(-3.5, -88, 1.4, 12) + rect(2, -88, 1.4, 12) + rect(7.5, -88, 1.4, 11), '#D98A3E', 0.8);
+    head.fill('M-19 -89C-19 -104 19 -104 19 -89Q0 -85 -19 -89Z', '#FF9ED2');
+    head.fill('M-11 -99C-10 -110 10 -110 11 -99Z', '#FFB3DC');
+    head.fill(rect(-10, -95, 3, 1.3) + rect(4, -97, 3, 1.3) + rect(-2, -101, 3, 1.3) + rect(9, -92, 3, 1.3), '#7FD8FF');
+    head.fill(rect(-14, -92, 3, 1.3) + rect(0, -94, 3, 1.3), '#FFE27A');
+    head.fill(circle(0, -110, 3.6), '#E5304B');
+    head.fill(circle(-1, -111.2, 1), '#FFFFFF', 0.7);
+  },
+  horns(head) {
+    // Little dragon horns on a purple headband.
+    head.fill(both('M-12 -80C-16 -92 -22 -101 -30 -106C-26 -98 -23 -88 -21 -76Z'), '#A98BE3');
+    head.fill(both('M-15.5 -86.5L-23.5 -88.5L-23 -86L-16 -84.6Z' + 'M-18.5 -94L-25.5 -97.5L-26 -95L-19.5 -92Z'), '#7E5CC4');
+    head.fill('M-28 -72C-26 -92 26 -92 28 -72L24.5 -72C22.5 -87 -22.5 -87 -24.5 -72Z', '#7A4FA0');
+  },
+  halo(head) {
+    // A golden ring floating overhead, softly glowing.
+    head.light(ellipse(0, -100, 26, 9.5), '#FFF3B0', 0.35);
+    head.fill('M-20 -100a20 6.6 0 1 0 40 0a20 6.6 0 1 0 -40 0Z' + 'M-13.5 -100a13.5 3.2 0 1 1 27 0a13.5 3.2 0 1 1 -27 0Z', '#FFC93C');
+    head.fill('M-17.5 -101.8a17.5 5 0 0 1 35 0l-2 0.5a15.5 3.8 0 0 0 -31 0Z', '#FFF0A8', 0.85);
+  },
+  shells(head) {
+    // A seashell tiara strung with pearls.
+    head.fill('M-27 -73Q0 -88 27 -73L25.5 -70Q0 -84 -25.5 -70Z', '#F7D9E3');
+    shell(head, -15, -79.5, 0.75);
+    shell(head, 15, -79.5, 0.75);
+    shell(head, 0, -84, 1);
+    head.fill(circle(-8, -82.5, 1.8) + circle(8, -82.5, 1.8) + circle(-22, -76, 1.6) + circle(22, -76, 1.6), '#FFFFFF');
+  },
+  helmet(head) {
+    // A space helmet: a glass bubble over the whole head, with a shine and a collar ring.
+    head.fill(circle(0, -60, 42), '#CFEAFF', 0.18);
+    head.fill(ring(0, -60, 42, 2.6), '#EAF6FF', 0.9);
+    head.fill('M-27 -88Q-16 -98 -2 -100Q-14 -94 -22 -84Z', '#FFFFFF', 0.75);
+    head.fill(roundRect(-26, -24, 52, 6, 3), '#D5DAE6');
+  },
+  mushroom(head) {
+    // A red toadstool cap with white spots.
+    head.fill(ellipse(0, -75, 25, 4), '#F4E8D0');
+    head.fill('M-31 -74C-31 -106 31 -106 31 -74Q0 -81 -31 -74Z', '#E5484D');
+    head.fill(circle(-15, -86, 4) + circle(3, -93, 4.8) + circle(18, -84, 3.6) + circle(-4, -80, 2.6) + circle(24, -77, 2), '#FFFFFF');
+    head.fill(ellipse(-14, -96, 6, 2.4), '#FFFFFF', 0.25);
+  },
 };
+
+/** A scallop shell, fanned out from (x, y), `k` its size. */
+function shell(pen: Pen, x: number, y: number, k: number) {
+  pen.fill(place('M0 0L-8 -9Q0 -15 8 -9Z', x, y, k), '#FFB3C7');
+  pen.fill(place('M0 0L-4 -11L-2.6 -11.6Z' + 'M0 0L0.7 -12.4L-0.7 -12.4Z' + 'M0 0L4 -11L2.6 -11.6Z', x, y, k), '#F28FAB');
+  pen.fill(place('M-3 0.5Q0 -2 3 0.5Q0 2.5 -3 0.5Z', x, y, k), '#F28FAB');
+}
 
 /** How high each hat reaches (head units), for the tap box. */
 const HAT_TOP: Record<string, number> = {
   party: -120, beanie: -105, flowers: -90, crown: -108, wizard: -124, tophat: -110, snapback: -101, bucket: -99,
+  guard: -122, toque: -105, rose: -89, boater: -97, cowboy: -101, panda: -97, cupcake: -114, horns: -106, halo: -106,
+  shells: -100, helmet: -102, mushroom: -100,
 };
 
 /** How high each species' head reaches without a hat (ears and horns included). */
@@ -1678,6 +1778,23 @@ export const PET: WorldDef = {
         { id: 'stars', label: 'Stars', emoji: '⭐' },
       ],
     },
+  ],
+
+  // Brought home from trips (src/lib/pet-adventures.ts): the first visit to each country or fantasy
+  // land earns its hat.
+  souvenirs: [
+    { from: 'united-kingdom', slot: 'hat', choice: { id: 'guard', label: "Guard's bearskin", emoji: '💂' } },
+    { from: 'canada', slot: 'hat', choice: { id: 'toque', label: 'Maple toque', emoji: '🍁' } },
+    { from: 'spain', slot: 'hat', choice: { id: 'rose', label: 'Flamenco rose', emoji: '🌹' } },
+    { from: 'italy', slot: 'hat', choice: { id: 'boater', label: "Gondolier's boater", emoji: '🛶' } },
+    { from: 'united-states', slot: 'hat', choice: { id: 'cowboy', label: 'Cowboy hat', emoji: '🤠' } },
+    { from: 'china', slot: 'hat', choice: { id: 'panda', label: 'Panda ears', emoji: '🐼' } },
+    { from: 'candy-kingdom', slot: 'hat', choice: { id: 'cupcake', label: 'Cupcake hat', emoji: '🧁' } },
+    { from: 'dragon-peaks', slot: 'hat', choice: { id: 'horns', label: 'Dragon horns', emoji: '🐉' } },
+    { from: 'cloud-kingdom', slot: 'hat', choice: { id: 'halo', label: 'Halo', emoji: '😇' } },
+    { from: 'mermaid-lagoon', slot: 'hat', choice: { id: 'shells', label: 'Seashell tiara', emoji: '🐚' } },
+    { from: 'moon-base', slot: 'hat', choice: { id: 'helmet', label: 'Space helmet', emoji: '🧑‍🚀' } },
+    { from: 'enchanted-forest', slot: 'hat', choice: { id: 'mushroom', label: 'Toadstool cap', emoji: '🍄' } },
   ],
 
   draw(level, picks, time, _steps, mood = 'awake') {

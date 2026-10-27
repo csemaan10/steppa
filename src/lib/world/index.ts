@@ -11,6 +11,7 @@ import {
   type Choice,
   type Picks,
   type Slot,
+  type Souvenir,
   type TimeOfDay,
   type WorldArt,
   type WorldDef,
@@ -29,6 +30,7 @@ export {
   type Choice,
   type Picks,
   type Slot,
+  type Souvenir,
   type WorldArt,
   type WorldDef,
   type WorldKind,
@@ -51,12 +53,19 @@ export function choiceLevel(slot: Slot, choice: Choice): number {
   return Math.max(slot.level, choice.level ?? slot.level);
 }
 
-/** Every unlocked slot's choice: the saved one if it's still valid and unlocked, else the default. */
+/**
+ * Every unlocked slot's choice: the saved one if it's still valid and unlocked, else the default. A
+ * souvenir counts whatever the level, even in a slot not unlocked yet: it was earned on a trip.
+ */
 export function resolvePicks(def: WorldDef, level: number, saved: KindPicks | undefined): Picks {
   const picks: Picks = {};
   for (const slot of def.slots) {
-    if (slot.level > level) continue;
     const wanted = saved?.[slot.id];
+    if (def.souvenirs?.some((s) => s.slot === slot.id && s.choice.id === wanted)) {
+      picks[slot.id] = wanted!;
+      continue;
+    }
+    if (slot.level > level) continue;
     const choice = slot.choices.find((c) => c.id === wanted && choiceLevel(slot, c) <= level) ?? slot.choices[0]!;
     picks[slot.id] = choice.id;
   }

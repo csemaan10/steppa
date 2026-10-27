@@ -11,6 +11,8 @@ type Mode = 'text' | 'outlined' | 'contained' | 'contained-tonal';
 type Props = {
   mode?: Mode;
   icon?: ComponentProps<typeof Icon>['source'];
+  /** After the label, e.g. a dropdown's chevron. */
+  trailingIcon?: ComponentProps<typeof Icon>['source'];
   onPress?: () => void;
   disabled?: boolean;
   /** Shows a spinner in place of the icon. */
@@ -40,6 +42,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 export function Button({
   mode = 'text',
   icon,
+  trailingIcon,
   onPress,
   disabled,
   loading,
@@ -72,10 +75,10 @@ export function Button({
         ? theme.colors.primary
         : theme.colors.secondaryContainer;
 
-  // Paper's MD3 spacing: 24 each side (12 for text buttons), 16 before a leading icon, 8 when compact.
+  // Paper's MD3 spacing: 24 each side (12 for text buttons), 16 beside an icon, 8 when compact.
   const leading = icon || loading;
   const paddingLeft = compact ? (leading && text ? 6 : 8) : leading ? (text ? 12 : 16) : text ? 12 : 24;
-  const paddingRight = compact ? 8 : text ? (leading ? 16 : 12) : 24;
+  const paddingRight = compact ? 8 : trailingIcon ? (text ? 12 : 16) : text ? (leading ? 16 : 12) : 24;
 
   const shape = useAnimatedStyle(() => ({
     borderRadius: interpolate(pressed.value, [0, 1], [ROUND, PRESSED_RADIUS]),
@@ -109,6 +112,7 @@ export function Button({
         <Text variant="labelLarge" numberOfLines={1} style={{ color }}>
           {children}
         </Text>
+        {trailingIcon ? <Icon source={trailingIcon} size={ICON_SIZE} color={color} /> : null}
       </View>
     </AnimatedPressable>
   );

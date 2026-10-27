@@ -164,6 +164,11 @@ const GLASS = {
   },
 };
 
+/** The glass colours themselves, for drawing glass in a shape of its own (see `GlassShape`). */
+export function glassTokens(theme: MD3Theme) {
+  return theme.dark ? GLASS.dark : GLASS.light;
+}
+
 /**
  * Frosted glass without a shape. Behind a pane there's only the fixed glow background, which a blur
  * wouldn't change, so a translucent fill gives the same look.

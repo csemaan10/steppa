@@ -1,0 +1,391 @@
+import { useState, type ReactNode } from 'react';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Icon, Text, TextInput } from 'react-native-paper';
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+
+import { ButtonGroup } from '@/components/button-group';
+import { NewBadge, SparkleBurst } from '@/components/game/game-fx';
+import { gameMotion } from '@/components/game/game-motion';
+import { shortSteps } from '@/components/world-parts';
+import { usePressed } from '@/hooks/use-pressed';
+import { destinationNamed } from '@/lib/pet-adventures';
+import { isFresh, type Fresh } from '@/lib/shop';
+import { choiceLevel, LEVELS, NAME_LENGTH, type Choice, type Picks, type Slot, type WorldDef } from '@/lib/world';
+import { glass, useAppTheme, withAlpha } from '@/theme';
+
+const COLUMNS = 3;
+const GAP = 10;
+/** Who your pet is rather than what it wears: kept in their own part of Looks, with its name. */
+export const IDENTITY_SLOTS = ['species'];
+
+type Part = 'wardrobe' | 'pet';
+const PARTS = [
+  { value: 'wardrobe' as const, label: 'Wardrobe', icon: 'hanger' as const },
+  { value: 'pet' as const, label: 'Name & species', icon: 'paw' as const },
+];
+
+/** Why a look can't be worn yet: shown small under it, and read out in full. */
+type Lock = { note: string; spoken: string; icon: string };
+
+function stepsLock(level: number): Lock {
+  const steps = shortSteps(LEVELS[level]!);
+  return { note: steps, spoken: `unlocks at ${steps} steps`, icon: 'lock' };
+}
+
+type Props = {
+  def: WorldDef;
+  level: number;
+  /** Destinations it has been to (src/lib/pet-adventures.ts): their souvenirs are its to wear. */
+  visited: Set<string>;
+  /** A souvenir just brought home, marked new and shelved first. */
+  newSouvenir: string | null;
+  /** What's worn now, for every unlocked slot. */
+  picks: Picks;
+  /** Milestones just reached: their looks are marked new and shelved first. */
+  fresh: Fresh | null;
+  /** The saved name, or empty. */
+  name: string;
+  /** "Your pet", shown when it has no name. */
+  placeholder: string;
+  onRename: (name: string) => void;
+  onPick: (slot: string, choice: string) => void;
+};
+
+/**
+ * Looks, in two parts. The wardrobe: every look on shelves of tiles, tap one to put it on, locked
+ * ones saying when they unlock, and souvenirs from its trips on a shelf of their own. Name &
+ * species: who your pet is, kept apart from what it wears.
+ */
+export function LooksTab({
+  def,
+  level,
+  visited,
+  newSouvenir,
+  picks,
+  fresh,
+  name,
+  placeholder,
+  onRename,
+  onPick,
+}: Props) {
+  const theme = useAppTheme();
+  const { width } = useWindowDimensions();
+  const [part, setPart] = useState<Part>('wardrobe');
+  const [draft, setDraft] = useState(name);
+  // Rounded down: three tiles that add up to exactly the row would wrap the last one on rounding.
+  const tile = Math.floor((Math.min(width, 520) - 32 - GAP * (COLUMNS - 1)) / COLUMNS) - 1;
+  const looks = def.slots.filter((s) => !IDENTITY_SLOTS.includes(s.id));
+  const unlocked = looks.filter((s) => s.level <= level);
+  const locked = looks.filter((s) => s.level > level);
+  const hasFresh = (slot: Slot) => slot.choices.some((c) => isFresh(slot, c, fresh));
+  // A milestone's new looks are the first thing you see.
+  const shelves = [...unlocked].sort((a, b) => Number(hasFresh(b)) - Number(hasFresh(a)));
+  const identity = def.slots.filter((s) => IDENTITY_SLOTS.includes(s.id) && s.level <= level);
+
+  function saveName() {
+    if (draft.trim() !== name) onRename(draft);
+  }
+
+  if (part === 'pet') {
+    return (
+      <View style={styles.page}>
+        <ButtonGroup value={part} onChange={setPart} options={PARTS} />
+        <TextInput
+          mode="outlined"
+          label="Name"
+          placeholder={placeholder}
+          value={draft}
+          onChangeText={setDraft}
+          onBlur={saveName}
+          onSubmitEditing={saveName}
+          maxLength={NAME_LENGTH}
+          returnKeyType="done"
+          style={styles.name}
+        />
+        {identity.map((slot) => (
+          <Shelf key={slot.id} title={slot.title} note={`${slot.choices.length} to choose from`}>
+            {slot.choices.map((choice) => (
+              <ItemTile
+                key={choice.id}
+                choice={choice}
+                size={tile}
+                equipped={picks[slot.id] === choice.id}
+                lock={choiceLevel(slot, choice) > level ? stepsLock(choiceLevel(slot, choice)) : null}
+                fresh={false}
+                onPress={() => onPick(slot.id, choice.id)}
+              />
+            ))}
+          </Shelf>
+        ))}
+      </View>
+    );
+  }
+
+  function renderShelf(slot: Slot) {
+    const owned = slot.choices.filter((c) => choiceLevel(slot, c) <= level).length;
+    return (
+      <Shelf key={slot.id} title={slot.title} note={`${owned} of ${slot.choices.length}`} fresh={hasFresh(slot)}>
+        {slot.choices.map((choice) => {
+          const at = choiceLevel(slot, choice);
+          return (
+            <ItemTile
+              key={choice.id}
+              choice={choice}
+              size={tile}
+              equipped={picks[slot.id] === choice.id}
+              lock={at > level ? stepsLock(at) : null}
+              fresh={isFresh(slot, choice, fresh)}
+              onPress={() => onPick(slot.id, choice.id)}
+            />
+          );
+        })}
+      </Shelf>
+    );
+  }
+
+  const souvenirs = def.souvenirs ?? [];
+  const souvenirShelf = souvenirs.length ? (
+    <Shelf
+      key="souvenirs"
+      title="Souvenirs"
+      note={`${souvenirs.filter((s) => visited.has(s.from)).length} of ${souvenirs.length}`}
+      fresh={!!newSouvenir}>
+      {souvenirs.map(({ from, slot, choice }) => {
+        const where = destinationNamed(from);
+        const owned = visited.has(from);
+        const worn = picks[slot] === choice.id;
+        return (
+          <ItemTile
+            key={choice.id}
+            choice={choice}
+            size={tile}
+            equipped={worn}
+            lock={owned ? null : { note: where?.name ?? from, spoken: `a souvenir from ${where?.name ?? from}`, icon: 'airplane' }}
+            fresh={choice.id === newSouvenir}
+            // Tap one you're wearing to take it off.
+            onPress={() => onPick(slot, worn ? 'none' : choice.id)}
+            canTakeOff
+          />
+        );
+      })}
+    </Shelf>
+  ) : null;
+  const firstShelves = newSouvenir ? [] : shelves.filter(hasFresh);
+  const restShelves = shelves.filter((slot) => !firstShelves.includes(slot));
+
+  return (
+    <View style={styles.page}>
+      <ButtonGroup value={part} onChange={setPart} options={PARTS} />
+      {firstShelves.map((slot) => renderShelf(slot))}
+      {souvenirShelf}
+      {restShelves.map((slot) => renderShelf(slot))}
+
+      {locked.length ? (
+        <>
+          <Text variant="labelLarge" style={[styles.coming, { color: theme.colors.onSurfaceVariant }]}>
+            COMING UP
+          </Text>
+          {locked.map((slot) => (
+            <Shelf key={slot.id} title={slot.title} note={`${shortSteps(LEVELS[slot.level]!)} steps`} locked>
+              {slot.choices.map((choice) => (
+                <ItemTile
+                  key={choice.id}
+                  choice={choice}
+                  size={tile}
+                  equipped={false}
+                  lock={stepsLock(choiceLevel(slot, choice))}
+                  fresh={false}
+                />
+              ))}
+            </Shelf>
+          ))}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function Shelf({
+  title,
+  note,
+  fresh,
+  locked,
+  children,
+}: {
+  title: string;
+  note: string;
+  fresh?: boolean;
+  locked?: boolean;
+  children: ReactNode;
+}) {
+  const theme = useAppTheme();
+  return (
+    <View style={styles.shelf}>
+      <View style={styles.shelfHead}>
+        {locked ? <Icon source="lock" size={16} color={theme.colors.onSurfaceVariant} /> : null}
+        <Text variant="titleMedium" style={[styles.bold, locked && { color: theme.colors.onSurfaceVariant }]}>
+          {title}
+        </Text>
+        {fresh ? <NewBadge /> : null}
+        <View style={styles.flex} />
+        <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+          {note.toUpperCase()}
+        </Text>
+      </View>
+      <View style={styles.grid}>{children}</View>
+    </View>
+  );
+}
+
+/**
+ * One look on the shelf, on the app's glass. Tapping one you own dips it, pops it and bursts a few
+ * sparkles (the pet above twirls into it); the one being worn fills with the theme's colour and is
+ * ticked; a locked one is dimmed with the steps it needs.
+ */
+function ItemTile({
+  choice,
+  size,
+  equipped,
+  lock,
+  fresh,
+  onPress,
+  canTakeOff,
+}: {
+  choice: Choice;
+  size: number;
+  equipped: boolean;
+  /** Why it can't be worn yet, or null if it can. */
+  lock: Lock | null;
+  fresh: boolean;
+  onPress?: () => void;
+  /** Tapping it while it's worn takes it off (souvenirs). */
+  canTakeOff?: boolean;
+}) {
+  const theme = useAppTheme();
+  const { pressed, onPressIn, onPressOut } = usePressed();
+  const pop = useSharedValue(1);
+  const [burst, setBurst] = useState(0);
+  const locked = lock !== null;
+
+  function press() {
+    pop.set(withSequence(withTiming(0.86, { duration: 70 }), withTiming(1, gameMotion.pop)));
+    setBurst((n) => n + 1);
+    onPress?.();
+  }
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: pop.value * interpolate(pressed.value, [0, 1], [1, 0.95]) }],
+  }));
+
+  const fill = theme.colors.primaryContainer;
+
+  return (
+    <Pressable
+      onPress={press}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      disabled={locked || (equipped && !canTakeOff) || !onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: equipped, disabled: locked }}
+      accessibilityLabel={lock ? `${choice.label}, ${lock.spoken}` : choice.label}>
+      <Animated.View
+        style={[
+          glass(theme, 'small'),
+          styles.tile,
+          { width: size },
+          equipped && {
+            experimental_backgroundImage: `linear-gradient(${fill}, ${fill})`,
+            borderColor: theme.colors.primary,
+            borderWidth: 2,
+          },
+          locked && { experimental_backgroundImage: 'none', backgroundColor: withAlpha(theme.colors.onSurface, 0.04) },
+          style,
+        ]}>
+        <View style={[styles.tileArt, locked && styles.dim]}>
+          {choice.color ? (
+            <View style={[styles.swatch, { backgroundColor: choice.color }]} />
+          ) : (
+            <Text style={styles.tileEmoji}>{choice.emoji ?? '✨'}</Text>
+          )}
+        </View>
+        <Text
+          variant="labelMedium"
+          numberOfLines={2}
+          style={[
+            styles.tileLabel,
+            { color: equipped ? theme.colors.onPrimaryContainer : theme.colors.onSurface },
+            locked && styles.dim,
+          ]}>
+          {choice.label}
+        </Text>
+        {lock ? (
+          <View style={styles.lockRow}>
+            <Icon source={lock.icon} size={11} color={theme.colors.onSurfaceVariant} />
+            <Text variant="labelSmall" numberOfLines={1} style={[styles.lockNote, { color: theme.colors.onSurfaceVariant }]}>
+              {lock.note}
+            </Text>
+          </View>
+        ) : null}
+        {equipped ? (
+          <View style={[styles.check, { backgroundColor: theme.colors.primary, borderColor: theme.colors.surface }]}>
+            <Icon source="check-bold" size={13} color={theme.colors.onPrimary} />
+          </View>
+        ) : null}
+        {fresh ? <NewBadge style={styles.newSpot} /> : null}
+        {burst ? <SparkleBurst key={burst} count={10} radius={size * 0.55} /> : null}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  page: { gap: 20 },
+  flex: { flex: 1 },
+  bold: { fontWeight: '700' },
+  coming: { letterSpacing: 1.5, marginBottom: -8 },
+  name: { backgroundColor: 'transparent' },
+  shelf: { gap: 10 },
+  shelfHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
+  tile: {
+    minHeight: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    borderRadius: 18,
+  },
+  tileArt: { height: 38, alignItems: 'center', justifyContent: 'center' },
+  tileEmoji: { fontSize: 30, lineHeight: 38 },
+  swatch: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    boxShadow: '0 1px 4px rgba(0, 0, 0, 0.25)',
+  },
+  tileLabel: { textAlign: 'center' },
+  dim: { opacity: 0.4 },
+  lockRow: { flexDirection: 'row', alignItems: 'center', gap: 3, maxWidth: '100%' },
+  lockNote: { flexShrink: 1 },
+  check: {
+    position: 'absolute',
+    top: -7,
+    right: -7,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newSpot: { position: 'absolute', top: -7, left: -5 },
+});

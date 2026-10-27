@@ -718,6 +718,9 @@ export async function updateWorld(
 /** A pet's treats: earned by walking, eaten (training tricks) and spent on adventures. */
 export type Treats = { earned: number; fed: number; spent: number; toNext: number };
 
+/** Steps walked for each treat. Must match pet_treats in migration 018. */
+export const STEPS_PER_TREAT = 2000;
+
 /** Your pet's treats (migration 018), or null without a pet or before the migration has run. */
 export async function getTreats(): Promise<Treats | null> {
   const { data, error } = await supabase.rpc('pet_treats');
@@ -729,6 +732,14 @@ export async function getTreats(): Promise<Treats | null> {
 /** Gives your pet a treat. Returns how many it has eaten now, or null if there was none to give. */
 export async function feedPet(): Promise<number | null> {
   return unwrap<number | null>(await supabase.rpc('feed_pet'));
+}
+
+/**
+ * Feeds several treats at once (migration 019), to teach a whole trick from the shop. Returns how
+ * many it has eaten now, or null if there weren't enough.
+ */
+export async function feedPetMany(amount: number): Promise<number | null> {
+  return unwrap<number | null>(await supabase.rpc('feed_pet_many', { amount }));
 }
 
 export type Adventure = { id: number; place: string; created_at: string };
@@ -746,6 +757,48 @@ export async function getAdventures(userId: string): Promise<Adventure[]> {
 /** Spends treats on an adventure to `place` (a key from src/lib/pet-adventures.ts). False if short of treats. */
 export async function goOnAdventure(place: string): Promise<boolean> {
   return unwrap<boolean>(await supabase.rpc('go_on_adventure', { destination: place }));
+}
+
+// ---------- Playdates ----------
+
+/** How giving a treat went: given, or why not (see give_treat in migration 020). */
+export type GiveTreat = 'given' | 'already' | 'no-treats' | 'no-pet' | 'not-friends';
+
+/** Gives a group mate's pet one of your treats, once a day for each friend. */
+export async function giveTreat(friendId: string): Promise<GiveTreat> {
+  return unwrap<GiveTreat>(await supabase.rpc('give_treat', { friend: friendId }));
+}
+
+/** A treat a friend gave your pet. */
+export type TreatGift = { id: number; from: string; created_at: string };
+
+/** Treats friends have given your pet, newest first; empty before migration 020. */
+export async function getTreatGifts(userId: string): Promise<TreatGift[]> {
+  const { data, error } = await supabase
+    .from('pet_gifts')
+    .select('id, created_at, giver:profiles!pet_gifts_from_user_fkey(display_name)')
+    .eq('to_user', userId)
+    .order('id', { ascending: false })
+    .limit(20);
+  if (error || !data) return [];
+  return (data as unknown as { id: number; created_at: string; giver: { display_name: string } | null }[]).map((g) => ({
+    id: g.id,
+    from: g.giver?.display_name ?? 'A friend',
+    created_at: g.created_at,
+  }));
+}
+
+/** When you last gave this friend's pet a treat, or null if never (or before migration 020). */
+export async function lastTreatGiven(fromId: string, toId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('pet_gifts')
+    .select('created_at')
+    .eq('from_user', fromId)
+    .eq('to_user', toId)
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return error || !data ? null : (data as { created_at: string }).created_at;
 }
 
 // ---------- Account ----------

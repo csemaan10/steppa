@@ -4,7 +4,7 @@
 // runs along the bottom, with its top edge around y = 166; landmarks sit on y = 160, mostly to the
 // right, leaving the left third clear for the character.
 
-export type Ground = 'grass' | 'sand' | 'stone' | 'path' | 'desert';
+export type Ground = 'grass' | 'sand' | 'stone' | 'path' | 'desert' | 'candy' | 'cloud' | 'seabed' | 'moon' | 'rock';
 
 export type Feature =
   // Backdrops
@@ -51,7 +51,32 @@ export type Feature =
   | 'balloons'
   | 'cadillacs'
   | 'canyon'
-  | 'diner';
+  | 'diner'
+  // Fantasy lands, for the pet's adventures
+  | 'candyhills'
+  | 'gumdrops'
+  | 'lollipops'
+  | 'candycanes'
+  | 'chocriver'
+  | 'cupcakecastle'
+  | 'dragonnest'
+  | 'crystals'
+  | 'wizardtower'
+  | 'skycastle'
+  | 'rainbow'
+  | 'floatisles'
+  | 'coral'
+  | 'kelp'
+  | 'wreck'
+  | 'shellpalace'
+  | 'bubbles'
+  | 'craters'
+  | 'rocket'
+  | 'planet'
+  | 'mushrooms'
+  | 'fairylights'
+  | 'well'
+  | 'unicorn';
 
 /** A stop's place: what the character stands on, then what's around them, drawn back to front. */
 export type Scene = readonly [Ground, ...Feature[]];
@@ -83,6 +108,17 @@ export const SKY: Record<TimeOfDay, readonly [string, string]> = {
   dusk: ['#3D3A88', '#F49364'],
   night: ['#0A1230', '#27366C'],
 };
+
+/** The sea floor and the moon have their own skies whatever the hour; candy land is pink by day. */
+const OTHER_SKY: Partial<Record<Ground, readonly [string, string]>> = {
+  seabed: ['#46C3E0', '#0F4F8A'],
+  moon: ['#05081C', '#232B5C'],
+};
+
+function skyFor(kind: Ground, time: TimeOfDay): readonly [string, string] {
+  if (kind === 'candy' && time === 'day') return ['#FF9FD2', '#FFE4F2'];
+  return OTHER_SKY[kind] ?? SKY[time];
+}
 
 /**
  * Mixed into every colour of the place (not the sky, the sun or moon, or lights), so the whole scene
@@ -214,7 +250,24 @@ class Painter {
 
 // ---------- Sky ----------
 
-function sky(p: Painter) {
+function sky(p: Painter, kind: Ground) {
+  if (kind === 'moon') {
+    // Space: lots of stars, and the Earth hanging where the moon would be.
+    const stars: string[] = [];
+    for (let i = 0; i < 70; i++) stars.push(circle(p.between(0, W), p.between(4, 130), p.between(0.4, 1.3)));
+    p.fill(stars.join(''), '#FFFFFF', 0.9);
+    p.fill(circle(300, 44, 32), '#7FB8FF', 0.15);
+    p.fill(circle(300, 44, 18), '#3E7FD8');
+    p.fill(ellipse(294, 38, 7, 5) + ellipse(306, 50, 6, 4) + ellipse(299, 52, 3, 2), '#5DBB63');
+    p.fill(ellipse(296, 30, 8, 2), '#FFFFFF', 0.7);
+    return;
+  }
+  if (kind === 'seabed') {
+    // Sunlight slanting down through the water, and a few bubbles on their way up.
+    p.fill(poly(40, 0, 70, 0, 150, 160, 110, 160) + poly(170, 0, 190, 0, 250, 160, 220, 160), '#FFFFFF', 0.1);
+    p.fill(poly(280, 0, 300, 0, 340, 160, 316, 160), '#FFFFFF', 0.08);
+    return;
+  }
   if (p.time === 'night') {
     const stars: string[] = [];
     for (let i = 0; i < 46; i++) stars.push(circle(p.between(0, W), p.between(4, 120), p.between(0.4, 1.2)));
@@ -826,7 +879,407 @@ function diner(p: Painter) {
   }
 }
 
+// ---------- Fantasy lands ----------
+// For the pet's adventures: candy, dragons, clouds, the sea floor, the moon and an enchanted forest.
+
+/** A gumdrop-ish mound on `base`, `r` across each way and about `h` tall. */
+function mound(cx: number, base: number, r: number, h: number): string {
+  const c = base - h * 1.33;
+  return `M${n(cx - r)} ${n(base)}C${n(cx - r)} ${n(c)} ${n(cx + r)} ${n(c)} ${n(cx + r)} ${n(base)}Z`;
+}
+
+/** The top half of a ring: a band between radius `inner` and `outer`, standing on `cy`. */
+function halfRing(cx: number, cy: number, outer: number, inner: number): string {
+  return (
+    `M${n(cx - outer)} ${n(cy)}A${n(outer)} ${n(outer)} 0 0 1 ${n(cx + outer)} ${n(cy)}` +
+    `H${n(cx + inner)}A${n(inner)} ${n(inner)} 0 0 0 ${n(cx - inner)} ${n(cy)}Z`
+  );
+}
+
+/** A five-pointed star (a starfish, a sparkle on a hat). */
+function star(cx: number, cy: number, outer: number, inner: number): string {
+  const pts: number[] = [];
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? inner : outer;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    pts.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+  return poly(...pts);
+}
+
+function candyhills(p: Painter) {
+  p.fill('M0 136C60 116 120 130 180 122S300 108 360 124V200H0Z', '#FFD1E6');
+  p.fill('M0 152C70 136 140 150 220 143S320 136 360 147V200H0Z', '#C9F2D9');
+}
+
+function gumdrops(p: Painter) {
+  const colors = ['#FF6B9A', '#7ED957', '#FFD54A', '#6EC6FF', '#B98CFF'];
+  let x = 150;
+  for (let i = 0; x < 340; i++) {
+    const r = p.between(14, 22);
+    const cx = x + r;
+    p.fill(mound(cx, 162, r, r * 1.2), colors[i % colors.length]!);
+    p.fill(ellipse(cx - r * 0.38, 162 - r * 0.85, r * 0.16, r * 0.26), '#FFFFFF', 0.55);
+    x = cx + r + p.between(4, 12);
+  }
+}
+
+function lollipops(p: Painter) {
+  const pops: [number, number, number, string, string][] = [
+    [214, 62, 18, '#FF5C8A', '#FFFFFF'],
+    [278, 80, 22, '#6EC6FF', '#FFFFFF'],
+    [334, 54, 15, '#FFD54A', '#FF8A3D'],
+  ];
+  for (const [x, h, r, a, b] of pops) {
+    p.fill(rect(x - 2, BASE - h, 4, h), '#F4F1EA');
+    const cy = BASE - h - r + 4;
+    p.fill(circle(x, cy, r), a);
+    p.fill(ring(x, cy, r * 0.74, r * 0.16) + ring(x, cy, r * 0.4, r * 0.15), b, 0.9);
+    p.fill(ellipse(x - r * 0.4, cy - r * 0.45, r * 0.2, r * 0.13), '#FFFFFF', 0.5);
+  }
+}
+
+function candycanes(p: Painter) {
+  for (const [x, top, r] of [
+    [180, 104, 9],
+    [246, 92, 11],
+    [318, 110, 8],
+  ] as const) {
+    const w = 7;
+    const outer = r + w / 2;
+    const inner = r - w / 2;
+    // Up the stick, over the hook and down its end, back under the hook and down the stick.
+    p.fill(
+      `M${n(x - w / 2)} ${BASE}V${n(top)}A${n(outer)} ${n(outer)} 0 0 1 ${n(x - w / 2 + 2 * outer)} ${n(top)}` +
+        `V${n(top + 9)}h${n(-w)}V${n(top)}A${n(inner)} ${n(inner)} 0 0 0 ${n(x + w / 2)} ${n(top)}V${BASE}Z`,
+      '#FFFFFF'
+    );
+    const stripes: string[] = [];
+    for (let y = top + 4; y < BASE - 2; y += 11) stripes.push(poly(x - w / 2, y + 4, x + w / 2, y, x + w / 2, y + 4, x - w / 2, y + 8));
+    p.fill(stripes.join(''), '#E5304B');
+  }
+}
+
+function chocriver(p: Painter) {
+  p.fill(rect(0, 138, W, 14), '#FFC9E3');
+  p.fill('M0 142C90 138 180 148 270 141S340 138 360 142V172H0Z', '#7B4A2B');
+  p.fill('M0 150C90 146 180 156 270 149S340 146 360 150V153C340 149 270 152 180 159S90 149 0 153Z', '#9A6440', 0.8);
+  const glints: string[] = [];
+  for (let i = 0; i < 10; i++) glints.push(ellipse(p.between(0, W), p.between(155, 165), p.between(5, 11), 1));
+  p.fill(glints.join(''), '#B07A4F', 0.75);
+}
+
+function cupcake(p: Painter, cx: number, w: number, h: number, frosting: string) {
+  const top = BASE - h;
+  p.fill(poly(cx - w / 2, top, cx + w / 2, top, cx + w * 0.4, BASE, cx - w * 0.4, BASE), '#F3A65A');
+  const pleats: string[] = [];
+  for (let x = cx - w * 0.36; x < cx + w * 0.36; x += 7) pleats.push(rect(x, top + 3, 1.6, h - 5));
+  p.fill(pleats.join(''), '#D98A3E', 0.8);
+  p.fill(mound(cx, top + 4, w * 0.58, h * 0.85), frosting);
+  p.fill(mound(cx, top - h * 0.32, w * 0.38, h * 0.55), frosting);
+  p.fill(ellipse(cx - w * 0.22, top - h * 0.3, w * 0.1, h * 0.1), '#FFFFFF', 0.45);
+  p.fill(circle(cx, top - h * 0.86, Math.max(3, w * 0.08)), '#E5304B');
+}
+
+function cupcakecastle(p: Painter) {
+  cupcake(p, 196, 40, 32, '#B9F18C');
+  cupcake(p, 312, 40, 32, '#7FD8FF');
+  cupcake(p, 254, 72, 48, '#FF9ED2');
+  p.fill(arch(246, 136, 16, 24), '#7A4A2A');
+  p.window(arch(226, 128, 7, 10));
+  p.window(arch(276, 128, 7, 10));
+}
+
+function dragonnest(p: Painter) {
+  p.fill(poly(184, BASE, 206, 130, 258, 118, 318, 124, 352, BASE), '#8C8197');
+  p.fill(poly(206, 130, 258, 118, 318, 124, 300, 132, 250, 128), '#A49AAE');
+  p.fill(ellipse(268, 120, 38, 11), '#8A5A33');
+  const twigs: string[] = [];
+  for (let i = 0; i < 9; i++) twigs.push(rect(234 + i * 8, 116 + (i % 3), 10, 1.6));
+  p.fill(twigs.join(''), '#6B4426');
+  const eggs: [number, number, number, string][] = [
+    [254, 108, 9, '#9FD7A7'],
+    [270, 105, 10, '#F6C76E'],
+    [285, 109, 8, '#C79BF2'],
+  ];
+  for (const [x, y, r, c] of eggs) {
+    p.fill(ellipse(x, y, r, r * 1.3), c);
+    p.fill(circle(x - r * 0.3, y - r * 0.2, r * 0.18) + circle(x + r * 0.3, y + r * 0.35, r * 0.15), mix(c, '#000000', 0.25), 0.8);
+  }
+  p.fill(ellipse(268, 123, 38, 5), '#6B4426');
+}
+
+function crystals(p: Painter) {
+  const shard = (x: number, w: number, h: number, tilt: number) =>
+    poly(x - w / 2, BASE, x - w / 2 + tilt, BASE - h * 0.78, x + tilt, BASE - h, x + w / 2 + tilt, BASE - h * 0.78, x + w / 2, BASE);
+  const facet = (x: number, w: number, h: number, tilt: number) =>
+    poly(x - w / 2, BASE, x - w / 2 + tilt, BASE - h * 0.78, x + tilt, BASE - h, x + tilt * 0.4, BASE);
+  const clusters: [number, string][] = [
+    [204, '#A77BF3'],
+    [282, '#6FE3F2'],
+    [336, '#F07BD8'],
+  ];
+  for (const [cx, color] of clusters) {
+    for (const [dx, w, h, tilt] of [
+      [-12, 12, 34, -6],
+      [0, 16, 56, 0],
+      [12, 11, 30, 7],
+    ] as const) {
+      p.fill(shard(cx + dx, w, h, tilt), color);
+      p.fill(facet(cx + dx, w, h, tilt), '#FFFFFF', 0.3);
+    }
+    // They glow after dark, and on the moon, where there's no daylight to speak of.
+    if (p.night || p.dusk || !p.tint) p.light(circle(cx, BASE - 26, 30), color, 0.22);
+  }
+}
+
+function wizardtower(p: Painter) {
+  p.fill(rect(250, 70, 40, 90), '#9A92A8');
+  const stones: string[] = [];
+  for (let y = 78; y < BASE; y += 10) stones.push(rect(250, y, 40, 1));
+  p.fill(stones.join(''), '#7F778F', 0.7);
+  p.fill(rect(244, 66, 52, 8), '#857C95');
+  p.fill(poly(242, 68, 270, 14, 298, 68), '#5B3FA0');
+  p.fill(star(262, 46, 4, 1.8) + star(278, 32, 3, 1.3) + star(274, 58, 3.2, 1.4), '#FFE066');
+  p.fill(poly(270, 14, 270, 4, 284, 8), '#FFD54A');
+  p.window(arch(263, 86, 14, 18));
+  p.window(arch(263, 118, 14, 18));
+  p.fill(arch(262, 140, 16, 20), '#5A4232');
+}
+
+function skycastle(p: Painter) {
+  p.fill(rect(212, 104, 96, 56), '#F4F1FA');
+  p.fill(rect(202, 82, 24, 78) + rect(294, 82, 24, 78) + rect(248, 66, 24, 44), '#ECE8F5');
+  p.fill(poly(198, 84, 214, 54, 230, 84) + poly(290, 84, 306, 54, 322, 84) + poly(244, 68, 260, 36, 276, 68), '#5B8DEF');
+  p.fill(poly(214, 54, 214, 44, 224, 48) + poly(306, 54, 306, 44, 316, 48) + poly(260, 36, 260, 24, 272, 29), '#FFD54A');
+  for (const x of [210, 302, 254]) p.window(arch(x, 96, 8, 12));
+  p.fill(arch(250, 132, 20, 28), '#B9A9D9');
+  // Cloud puffs round its foot.
+  p.fill(circle(214, 160, 14) + circle(240, 162, 12) + circle(282, 162, 13) + circle(308, 160, 15), '#FFFFFF');
+}
+
+function rainbow(p: Painter) {
+  const bands = ['#FF5C5C', '#FF9F43', '#FFD93D', '#6BCB77', '#4D96FF', '#9B5DE5'];
+  bands.forEach((color, i) => p.fill(halfRing(250, 166, 118 - i * 8, 110 - i * 8), color, 0.85));
+}
+
+function floatisles(p: Painter) {
+  const isles: [number, number, number][] = [
+    [188, 92, 46],
+    [268, 64, 58],
+    [330, 104, 38],
+  ];
+  for (const [cx, y, w] of isles) {
+    p.fill(poly(cx - w / 2, y, cx + w / 2, y, cx + w * 0.16, y + w * 0.55, cx - w * 0.08, y + w * 0.46), '#9C8C7A');
+    p.fill(poly(cx - w / 2, y, cx - w * 0.1, y, cx - w * 0.08, y + w * 0.46), '#87786A');
+    p.fill(ellipse(cx, y, w / 2, 5), '#7CCB6E');
+    p.fill(rect(cx + w * 0.12, y - 14, 2.4, 12), '#6B4F3A');
+    p.fill(circle(cx + w * 0.13, y - 17, 7), '#5DA454');
+  }
+  // A waterfall that falls off the edge and never lands.
+  p.fill(rect(282, 68, 5, 70), '#BFE6FF', 0.8);
+  p.fill(ellipse(284, 140, 10, 4), '#FFFFFF', 0.6);
+}
+
+function coral(p: Painter) {
+  const reefs: [number, string, number][] = [
+    [186, '#FF7A8A', 30],
+    [234, '#FFB347', 40],
+    [296, '#B784F7', 48],
+    [344, '#5ED6C6', 32],
+  ];
+  for (const [x, color, h] of reefs) {
+    const blobs: string[] = [rect(x - 3, BASE - h * 0.6, 6, h * 0.6)];
+    for (let i = 0; i < 5; i++) {
+      const bx = x + p.between(-h * 0.35, h * 0.35);
+      const by = BASE - h * p.between(0.45, 1);
+      blobs.push(rect(bx - 2, by, 4, BASE - by), circle(bx, by, p.between(4, 7)));
+    }
+    p.fill(blobs.join(''), color);
+  }
+}
+
+function kelp(p: Painter) {
+  for (const [x, h] of [
+    [150, 110],
+    [172, 86],
+    [204, 128],
+    [232, 74],
+    [262, 116],
+    [296, 92],
+    [326, 120],
+    [350, 96],
+  ] as const) {
+    p.fill(
+      `M${x} 168C${x - 12} ${168 - h * 0.35} ${x + 12} ${168 - h * 0.65} ${x} ${168 - h}` +
+        `L${x + 6} ${168 - h}C${x + 18} ${168 - h * 0.65} ${x - 6} ${168 - h * 0.35} ${x + 6} 168Z`,
+      '#2E9E6B',
+      0.9
+    );
+  }
+}
+
+function wreck(p: Painter) {
+  p.fill(poly(200, BASE, 214, 128, 330, 118, 346, 150, 300, 166), '#7A5636');
+  p.fill(poly(214, 128, 330, 118, 332, 124, 216, 134), '#5E4129');
+  p.fill(poly(268, 124, 272, 124, 286, 58, 282, 58), '#6A4A2E');
+  p.fill(poly(286, 64, 318, 80, 288, 96), '#E9E1CF', 0.8);
+  for (const x of [236, 266, 296]) {
+    p.fill(circle(x, 140 - (x - 236) * 0.08, 6), '#C9A86A');
+    p.fill(circle(x, 140 - (x - 236) * 0.08, 4), '#2B2219');
+  }
+}
+
+function shellpalace(p: Painter) {
+  p.fill(rect(206, 124, 10, 36) + rect(308, 124, 10, 36), '#F4E6E0');
+  p.fill('M212 160C212 82 312 82 312 160Z', '#F7B8C8');
+  const ridges: string[] = [];
+  for (let i = 1; i < 8; i++) {
+    const a = Math.PI + (i * Math.PI) / 8;
+    ridges.push(poly(262, 158, 262 + Math.cos(a) * 46 - 2, 160 + Math.sin(a) * 62, 262 + Math.cos(a) * 46 + 2, 160 + Math.sin(a) * 62));
+  }
+  p.fill(ridges.join(''), '#E896AE');
+  p.fill(circle(262, 98, 9), '#FFF6F0');
+  p.fill(circle(259, 95, 3), '#FFFFFF', 0.8);
+  p.fill(arch(254, 136, 16, 24), '#B5677E');
+}
+
+function bubbles(p: Painter) {
+  const rings: string[] = [];
+  for (let i = 0; i < 16; i++) {
+    const r = p.between(2, 5);
+    rings.push(ring(p.between(140, W), p.between(20, 150), r, r * 0.3));
+  }
+  p.fill(rings.join(''), '#E6FAFF', 0.75);
+}
+
+function craters(p: Painter) {
+  p.fill(ellipse(232, 154, 64, 10), '#A4A7B6');
+  p.fill(ellipse(232, 152, 50, 6.5), '#8F92A3');
+  p.fill(ellipse(334, 158, 30, 6), '#A4A7B6');
+  p.fill(ellipse(334, 157, 22, 4), '#8F92A3');
+  // Somebody got here first.
+  p.fill(rect(292, 104, 2, 52), '#DADDE6');
+  p.fill(rect(294, 104, 26, 16), '#E5484D');
+  p.fill(circle(307, 112, 4.5), '#FFFFFF');
+}
+
+function unicorn(p: Painter) {
+  const white = '#FFFFFF';
+  // Facing right, mid-graze-break, with a rainbow mane and tail.
+  p.fill(circle(246, 128, 5) + circle(242, 136, 4.5) + circle(243, 144, 4), '#B98CFF');
+  p.fill(rect(252, 134, 5, 26) + rect(262, 138, 5, 22) + rect(278, 138, 5, 22) + rect(288, 134, 5, 26), white);
+  p.fill(rect(252, 157, 5, 3) + rect(262, 157, 5, 3) + rect(278, 157, 5, 3) + rect(288, 157, 5, 3), '#D9C2F0');
+  p.fill(ellipse(272, 132, 25, 12), white);
+  p.fill(poly(284, 130, 294, 104, 306, 108, 296, 136), white);
+  p.fill(ellipse(304, 106, 11, 7), white);
+  p.fill(poly(298, 101, 301, 92, 304, 101), white);
+  p.fill(poly(302, 100, 306, 100, 312, 80), '#FFD54A');
+  p.fill(circle(290, 108, 4.5), '#FF8FB8');
+  p.fill(circle(287, 116, 4.5), '#B98CFF');
+  p.fill(circle(285, 124, 4.5), '#7FD8FF');
+  p.fill(circle(307, 104, 1.4), '#3A2F25');
+}
+
+function rocket(p: Painter) {
+  p.fill(rect(196, 152, 68, 8), '#6E7385');
+  p.fill(poly(208, 152, 216, 120, 220, 152) + poly(252, 152, 244, 120, 240, 152), '#E5484D');
+  p.fill(rect(218, 64, 24, 88), '#F2F2F7');
+  p.fill(poly(218, 64, 230, 32, 242, 64), '#E5484D');
+  p.fill(rect(218, 112, 24, 6), '#E5484D');
+  p.fill(circle(230, 86, 7), '#B0B5C2');
+  p.fill(circle(230, 86, 5), '#5BC0EB');
+  p.fill(rect(226, 152, 8, 4), '#FF9F43');
+}
+
+function planet(p: Painter) {
+  const cx = 214;
+  const cy = 54;
+  // The ring behind, the planet, then the near half of the ring over it.
+  p.fill(
+    `M${cx - 42} ${cy}a42 9 0 1 0 84 0a42 9 0 1 0 -84 0Z` + `M${cx - 32} ${cy}a32 6 0 1 1 64 0a32 6 0 1 1 -64 0Z`,
+    '#F3D9A4',
+    0.9
+  );
+  p.fill(circle(cx, cy, 22), '#E8B86A');
+  p.fill(rect(cx - 22, cy - 8, 44, 4) + rect(cx - 21, cy + 4, 42, 3), '#D19A4C', 0.6);
+  p.fill(`M${cx - 42} ${cy}A42 9 0 0 0 ${cx + 42} ${cy}L${cx + 32} ${cy}A32 6 0 0 1 ${cx - 32} ${cy}Z`, '#F3D9A4', 0.95);
+}
+
+function mushrooms(p: Painter) {
+  const houses: [number, number, number][] = [
+    [204, 46, 50],
+    [272, 34, 38],
+    [326, 26, 30],
+  ];
+  for (const [x, w, h] of houses) {
+    p.fill(poly(x - w * 0.3, BASE, x - w * 0.24, BASE - h * 0.62, x + w * 0.24, BASE - h * 0.62, x + w * 0.3, BASE), '#F4E8D0');
+    p.fill(mound(x, BASE - h * 0.58, w * 0.62, h * 0.55), '#E5484D');
+    p.fill(
+      circle(x - w * 0.28, BASE - h * 0.78, w * 0.08) + circle(x + w * 0.12, BASE - h * 0.95, w * 0.1) + circle(x + w * 0.36, BASE - h * 0.72, w * 0.06),
+      '#FFFFFF'
+    );
+    p.fill(arch(x - w * 0.09, BASE - h * 0.34, w * 0.18, h * 0.34), '#8A5A33');
+    p.window(circle(x + w * 0.17, BASE - h * 0.42, w * 0.07));
+  }
+}
+
+function fairylights(p: Painter) {
+  const colors = ['#FFD54A', '#FF8FA3', '#7FD8FF', '#B9F18C'];
+  const lit = p.night || p.dusk;
+  for (let i = 0; i < 22; i++) {
+    const x = 150 + i * 10 + p.between(-3, 3);
+    const y = 70 + Math.sin(i * 0.55) * 14 + p.between(-4, 4);
+    const color = colors[i % colors.length]!;
+    if (lit) {
+      p.light(circle(x, y, 2.2), color);
+      p.light(circle(x, y, 7), color, 0.25);
+    } else p.fill(circle(x, y, 2), color);
+  }
+  const sparkles: string[] = [];
+  for (let i = 0; i < 8; i++) sparkles.push(star(p.between(150, W), p.between(30, 140), 3, 1.1));
+  if (lit) p.light(sparkles.join(''), '#FFF3B0');
+  else p.fill(sparkles.join(''), '#FFFFFF', 0.85);
+}
+
+function well(p: Painter) {
+  p.fill(rect(240, 130, 60, 30), '#A79C8F');
+  const joints: string[] = [];
+  for (let y = 136; y < BASE; y += 7) joints.push(rect(240, y, 60, 1));
+  for (let y = 130; y < BASE; y += 7) for (let x = 244 + ((y / 7) % 2) * 6; x < 300; x += 12) joints.push(rect(x, y, 1, 7));
+  p.fill(joints.join(''), '#8A7F72', 0.7);
+  p.fill(ellipse(270, 130, 30, 4), '#4A4038');
+  p.fill(rect(244, 94, 5, 36) + rect(291, 94, 5, 36), '#7A5636');
+  p.fill(poly(232, 98, 270, 72, 308, 98), '#B5523B');
+  p.fill(rect(269, 98, 2, 18), '#C9B48C');
+  p.fill(rect(264, 116, 12, 9), '#8A5A33');
+}
+
 const FEATURES: Record<Feature, (p: Painter, index: number) => void> = {
+  candyhills,
+  gumdrops,
+  lollipops,
+  candycanes,
+  chocriver,
+  cupcakecastle,
+  dragonnest,
+  crystals,
+  wizardtower,
+  skycastle,
+  rainbow,
+  floatisles,
+  coral,
+  kelp,
+  wreck,
+  shellpalace,
+  bubbles,
+  craters,
+  rocket,
+  planet,
+  mushrooms,
+  fairylights,
+  well,
+  unicorn,
   greatwall,
   pagoda,
   mesas,
@@ -882,6 +1335,11 @@ const GROUND_COLOR: Record<Ground, string> = {
   sand: '#EED7A1',
   desert: '#E8C58F',
   stone: '#CDBFA9',
+  candy: '#FFC2DE',
+  cloud: '#FFFFFF',
+  seabed: '#E8D39A',
+  moon: '#BFC2CE',
+  rock: '#6E5F5A',
 };
 
 function ground(p: Painter, kind: Ground, rise: number) {
@@ -901,6 +1359,61 @@ function ground(p: Painter, kind: Ground, rise: number) {
     if (rise <= 0) p.fill('M0 164C80 158 160 168 240 163S330 158 360 163V170H0Z', '#FFFFFF', 0.55);
     p.fill(top, '#EED7A1');
     p.fill(low, '#E3C789');
+    return;
+  }
+  if (kind === 'candy') {
+    p.fill(top, '#FFC2DE');
+    p.fill(low, '#F7A3CB');
+    const colors = ['#FFD54A', '#7FD8FF', '#B9F18C', '#FFFFFF', '#B98CFF'];
+    for (let i = 0; i < 30; i++) {
+      p.fill(ellipse(p.between(0, W), p.between(172, 198), p.between(1.6, 2.6), 0.9), colors[i % colors.length]!);
+    }
+    return;
+  }
+  if (kind === 'cloud') {
+    p.fill(top, '#FFFFFF');
+    const puffs: string[] = [];
+    for (let x = -10; x < W + 20; x += p.between(18, 28)) puffs.push(circle(x, 168, p.between(9, 15)));
+    p.fill(puffs.join(''), '#FFFFFF');
+    p.fill(low, '#E6F0FC');
+    return;
+  }
+  if (kind === 'seabed') {
+    p.fill(top, '#E8D39A');
+    p.fill(low, '#D9BE7E');
+    const pebbles: string[] = [];
+    for (let i = 0; i < 12; i++) pebbles.push(ellipse(p.between(0, W), p.between(174, 198), p.between(1.5, 3), p.between(1, 1.8)));
+    p.fill(pebbles.join(''), '#BFA06A', 0.7);
+    p.fill(star(p.between(140, 200), p.between(180, 192), 6, 2.4) + star(p.between(300, 340), p.between(184, 194), 5, 2), '#FF8A5B');
+    return;
+  }
+  if (kind === 'rock') {
+    p.fill(top, '#6E5F5A');
+    p.fill(low, '#5A4C48');
+    const cracks: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const x = p.between(0, W);
+      const y = p.between(174, 194);
+      cracks.push(poly(x, y, x + 8, y - 2, x + 16, y + 1, x + 8, y + 0.8));
+    }
+    // Embers in the cracks, brighter after dark.
+    if (p.night || p.dusk) p.light(cracks.join(''), '#FF8A3D', 0.9);
+    else p.fill(cracks.join(''), '#D9682B', 0.8);
+    const rocks: string[] = [];
+    for (let i = 0; i < 8; i++) rocks.push(ellipse(p.between(0, W), p.between(172, 198), p.between(2, 4), p.between(1.2, 2)));
+    p.fill(rocks.join(''), '#4A3E3A');
+    return;
+  }
+  if (kind === 'moon') {
+    p.fill(top, '#BFC2CE');
+    p.fill(low, '#A9ACBA');
+    for (let i = 0; i < 7; i++) {
+      const x = p.between(0, W);
+      const y = p.between(176, 196);
+      const r = p.between(4, 9);
+      p.fill(ellipse(x, y, r, r * 0.35), '#9A9DAD');
+      p.fill(ellipse(x, y - r * 0.12, r * 0.8, r * 0.22), '#8A8D9D');
+    }
     return;
   }
   if (kind === 'desert') {
@@ -950,11 +1463,12 @@ function ground(p: Painter, kind: Ground, rise: number) {
 export function drawScene(scene: Scene, time: TimeOfDay, name: string, rise = 0): SceneArt {
   // The sky draws from its own random stream (night has stars, day has clouds), so the place itself
   // comes out the same at every hour.
-  const p = new Painter(time, seeded(hash(`${name}:sky`)));
-  sky(p);
-  p.rand = seeded(hash(name));
-  p.tint = TINT[time];
   const [kind, ...features] = scene;
+  const p = new Painter(time, seeded(hash(`${name}:sky`)));
+  sky(p, kind);
+  p.rand = seeded(hash(name));
+  // Space looks the same at any hour.
+  p.tint = kind === 'moon' ? null : TINT[time];
   const seen = new Map<Feature, number>();
   for (const f of features) {
     const index = seen.get(f) ?? 0;
@@ -968,5 +1482,5 @@ export function drawScene(scene: Scene, time: TimeOfDay, name: string, rise = 0)
   const place = lift(p.shapes.splice(0));
   const placeLights = lift(p.lights.splice(0));
   ground(p, kind, rise);
-  return { sky: SKY[time], shapes: [...place, ...p.shapes, ...placeLights, ...p.lights] };
+  return { sky: skyFor(kind, time), shapes: [...place, ...p.shapes, ...placeLights, ...p.lights] };
 }

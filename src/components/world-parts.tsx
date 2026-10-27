@@ -8,22 +8,21 @@ import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
 
 import { Button } from '@/components/button';
 import { usePressed } from '@/hooks/use-pressed';
-import type { World } from '@/lib/api';
 import {
   choiceLevel,
-  describeUnlock,
   LEVELS,
   MAX_LEVEL,
   stageOf,
   unlockAt,
   type Choice,
   type Slot,
+  type Unlock,
   type WorldDef,
 } from '@/lib/world';
 import { glass, glassCard, useAppTheme, withAlpha } from '@/theme';
@@ -140,8 +139,12 @@ function ChoiceChip({
 
 const COLLAPSED_BEFORE = 1;
 const COLLAPSED_AFTER = 3;
+const NODE = 34;
 
-/** Every milestone with what it brings: the ones reached ticked, the next one ringed. */
+/**
+ * Every milestone as a road of levels: the ones reached filled in, the next one pulsing, and what
+ * each brings beside it as little reward chips.
+ */
 export function MilestoneList({ def, level }: { def: WorldDef; level: number }) {
   const theme = useAppTheme();
   const [expanded, setExpanded] = useState(false);
@@ -152,39 +155,19 @@ export function MilestoneList({ def, level }: { def: WorldDef; level: number }) 
 
   return (
     <Card mode="contained" style={glassCard(theme)}>
-      <Card.Content style={styles.milestones}>
-        {shown.map((l) => {
-          const reached = l <= level;
-          const next = l === level + 1;
-          const unlock = unlockAt(def, l);
-          return (
-            <Animated.View key={l} entering={folded(l) ? undefined : FadeIn.duration(180)} style={styles.milestone}>
-              <View
-                style={[
-                  styles.dot,
-                  reached
-                    ? { backgroundColor: theme.colors.primary }
-                    : { borderWidth: 2, borderColor: next ? theme.colors.primary : theme.colors.outlineVariant },
-                ]}>
-                {reached ? (
-                  <Icon source="check" size={14} color={theme.colors.onPrimary} />
-                ) : next ? null : (
-                  <Icon source="lock-outline" size={12} color={theme.colors.onSurfaceVariant} />
-                )}
-              </View>
-              <View style={styles.flex}>
-                <Text
-                  variant="titleSmall"
-                  style={[styles.bold, !reached && !next && { color: theme.colors.onSurfaceVariant }]}>
-                  {shortSteps(unlock.steps)} steps
-                </Text>
-                <Text variant="bodySmall" numberOfLines={2} style={{ color: theme.colors.onSurfaceVariant }}>
-                  {describeUnlock(unlock)}
-                </Text>
-              </View>
-            </Animated.View>
-          );
-        })}
+      <Card.Content style={styles.road}>
+        {shown.map((l, i) => (
+          <MilestoneStop
+            key={l}
+            level={l}
+            state={l <= level ? 'reached' : l === level + 1 ? 'next' : 'locked'}
+            unlock={unlockAt(def, l)}
+            railAbove={i > 0}
+            railBelow={i < shown.length - 1}
+            nextReached={l + 1 <= level}
+            appear={!folded(l)}
+          />
+        ))}
         <Button
           icon={expanded ? 'chevron-up' : 'chevron-down'}
           compact
@@ -197,100 +180,98 @@ export function MilestoneList({ def, level }: { def: WorldDef; level: number }) 
   );
 }
 
-// ---------- Celebrating ----------
-
-/** The most milestones whose new options the card asks about at once; older ones are just counted. */
-const ASK_ABOUT = 3;
-
-/**
- * Shown when there are milestones you haven't seen (your starting choices are made when you adopt,
- * so it starts from the first): how your pet grew and what unlocked, with the new options to pick
- * from right there. Slides in on arrival; on Done it folds away, and the cards below slide up.
- */
-export function CelebrationCard({
-  def,
-  world,
+function MilestoneStop({
   level,
-  onPick,
-  onDone,
+  state,
+  unlock,
+  railAbove,
+  railBelow,
+  nextReached,
+  appear,
 }: {
-  def: WorldDef;
-  world: World;
   level: number;
-  onPick: (slot: string, choice: string) => void;
-  onDone: () => void;
+  state: 'reached' | 'next' | 'locked';
+  unlock: Unlock;
+  railAbove: boolean;
+  railBelow: boolean;
+  /** Whether the milestone after this one is reached too, so the rail on to it is filled. */
+  nextReached: boolean;
+  /** Fades in when the list is expanded. */
+  appear: boolean;
 }) {
   const theme = useAppTheme();
-  const first = Math.max(1, world.celebrated);
-  const unlocks = Array.from({ length: level - first + 1 }, (_, i) => unlockAt(def, first + i));
-  const asked = unlocks.slice(-ASK_ABOUT);
-  const slots = [...new Set([...asked.flatMap((u) => u.slots), ...asked.flatMap((u) => u.choices.map((c) => c.slot))])];
-  const grew = unlocks.filter((u) => u.grows);
-  const earlier = unlocks.length - asked.length;
-
-  // In: fade and rise. Out: fade while the height folds to nothing.
-  const shown = useSharedValue(0);
-  const fold = useSharedValue(1);
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    shown.set(withTiming(1, { duration: 300, easing: STANDARD }));
-  }, [shown]);
-  const animated = useAnimatedStyle(() => ({
-    opacity: shown.get() * fold.get(),
-    transform: [{ translateY: (1 - shown.get()) * 12 }],
-    ...(fold.get() < 1 && height ? { height: height * fold.get(), overflow: 'hidden' as const } : null),
-  }));
-
-  function done() {
-    fold.set(
-      withTiming(0, { duration: 250, easing: STANDARD }, (finished) => {
-        if (finished) scheduleOnRN(onDone);
-      })
-    );
-  }
+  const reached = state === 'reached';
+  const lit = theme.colors.primary;
+  const unlit = withAlpha(theme.colors.onSurface, 0.12);
+  const muted = theme.colors.onSurfaceVariant;
+  const chips = [
+    ...(unlock.grows ? [{ key: 'grow', text: unlock.grows, emoji: '🌱', color: undefined }] : []),
+    ...unlock.slots.map((s) => ({ key: `s-${s.id}`, text: s.title, emoji: s.choices[0]?.emoji, color: s.choices[0]?.color })),
+    ...unlock.choices.flatMap((c) =>
+      c.choices.map((choice) => ({ key: `c-${c.slot.id}-${choice.id}`, text: choice.label, emoji: choice.emoji, color: choice.color }))
+    ),
+  ];
 
   return (
-    <Animated.View style={animated} onLayout={(e) => fold.get() === 1 && setHeight(e.nativeEvent.layout.height)}>
-      <Card mode="contained" style={[glassCard(theme), styles.celebration, { borderColor: theme.colors.primary }]}>
-        <Card.Content style={styles.celebrationBody}>
-          <Text variant="titleLarge" style={styles.bold}>
-            {unlocks.length === 1 ? `🎉 ${shortSteps(LEVELS[level]!)} steps!` : `🎉 ${unlocks.length} new milestones!`}
-          </Text>
-          {grew.length ? (
-            <Text variant="bodyLarge">
-              It grew! Now it&apos;s <Text style={styles.bold}>{grew[grew.length - 1]!.grows!.toLowerCase()}</Text>.
-            </Text>
-          ) : null}
-          {earlier > 0 ? (
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              Plus {earlier} earlier {earlier === 1 ? 'milestone' : 'milestones'}, all in Customize.
-            </Text>
-          ) : null}
-          {slots.map((slot) => (
-            <View key={slot.id} style={styles.slot}>
-              <Text variant="titleSmall" style={styles.bold}>
-                {slot.title}
-              </Text>
-              <ChoiceChips
-                slot={slot}
-                level={level}
-                selected={picksFor(world, slot)}
-                onPick={(c) => onPick(slot.id, c)}
-              />
+    <Animated.View entering={appear ? FadeIn.duration(180) : undefined} style={styles.stop}>
+      <View style={styles.rail}>
+        <View style={[styles.segment, { backgroundColor: railAbove ? (reached ? lit : unlit) : 'transparent' }]} />
+        <LevelNode level={level} state={state} />
+        <View style={[styles.segment, { backgroundColor: railBelow ? (nextReached ? lit : unlit) : 'transparent' }]} />
+      </View>
+      <View style={[styles.stopBody, state === 'locked' && styles.faded]}>
+        <Text style={[styles.stopTitle, { color: state === 'locked' ? muted : theme.colors.onSurface }]}>
+          {shortSteps(unlock.steps)} steps
+        </Text>
+        <View style={styles.rewards}>
+          {chips.map((chip) => (
+            <View key={chip.key} style={[styles.reward, { backgroundColor: withAlpha(theme.colors.onSurface, 0.06) }]}>
+              {chip.color ? (
+                <View style={[styles.rewardSwatch, { backgroundColor: chip.color }]} />
+              ) : chip.emoji ? (
+                <Text style={styles.rewardEmoji}>{chip.emoji}</Text>
+              ) : null}
+              <Text style={[styles.rewardText, { color: theme.colors.onSurface }]}>{chip.text}</Text>
             </View>
           ))}
-          <Button mode="contained" onPress={done} style={styles.done}>
-            Lovely
-          </Button>
-        </Card.Content>
-      </Card>
+        </View>
+      </View>
     </Animated.View>
   );
 }
 
-/** The chosen option for a slot, or its default. */
-function picksFor(world: World, slot: Slot): string {
-  return world.picks[world.kind]?.[slot.id] ?? slot.choices[0]!.id;
+/** A level on the road: filled once reached, ringed and pulsing when it's next, locked after that. */
+function LevelNode({ level, state }: { level: number; state: 'reached' | 'next' | 'locked' }) {
+  const theme = useAppTheme();
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (state !== 'next') return;
+    pulse.set(withRepeat(withTiming(1, { duration: 1600, easing: Easing.out(Easing.quad) }), -1, false));
+  }, [pulse, state]);
+  const ring = useAnimatedStyle(() => ({ opacity: 0.45 * (1 - pulse.value), transform: [{ scale: 1 + pulse.value * 0.7 }] }));
+
+  if (state === 'locked') {
+    return (
+      <View style={[styles.node, { backgroundColor: withAlpha(theme.colors.onSurface, 0.07) }]}>
+        <Icon source="lock" size={14} color={theme.colors.onSurfaceVariant} />
+      </View>
+    );
+  }
+  const reached = state === 'reached';
+  return (
+    <View style={styles.nodeBox}>
+      {reached ? null : <Animated.View style={[styles.node, styles.pulse, { backgroundColor: theme.colors.primary }, ring]} />}
+      <View
+        style={[
+          styles.node,
+          reached
+            ? { backgroundColor: theme.colors.primary, borderBottomWidth: 3, borderBottomColor: 'rgba(0, 0, 0, 0.25)' }
+            : { backgroundColor: theme.colors.surface, borderWidth: 3, borderColor: theme.colors.primary },
+        ]}>
+        <Text style={[styles.nodeText, { color: reached ? theme.colors.onPrimary : theme.colors.primary }]}>{level}</Text>
+      </View>
+    </View>
+  );
 }
 
 /** Stage and level, in a pill over the bottom of the scene. */
@@ -324,14 +305,24 @@ const styles = StyleSheet.create({
   locked: { opacity: 0.6 },
   swatch: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
   emoji: { fontSize: 15 },
-  milestones: { gap: 14 },
-  milestone: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  dot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  showAll: { alignSelf: 'center' },
-  celebration: { borderWidth: 2 },
-  celebrationBody: { gap: 12 },
-  slot: { gap: 8 },
-  done: { alignSelf: 'flex-end' },
+  road: { paddingVertical: 8 },
+  stop: { flexDirection: 'row', gap: 12, minHeight: 64 },
+  rail: { width: NODE, alignItems: 'center' },
+  // Square ends, so the rail runs on unbroken from one row into the next.
+  segment: { flex: 1, width: 4, minHeight: 6 },
+  nodeBox: { width: NODE, height: NODE },
+  node: { width: NODE, height: NODE, borderRadius: NODE / 2, alignItems: 'center', justifyContent: 'center' },
+  pulse: { position: 'absolute' },
+  nodeText: { fontSize: 14, fontWeight: '900' },
+  stopBody: { flex: 1, justifyContent: 'center', gap: 6, paddingVertical: 10 },
+  faded: { opacity: 0.6 },
+  stopTitle: { fontSize: 15, fontWeight: '900' },
+  rewards: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  reward: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  rewardEmoji: { fontSize: 12, lineHeight: 15 },
+  rewardSwatch: { width: 11, height: 11, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)' },
+  rewardText: { fontSize: 11, fontWeight: '700' },
+  showAll: { alignSelf: 'center', marginTop: 8 },
   badge: {
     position: 'absolute',
     left: 10,

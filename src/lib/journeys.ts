@@ -15,6 +15,13 @@ export const SKIES = {
   sea: ['#36B5D8', '#1D5FA8'],
   stone: ['#B39B82', '#6B5444'],
   maple: ['#E2483D', '#9E1F2C'],
+  // The pet's fantasy lands
+  candy: ['#FF9ED2', '#B98CFF'],
+  ember: ['#FF8A3D', '#8E2B4A'],
+  cloud: ['#8FD3FF', '#B9A8FF'],
+  lagoon: ['#2BC7D9', '#1A4F9C'],
+  space: ['#3A3F8F', '#0B0E2A'],
+  enchanted: ['#4FB98A', '#5B4BB7'],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type Sky = keyof typeof SKIES;

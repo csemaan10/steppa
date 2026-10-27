@@ -9,13 +9,13 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { Button } from '@/components/button';
 import type { Motion } from '@/components/character/rig';
+import { gameMotion, riseIn } from '@/components/game/game-motion';
 import { JourneyScene, type Person } from '@/components/journey-scene';
 import { hashString } from '@/lib/character';
 import { formatKm, SKIES, type Route, type Sky, type Stop } from '@/lib/journeys';
@@ -43,6 +43,13 @@ const POSTCARD_TIME: Record<Sky, TimeOfDay> = {
   sea: 'day',
   stone: 'day',
   maple: 'dusk',
+  candy: 'day',
+  ember: 'dusk',
+  cloud: 'day',
+  // The sea floor and the moon have their own light whatever the hour.
+  lagoon: 'day',
+  space: 'day',
+  enchanted: 'dusk',
 };
 
 const POSES: Motion[] = ['p-peace', 'p-salute', 'p-crossed', 'p-hips', 'flex'];
@@ -185,8 +192,8 @@ export function PostcardFrame({ stop, scene, flag, caption, stamp: stampLabel, s
   const flip = useSharedValue(0);
 
   useEffect(() => {
-    enter.set(withSpring(1, { damping: 13, stiffness: 110, mass: 0.9 }));
-    stamp.set(withDelay(550, withSpring(1, { damping: 8, stiffness: 200 })));
+    enter.set(withTiming(1, gameMotion.glide));
+    stamp.set(withDelay(550, withTiming(1, gameMotion.slam)));
     postmark.set(withDelay(900, withTiming(1, { duration: 280, easing: Easing.out(Easing.quad) })));
   }, [enter, stamp, postmark]);
 
@@ -292,7 +299,7 @@ export function PostcardThumb({ stop, kmAway, index, onPress }: ThumbProps) {
   const locked = kmAway !== undefined;
 
   return (
-    <Animated.View entering={FadeInDown.delay(index * 60).springify().damping(16)} style={styles.thumbWrap}>
+    <Animated.View entering={riseIn(index * 60)} style={styles.thumbWrap}>
       <Pressable
         disabled={locked}
         onPress={onPress}
