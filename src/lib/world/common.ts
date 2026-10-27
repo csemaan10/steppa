@@ -27,6 +27,7 @@ import {
   type Shape,
   type TimeOfDay,
 } from '@/lib/scene-art';
+import type { Mood } from '@/lib/world/mood';
 
 export { arch, circle, ellipse, hash, mix, n, poly, rect, ring, seeded, type Shape, type TimeOfDay };
 
@@ -89,8 +90,11 @@ export type WorldDef = {
   /** What it's called at each stage, smallest first. */
   stages: readonly [string, string, string, string, string, string];
   slots: Slot[];
-  /** `steps` lets a world keep growing between milestones (the city adds buildings as you walk). */
-  draw(level: number, picks: Picks, time: TimeOfDay, steps: number): WorldArt;
+  /**
+   * `steps` lets a world keep growing between milestones (the city adds buildings as you walk);
+   * `mood` is how the pet feels today (a calm, wide-awake pet without one).
+   */
+  draw(level: number, picks: Picks, time: TimeOfDay, steps: number, mood?: Mood): WorldArt;
 };
 
 // ---------- Art ----------
@@ -140,6 +144,8 @@ export type PetSpot = {
   sounds: readonly string[];
   /** Its favourite treat, as an emoji (🐟 for a cat, 🦴 for a dog). */
   treat: string;
+  /** It lives in a bowl, so its tricks stay small enough to keep it inside. */
+  bowl?: boolean;
 };
 
 export type WorldArt = { sky: readonly [string, string]; layers: Layer[]; pet?: PetSpot };

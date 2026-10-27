@@ -16,7 +16,9 @@ import {
   type WorldDef,
   type WorldKind,
 } from '@/lib/world/common';
-import { PET } from '@/lib/world/pet';
+import type { Mood } from '@/lib/world/mood';
+import { PET, petPhoto } from '@/lib/world/pet';
+import type { Shape } from '@/lib/scene-art';
 
 export {
   LEVELS,
@@ -32,6 +34,8 @@ export {
   type WorldKind,
 };
 export { WORLD_HEIGHT, WORLD_WIDTH, type Layer, type Motion, type PetSpot } from '@/lib/world/common';
+export { MOOD_SAYS, moodLine, moodOf, type Mood } from '@/lib/world/mood';
+export { learnedTricks, training, TRICKS, type Trick, type TrickId } from '@/lib/world/tricks';
 
 /** Kinds of world by name: just the pet for now (the database has room for more). */
 export const WORLDS: Record<WorldKind, WorldDef> = { pet: PET };
@@ -59,10 +63,32 @@ export function resolvePicks(def: WorldDef, level: number, saved: KindPicks | un
   return picks;
 }
 
-export function drawWorld(kind: WorldKind, steps: number, saved: KindPicks | undefined, time: TimeOfDay): WorldArt {
+export function drawWorld(
+  kind: WorldKind,
+  steps: number,
+  saved: KindPicks | undefined,
+  time: TimeOfDay,
+  mood?: Mood
+): WorldArt {
   const def = WORLDS[kind];
   const level = levelOf(steps);
-  return def.draw(level, resolvePicks(def, level, saved), time, steps);
+  return def.draw(level, resolvePicks(def, level, saved), time, steps, mood);
+}
+
+/**
+ * Your pet on its own, smiling for a postcard from somewhere else: feet at (x, feet) in that
+ * picture, `size` its scale. Its shapes, back to front.
+ */
+export function drawPetPhoto(
+  steps: number,
+  saved: KindPicks | undefined,
+  time: TimeOfDay,
+  x: number,
+  feet: number,
+  size: number
+): Shape[] {
+  const level = levelOf(steps);
+  return petPhoto(level, resolvePicks(PET, level, saved), time, x, feet, size);
 }
 
 /** What one milestone brings: a new stage, new things to customise, new options for old ones. */

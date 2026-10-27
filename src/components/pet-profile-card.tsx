@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 
@@ -5,15 +6,16 @@ import { usePetPlay } from '@/components/pet-play';
 import { StageBadge } from '@/components/world-parts';
 import { WorldScene } from '@/components/world-scene';
 import { useScreenFocused } from '@/hooks/use-screen-focused';
-import type { WorldStatus } from '@/lib/api';
+import { getAdventures, type WorldStatus } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { timeOfDay } from '@/lib/scene-art';
-import { drawWorld, levelOf, WORLDS } from '@/lib/world';
+import { drawWorld, learnedTricks, levelOf, WORLDS } from '@/lib/world';
 import { glassCard, useAppTheme } from '@/theme';
 
 /**
- * Someone's pet on their profile: its name, how grown it is and the steps behind it, in its yard.
- * You can tap it and hold it to play, the same as your own. `owner` is null for your own pet.
+ * Someone's pet on their profile: its name, how grown it is and the steps behind it, in its yard,
+ * with the tricks it knows and how many adventures it's been on. You can tap it and hold it to play,
+ * the same as your own, and it shows off its tricks. `owner` is null for your own pet.
  */
 export function PetProfileCard({ status, owner }: { status: WorldStatus; owner: string | null }) {
   const theme = useAppTheme();
@@ -23,8 +25,23 @@ export function PetProfileCard({ status, owner }: { status: WorldStatus; owner: 
   const def = WORLDS[world.kind];
   const saved = world.picks[world.kind];
   const art = drawWorld(world.kind, steps, saved, timeOfDay());
-  const play = usePetPlay(art.pet);
+  const tricks = learnedTricks(world.treats_fed ?? 0);
+  const play = usePetPlay(art.pet, { tricks: tricks.map((t) => t.id) });
   const name = saved?.name;
+  const muted = { color: theme.colors.onSurfaceVariant };
+
+  const [trips, setTrips] = useState(0);
+  useEffect(() => {
+    let live = true;
+    getAdventures(world.user_id).then((all) => live && setTrips(all.length));
+    return () => {
+      live = false;
+    };
+  }, [world.user_id]);
+  const extras = [
+    tricks.length ? `Knows ${tricks.length} ${tricks.length === 1 ? 'trick' : 'tricks'}` : null,
+    trips ? `${trips} ${trips === 1 ? 'adventure' : 'adventures'}` : null,
+  ].filter(Boolean);
 
   // The screen's padding (16 a side) and the card's (8 a side).
   const sceneWidth = width - 48;
@@ -35,9 +52,14 @@ export function PetProfileCard({ status, owner }: { status: WorldStatus; owner: 
         <Text variant="titleMedium" numberOfLines={1} style={styles.bold}>
           {[name, owner ? `${owner}'s pet` : name ? 'your pet' : 'Your pet'].filter(Boolean).join(', ')}
         </Text>
-        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+        <Text variant="bodyMedium" style={muted}>
           {formatSteps(steps)} steps walked together
         </Text>
+        {extras.length ? (
+          <Text variant="bodyMedium" style={muted}>
+            {extras.join(' · ')}
+          </Text>
+        ) : null}
       </Card.Content>
       <View style={styles.scene}>
         <WorldScene art={art} width={sceneWidth} animate={focused} play={play} radius={18} />

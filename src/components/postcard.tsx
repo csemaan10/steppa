@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Modal, Portal, Text } from 'react-native-paper';
 import Animated, {
@@ -84,13 +84,13 @@ function PostcardArt({ stop, emojiSize }: { stop: Stop; emojiSize: number }) {
   );
 }
 
-/** Perforated stamp with the route's flag and how far along the stop is. */
-function Stamp({ route, stop }: { route: Route; stop: Stop }) {
+/** Perforated stamp with the route's flag and a word or two: how far along the stop is. */
+function Stamp({ flag, label, stop }: { flag: string; label: string; stop: Stop }) {
   return (
     <View style={styles.stamp}>
       <View style={[styles.stampInner, { experimental_backgroundImage: sky(stop) }]}>
-        <Text style={styles.stampFlag}>{route.flag}</Text>
-        <Text style={styles.stampKm}>{formatKm(stop.km)} KM</Text>
+        <Text style={styles.stampFlag}>{flag}</Text>
+        <Text style={styles.stampKm}>{label}</Text>
       </View>
     </View>
   );
@@ -127,9 +127,57 @@ type PostcardProps = {
  * to read the back.
  */
 export function Postcard({ route, stop, people, you, recipient, width }: PostcardProps) {
-  const height = Math.round(width * ASPECT);
   const index = route.stops.indexOf(stop);
   const start = route.stops[0]!;
+  return (
+    <PostcardFrame
+      stop={stop}
+      flag={route.flag}
+      caption={`${route.flag} ${route.name} · Stop ${index + 1} of ${route.stops.length}`}
+      stamp={`${formatKm(stop.km)} KM`}
+      sign="Keep walking 👟"
+      address={[recipient, route.subtitle, stop.km > 0 ? `${formatKm(stop.km)} km from ${start.name}` : 'Day 1. Here we go!']}
+      width={width}
+      // Smaller than on the journey screen, so a two-line place name stays clear of their head.
+      scene={(height, time) => (
+        <JourneyScene
+          people={people}
+          you={you}
+          stop={stop}
+          motion={(person) => postcardPose(route, stop, person)}
+          time={time}
+          height={height}
+          characterSize={0.44}
+          style={styles.scene}
+        />
+      )}
+    />
+  );
+}
+
+type FrameProps = {
+  stop: Stop;
+  /** The picture: the stop's place with someone in it, `height` tall at the hour given. */
+  scene: (height: number, time: TimeOfDay) => ReactNode;
+  flag: string;
+  /** Bottom right of the picture, e.g. "🇨🇦 Toronto to Ottawa · Stop 3 of 8". */
+  caption: string;
+  /** On the stamp under the flag, e.g. "260 KM". */
+  stamp: string;
+  /** Signed at the bottom of the message on the back. */
+  sign: string;
+  /** The address lines on the back. */
+  address: string[];
+  width: number;
+};
+
+/**
+ * Any postcard from a stop: the picture side with the place's name, a stamp and a postmark; the
+ * back with the stop's story. It lands with a little tilt, the stamp thunks down, the postmark inks
+ * in, and a tap flips it over.
+ */
+export function PostcardFrame({ stop, scene, flag, caption, stamp: stampLabel, sign, address, width }: FrameProps) {
+  const height = Math.round(width * ASPECT);
   const [flipped, setFlipped] = useState(false);
   const enter = useSharedValue(0);
   const stamp = useSharedValue(0);
@@ -182,17 +230,7 @@ export function Postcard({ route, stop, people, you, recipient, width }: Postcar
         style={StyleSheet.absoluteFill}>
         <Animated.View style={[styles.face, styles.front, frontStyle]}>
           <View style={styles.art}>
-            {/* Smaller than on the journey screen, so a two-line place name stays clear of their head. */}
-            <JourneyScene
-              people={people}
-              you={you}
-              stop={stop}
-              motion={(person) => postcardPose(route, stop, person)}
-              time={POSTCARD_TIME[stop.sky]}
-              height={height - ART_INSET * 2}
-              characterSize={0.44}
-              style={styles.scene}
-            />
+            {scene(height - ART_INSET * 2, POSTCARD_TIME[stop.sky])}
             <View style={styles.greeting}>
               <Text style={styles.greetingSmall}>GREETINGS FROM</Text>
               <Text
@@ -203,13 +241,11 @@ export function Postcard({ route, stop, people, you, recipient, width }: Postcar
               </Text>
             </View>
             <View style={styles.caption}>
-              <Text style={styles.captionText}>
-                {route.flag} {route.name} · Stop {index + 1} of {route.stops.length}
-              </Text>
+              <Text style={styles.captionText}>{caption}</Text>
             </View>
           </View>
           <Animated.View style={[styles.stampSpot, stampStyle]}>
-            <Stamp route={route} stop={stop} />
+            <Stamp flag={flag} label={stampLabel} stop={stop} />
           </Animated.View>
           <Animated.View style={[styles.postmarkSpot, postmarkStyle]}>
             <Postmark ink="rgba(255,255,255,0.8)" />
@@ -220,19 +256,15 @@ export function Postcard({ route, stop, people, you, recipient, width }: Postcar
           <View style={styles.backLeft}>
             <Text style={[styles.backTitle, { fontSize: width * 0.044 }]}>Greetings from {stop.name}!</Text>
             <Text style={[styles.backBody, { fontSize: width * 0.035, lineHeight: width * 0.05 }]}>{stop.fact}</Text>
-            <Text style={[styles.backSign, { fontSize: width * 0.035 }]}>Keep walking 👟</Text>
+            <Text style={[styles.backSign, { fontSize: width * 0.035 }]}>{sign}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.backRight}>
             <View style={styles.backStamp}>
-              <Stamp route={route} stop={stop} />
+              <Stamp flag={flag} label={stampLabel} stop={stop} />
             </View>
             <View style={styles.address}>
-              {[
-                recipient,
-                route.subtitle,
-                stop.km > 0 ? `${formatKm(stop.km)} km from ${start.name}` : 'Day 1. Here we go!',
-              ].map((line) => (
+              {address.map((line) => (
                 <Text key={line} numberOfLines={1} style={[styles.addressLine, { fontSize: width * 0.033 }]}>
                   {line}
                 </Text>

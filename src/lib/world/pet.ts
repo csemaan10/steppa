@@ -26,8 +26,12 @@ import {
   stageOf,
   star,
   type PetSpot,
+  type Picks,
+  type Shape,
+  type TimeOfDay,
   type WorldDef,
 } from '@/lib/world/common';
+import type { Mood } from '@/lib/world/mood';
 
 const SPECIES = ['cat', 'dog', 'bunny', 'fox', 'bear', 'dragon', 'lion', 'tiger', 'cheetah', 'horse', 'fish'] as const;
 type Species = (typeof SPECIES)[number];
@@ -1386,7 +1390,66 @@ function petSpot(art: Art, look: Look, feet: number, s: number, hb: number): Pet
     mouth: [PET_X, n(head.at(0, look.species === 'horse' ? -38 : -45)[1])],
     sounds: SOUNDS[look.species],
     treat: TREATS[look.species],
+    ...(look.species === 'fish' ? { bowl: true } : {}),
   };
+}
+
+/** What it looks like at this stage with these choices. */
+function lookFor(picks: Picks, stage: number): Look {
+  const species = (SPECIES as readonly string[]).includes(picks.species ?? '') ? (picks.species as Species) : 'cat';
+  const fish = species === 'fish';
+  return {
+    species,
+    coat: coatFor(species, picks.coat),
+    marks: marksFor(species, picks.pattern),
+    eyes: picks.eyes ?? 'brown',
+    stage,
+    // A fish wears only what fits a fish: a bow on its head, glasses and hats.
+    collar: fish && picks.collar !== 'bow' ? undefined : picks.collar,
+    hat: picks.hat,
+    glasses: picks.glasses,
+    outfit: fish ? undefined : picks.outfit,
+    kicks: fish ? undefined : picks.kicks,
+  };
+}
+
+/**
+ * How lively it is with each mood: `wag` scales its tail's swing (a fish's bobbing), `period` how
+ * long each sway and breath takes, and `breath` how deeply it breathes. A sleepy pet breathes slow
+ * and deep with its tail barely moving; an overjoyed one wags away.
+ */
+const PACE: Record<Mood, { wag: number; period: number; breath: number }> = {
+  sleepy: { wag: 0.4, period: 1.6, breath: 0.04 },
+  awake: { wag: 1, period: 1, breath: 0.025 },
+  happy: { wag: 1.25, period: 0.75, breath: 0.025 },
+  overjoyed: { wag: 1.5, period: 0.45, breath: 0.025 },
+};
+
+/**
+ * Just the pet, smiling for a photo somewhere else (a postcard from an adventure): its feet at
+ * (x, feet) in that picture, `s` its size, in the hour's light, wearing what it wears at home.
+ */
+export function petPhoto(level: number, picks: Picks, time: TimeOfDay, x: number, feet: number, s: number): Shape[] {
+  const art = new Art(time, 'pet');
+  art.startTint();
+  const stage = stageOf(level);
+  const hb = HEAD[stage]!;
+  const look = lookFor(picks, stage);
+  art.fill(ellipse(x, feet + 1, 30 * s, 5 * s), '#2E2A24', 0.2);
+  if (look.species === 'fish') {
+    const body = new Pen(art, x, feet, s);
+    const head = fishPen(art, x, feet, s, hb);
+    bowlBack(body);
+    drawFish(head, look);
+    happyFace(head, look);
+    bowlFront(body);
+  } else {
+    const { body, head } = pens(art, x, feet, s, hb);
+    tail(body, look);
+    drawPet(art, x, feet, s, hb, look);
+    happyFace(head, look);
+  }
+  return art.done().layers.flatMap((layer) => layer.shapes);
 }
 
 export const PET: WorldDef = {
@@ -1617,28 +1680,19 @@ export const PET: WorldDef = {
     },
   ],
 
-  draw(level, picks, time) {
+  draw(level, picks, time, _steps, mood = 'awake') {
     const art = new Art(time, 'pet');
     const stage = stageOf(level);
     const s = SIZE[stage]!;
     const hb = HEAD[stage]!;
     const feet = FEET[stage]!;
     const layout = LAYOUT[stage]!;
-    const species = (SPECIES as readonly string[]).includes(picks.species ?? '') ? (picks.species as Species) : 'cat';
+    const look = lookFor(picks, stage);
+    const { species } = look;
     const fish = species === 'fish';
-    const look: Look = {
-      species,
-      coat: coatFor(species, picks.coat),
-      marks: marksFor(species, picks.pattern),
-      eyes: picks.eyes ?? 'brown',
-      stage,
-      // A fish wears only what fits a fish: a bow on its head, glasses and hats.
-      collar: fish && picks.collar !== 'bow' ? undefined : picks.collar,
-      hat: picks.hat,
-      glasses: picks.glasses,
-      outfit: fish ? undefined : picks.outfit,
-      kicks: fish ? undefined : picks.kicks,
-    };
+    // Dozing until you've walked a bit, eyes closed.
+    if (mood === 'sleepy') look.sleepy = true;
+    const pace = PACE[mood];
     // The middle of the pet, for its legendary glow.
     const centre = feet - (fish ? 62 : 50) * s;
 
@@ -1660,7 +1714,7 @@ export const PET: WorldDef = {
     // A warm pool of light after dark and a soft shadow, which stay put while the pet moves.
     if (art.dark) art.light(ellipse(PET_X, feet - 4, 70 * s, 22 * s), '#FFE9B0', 0.08);
     art.fill(ellipse(PET_X, feet + 1, 30 * s, 5 * s), '#2E4A2A', 0.18);
-    const canBlink = !look.glasses || look.glasses === 'none' || look.glasses === 'round';
+    const canBlink = !look.sleepy && (!look.glasses || look.glasses === 'none' || look.glasses === 'round');
 
     const { body, head } = fish
       ? { body: new Pen(art, PET_X, feet, s), head: fishPen(art, PET_X, feet, s, hb) }
@@ -1668,7 +1722,7 @@ export const PET: WorldDef = {
     if (fish) {
       // The stool and bowl stay put; the fish bobs about inside.
       bowlBack(body);
-      art.move({ type: 'bob', dy: 2.5, period: 3000 }, () => drawFish(head, look), {
+      art.move({ type: 'bob', dy: 2.5 * pace.wag, period: 3000 * pace.period }, () => drawFish(head, look), {
         pet: true,
         ...(canBlink ? { blink: () => blinkEyes(head, look) } : {}),
         happy: () => happyFace(head, look),
@@ -1677,9 +1731,10 @@ export const PET: WorldDef = {
     } else {
       if (TAILS[species]) {
         const [x, y] = body.at(12, -10);
-        art.move({ type: 'sway', deg: species === 'dragon' ? 4 : 8, x, y, period: 2600 }, () => tail(body, look), { pet: true });
+        const deg = (species === 'dragon' ? 4 : 8) * pace.wag;
+        art.move({ type: 'sway', deg, x, y, period: 2600 * pace.period }, () => tail(body, look), { pet: true });
       }
-      art.move({ type: 'breathe', amount: 0.025, x: PET_X, y: feet, period: 3600 }, () => drawPet(art, PET_X, feet, s, hb, look), {
+      art.move({ type: 'breathe', amount: pace.breath, x: PET_X, y: feet, period: 3600 * pace.period }, () => drawPet(art, PET_X, feet, s, hb, look), {
         pet: true,
         ...(canBlink ? { blink: () => blinkEyes(head, look) } : {}),
         happy: () => happyFace(head, look),

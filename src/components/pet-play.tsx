@@ -12,7 +12,7 @@ import Animated, {
 import Svg, { Path } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { WORLD_WIDTH, type PetSpot } from '@/lib/world';
+import { WORLD_WIDTH, type PetSpot, type TrickId } from '@/lib/world';
 
 // Everything eases in and out, like the rest of the app's motion: a hop rises fast and falls under
 // gravity, with no spring overshoot or bounce.
@@ -36,20 +36,35 @@ type NewEffect<E = Effect> = E extends Effect ? Omit<E, 'id'> : never;
 
 export type PetPlay = ReturnType<typeof usePetPlay>;
 
+type PlayOptions = {
+  /** Tricks it knows: every fourth tap, it shows one off. */
+  tricks?: readonly TrickId[];
+  /** Things it says besides its own sounds, like how it feels today. */
+  says?: readonly string[];
+};
+
+/** A training attempt after a treat: the trick, and how well it does it (1 when this treat teaches it). */
+export type Lesson = { trick: TrickId; skill: number };
+
 /**
  * Playing with your pet: tap it (it hops, wiggles or turns around, in turn), hold it to stroke it
- * (it squishes happily and purrs while hearts float up), give it a treat, or toss it a ball. The
- * pet's own layers move with the shared values here; hearts, treats and speech bubbles are effects
- * drawn over the scene. Pass the result to WorldScene's `play` and call the actions from buttons.
+ * (it squishes happily and purrs while hearts float up), give it a treat, toss it a ball, or ask for
+ * a trick it knows. The pet's own layers move with the shared values here; hearts, treats and speech
+ * bubbles are effects drawn over the scene. Pass the result to WorldScene's `play` and call the
+ * actions from buttons.
  */
-export function usePetPlay(spot: PetSpot | undefined) {
+export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }: PlayOptions = {}) {
   /** Scene units up. */
   const hop = useSharedValue(0);
+  /** Scene units right. */
+  const slide = useSharedValue(0);
   /** Degrees, about its feet. */
   const tilt = useSharedValue(0);
+  /** Degrees, about its middle: rolls, flips and handstands. */
+  const roll = useSharedValue(0);
   /** 1 facing forward, -1 turned around. */
   const turn = useSharedValue(1);
-  /** 0–1: squashed down while being stroked. */
+  /** 0–1: squashed down while being stroked (up to 2 sitting for a trick). */
   const squish = useSharedValue(0);
   /** 0–1: how much the happy face shows. */
   const joy = useSharedValue(0);
@@ -88,7 +103,8 @@ export function usePetPlay(spot: PetSpot | undefined) {
 
   function say(text?: string) {
     if (!spot) return;
-    add({ kind: 'bubble', text: text ?? spot.sounds[said.current++ % spot.sounds.length]! });
+    const lines = [...spot.sounds, ...says];
+    add({ kind: 'bubble', text: text ?? lines[said.current++ % lines.length]! });
   }
 
   function hearts(count: number) {
@@ -108,7 +124,12 @@ export function usePetPlay(spot: PetSpot | undefined) {
 
   function tap() {
     if (!spot) return;
-    const reaction = REACTIONS[taps.current++ % REACTIONS.length]!;
+    const count = taps.current++;
+    if (tricks.length && count % 4 === 3) {
+      showOff(tricks[Math.floor(count / 4) % tricks.length]!);
+      return;
+    }
+    const reaction = REACTIONS[count % REACTIONS.length]!;
     const size = spot.box[3];
     if (reaction === 'hop') jump(size * 0.14);
     if (reaction === 'wiggle') {
@@ -158,8 +179,11 @@ export function usePetPlay(spot: PetSpot | undefined) {
     later(1300, holdEnd);
   }
 
-  /** A treat drops in from above, right into its mouth; it gobbles it up. */
-  function treat() {
+  /**
+   * A treat drops in from above, right into its mouth; it gobbles it up. With a lesson, it then has
+   * a go at the trick it's learning: partway while it's still learning, the whole thing once it has it.
+   */
+  function treat(lesson?: Lesson) {
     if (!spot) return;
     add({ kind: 'treat', emoji: spot.treat });
     later(TREAT_FALL, () => {
@@ -168,6 +192,147 @@ export function usePetPlay(spot: PetSpot | undefined) {
       say('Nom nom!');
       hearts(3);
     });
+    if (!lesson) return;
+    later(TREAT_FALL + 1000, () => {
+      if (lesson.skill >= 1) {
+        showOff(lesson.trick, 'Ta-da!');
+        return;
+      }
+      const ms = perform(lesson.trick, lesson.skill);
+      later(ms, () => say(lesson.skill < 0.4 ? 'Hmm?' : lesson.skill < 0.75 ? 'Like this?' : 'Almost!'));
+    });
+  }
+
+  /** A trick it knows, done properly, with a cheer at the end. */
+  function showOff(trick: TrickId, line?: string) {
+    const ms = perform(trick, 1);
+    later(ms, () => {
+      add({ kind: 'sparkles' });
+      cheer(900);
+      say(line);
+      hearts(3);
+    });
+  }
+
+  /**
+   * Moves the pet through a trick and returns how long it takes. `skill` below 1 is a training
+   * attempt: the same moves done only partway, so you can see it getting there. A fish stays in
+   * its bowl, so its moves are smaller and it turns about its middle rather than falling over.
+   */
+  function perform(trick: TrickId, skill: number): number {
+    if (!spot) return 0;
+    const k = Math.min(1, Math.max(0.15, skill));
+    const h = spot.box[3];
+    const room = spot.bowl ? 0.15 : 1;
+    // Rolls and dashes head for whichever side has more room.
+    const dir = spot.box[0] + spot.box[2] / 2 < WORLD_WIDTH / 2 ? 1 : -1;
+    const ease = { easing: STANDARD };
+    switch (trick) {
+      case 'sit':
+        squish.set(
+          withSequence(
+            withTiming(1.8 * k, { duration: 180, ...ease }),
+            withDelay(600, withTiming(0, { duration: 220, ...ease }))
+          )
+        );
+        return 1000;
+      case 'spin': {
+        const flips = Math.max(1, Math.round(4 * k));
+        const steps = Array.from({ length: flips }, (_, i) => withTiming(i % 2 ? 1 : -1, { duration: 120, easing: SWING }));
+        if (flips % 2) steps.push(withTiming(1, { duration: 120, easing: SWING }));
+        turn.set(withSequence(...steps));
+        jump(h * 0.06 * (spot.bowl ? 0.5 : 1));
+        return steps.length * 120 + 100;
+      }
+      case 'rollover':
+        roll.set(
+          withSequence(
+            withTiming(dir * 360 * k, { duration: 700, ...ease }),
+            k >= 1 ? withTiming(0, { duration: 0 }) : withTiming(0, { duration: 300, ...ease })
+          )
+        );
+        slide.set(
+          withSequence(withTiming(dir * 34 * k * room, { duration: 700, ...ease }), withTiming(0, { duration: 420, ...ease }))
+        );
+        return 1150;
+      case 'playdead': {
+        const over = spot.bowl ? roll : tilt;
+        over.set(
+          withSequence(
+            withTiming(dir * (spot.bowl ? 180 : 90) * k, { duration: 260, easing: DOWN }),
+            withDelay(900, withTiming(0, { duration: 260, ...ease }))
+          )
+        );
+        later(1300, () => jump(h * 0.08 * (spot.bowl ? 0.5 : 1)));
+        return 1700;
+      }
+      case 'dance': {
+        const beats = Math.max(2, Math.round(6 * k));
+        tilt.set(
+          withSequence(
+            ...Array.from({ length: beats }, (_, i) => withTiming((i % 2 ? -1 : 1) * 10 * k, { duration: 220, easing: SWING })),
+            withTiming(0, { duration: 160, easing: SWING })
+          )
+        );
+        for (let i = 0; i < beats; i += 2) later(i * 220, () => jump(h * 0.05 * (spot.bowl ? 0.5 : 1)));
+        say('♪');
+        return beats * 220 + 160;
+      }
+      case 'backflip': {
+        const height = h * 0.45 * k * (spot.bowl ? 0.2 : 1);
+        hop.set(
+          withSequence(withTiming(height, { duration: 300, easing: UP }), withTiming(0, { duration: 300, easing: DOWN }))
+        );
+        roll.set(
+          withSequence(
+            withTiming(-dir * 360 * k, { duration: 600, ...ease }),
+            k >= 1 ? withTiming(0, { duration: 0 }) : withTiming(0, { duration: 220, ...ease })
+          )
+        );
+        return 850;
+      }
+      case 'zoomies': {
+        const far = 80 * k * room;
+        slide.set(
+          withSequence(
+            withTiming(dir * far, { duration: 340, ...ease }),
+            withTiming(-dir * far, { duration: 620, ...ease }),
+            withTiming(0, { duration: 340, ...ease })
+          )
+        );
+        turn.set(
+          withSequence(
+            withDelay(300, withTiming(-1, { duration: 80 })),
+            withDelay(560, withTiming(1, { duration: 80 }))
+          )
+        );
+        for (let i = 0; i < 6; i++) later(i * 210, () => jump(h * 0.05 * (spot.bowl ? 0.5 : 1)));
+        return 1350;
+      }
+      case 'handstand':
+        hop.set(
+          withSequence(
+            withTiming(h * 0.25 * k * (spot.bowl ? 0.2 : 1), { duration: 240, easing: UP }),
+            withDelay(900, withTiming(0, { duration: 240, easing: DOWN }))
+          )
+        );
+        roll.set(
+          withSequence(
+            withTiming(180 * k, { duration: 300, ...ease }),
+            withDelay(840, withTiming(k >= 1 ? 360 : 0, { duration: 300, ...ease })),
+            withTiming(0, { duration: 0 })
+          )
+        );
+        return 1500;
+    }
+  }
+
+  /** A little happy bounce, for an overjoyed pet now and then. */
+  function bounce() {
+    if (!spot) return;
+    jump(spot.box[3] * 0.08);
+    cheer(600);
+    hearts(1);
   }
 
   /**
@@ -202,10 +367,32 @@ export function usePetPlay(spot: PetSpot | undefined) {
     setEffects((all) => all.filter((e) => e.id !== id));
   }
 
-  return { hop, tilt, turn, squish, joy, effects, remove, tap, holdStart, holdEnd, stroke, treat, play };
+  return {
+    hop,
+    slide,
+    tilt,
+    roll,
+    turn,
+    squish,
+    joy,
+    effects,
+    remove,
+    tap,
+    holdStart,
+    holdEnd,
+    stroke,
+    treat,
+    play,
+    showOff,
+    say,
+    bounce,
+  };
 }
 
-/** Wraps one of the pet's layers so it moves with the play: hops, wiggles, turns and squishes about its feet. */
+/**
+ * Wraps one of the pet's layers so it moves with the play: hops, slides, wiggles, turns and squishes
+ * about its feet, and rolls about its middle.
+ */
 export function PetBody({
   play,
   spot,
@@ -219,19 +406,22 @@ export function PetBody({
 }) {
   const [x, y, w, h] = spot.box;
   const feet = [(x + w / 2) * scale, (y + h) * scale, 0];
-  const { hop, tilt, turn, squish } = play;
+  const middle = [(x + w / 2) * scale, (y + h / 2) * scale, 0];
+  const { hop, slide, tilt, roll, turn, squish } = play;
   const style = useAnimatedStyle(() => ({
     transformOrigin: feet,
     transform: [
+      { translateX: slide.get() * scale },
       { translateY: -hop.get() * scale },
       { rotate: `${tilt.get()}deg` },
       { scaleX: turn.get() * (1 + squish.get() * 0.05) },
       { scaleY: 1 - squish.get() * 0.07 },
     ],
   }));
+  const rolled = useAnimatedStyle(() => ({ transformOrigin: middle, transform: [{ rotate: `${roll.get()}deg` }] }));
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
-      {children}
+      <Animated.View style={[StyleSheet.absoluteFill, rolled]}>{children}</Animated.View>
     </Animated.View>
   );
 }

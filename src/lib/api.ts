@@ -659,6 +659,8 @@ export type World = {
   /** Milestones already celebrated: levels below this one. */
   celebrated: number;
   created_at: string;
+  /** Treats eaten, which teach it tricks (src/lib/world/tricks.ts). Missing before migration 018. */
+  treats_fed?: number;
 };
 
 export type WorldStatus = { world: World; steps: number };
@@ -711,6 +713,39 @@ export async function updateWorld(
 ): Promise<void> {
   const { error } = await supabase.from('worlds').update(patch).eq('user_id', userId);
   if (error) throw new Error(error.message);
+}
+
+/** A pet's treats: earned by walking, eaten (training tricks) and spent on adventures. */
+export type Treats = { earned: number; fed: number; spent: number; toNext: number };
+
+/** Your pet's treats (migration 018), or null without a pet or before the migration has run. */
+export async function getTreats(): Promise<Treats | null> {
+  const { data, error } = await supabase.rpc('pet_treats');
+  const row = (data as { earned: number; fed: number; spent: number; to_next: number }[] | null)?.[0];
+  if (error || !row) return null;
+  return { earned: row.earned, fed: row.fed, spent: row.spent, toNext: row.to_next };
+}
+
+/** Gives your pet a treat. Returns how many it has eaten now, or null if there was none to give. */
+export async function feedPet(): Promise<number | null> {
+  return unwrap<number | null>(await supabase.rpc('feed_pet'));
+}
+
+export type Adventure = { id: number; place: string; created_at: string };
+
+/** Where someone's pet has been, newest first; empty before migration 018. */
+export async function getAdventures(userId: string): Promise<Adventure[]> {
+  const { data, error } = await supabase
+    .from('pet_adventures')
+    .select('id, place, created_at')
+    .eq('user_id', userId)
+    .order('id', { ascending: false });
+  return error ? [] : (data as Adventure[]);
+}
+
+/** Spends treats on an adventure to `place` (a key from src/lib/pet-adventures.ts). False if short of treats. */
+export async function goOnAdventure(place: string): Promise<boolean> {
+  return unwrap<boolean>(await supabase.rpc('go_on_adventure', { destination: place }));
 }
 
 // ---------- Account ----------
