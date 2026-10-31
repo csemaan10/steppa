@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useDeferredValue, useEffect, useRef, useState, type RefObject } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, Text } from 'react-native-paper';
 import Animated, { FadeIn, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -281,6 +281,12 @@ function Shop({
   const play = usePetPlay(art.pet, { tricks: learnedTricks(fed).map((t) => t.id) });
 
   const [tab, setTab] = useState<ShopTab>(initialTab);
+  // The tabs and the stage answer a switch at once; the tab's content follows a moment behind, built
+  // in the background, so a heavy one (Trips) doesn't freeze the switch while it's laid out.
+  const page = useDeferredValue(tab);
+  // The tabs built so far: each stays once it's been opened (see the pages below).
+  const [opened, setOpened] = useState<ReadonlySet<ShopTab>>(() => new Set([initialTab]));
+  if (!opened.has(page)) setOpened(new Set([...opened, page]));
   const [buying, setBuying] = useState<string | null>(null);
   const [justLearned, setJustLearned] = useState<TrickId | null>(null);
   const [announcing, setAnnouncing] = useState<Trick | null>(null);
@@ -444,6 +450,64 @@ function Shop({
     }
   }
 
+  function renderTab(which: ShopTab) {
+    if (which === 'looks') {
+      return (
+        <LooksTab
+          def={def}
+          level={level}
+          visited={visited}
+          newSouvenir={newSouvenir}
+          picks={picks}
+          fresh={fresh}
+          name={saved?.name ?? ''}
+          placeholder={`Your ${def.title.toLowerCase()}`}
+          onRename={editor.rename}
+          onPick={pick}
+          owned={owned}
+          prices={price}
+          available={available}
+          buying={buying}
+          trying={trying}
+          onTry={tryOn}
+          onBuy={buy}
+        />
+      );
+    }
+    if (!treats) {
+      return <Text style={styles.message}>Treats aren&apos;t switched on yet, so there&apos;s nothing to buy here.</Text>;
+    }
+    if (which === 'tricks') {
+      return (
+        <TricksTab
+          fed={fed}
+          available={available}
+          buying={buying}
+          justLearned={justLearned}
+          onLearn={learn}
+          onShowOff={(trick) => play.showOff(trick)}
+        />
+      );
+    }
+    return (
+      <TripsTab
+        name={name}
+        available={available}
+        adventures={adventures}
+        busy={buying}
+        onBook={book}
+        onOpen={setPostcard}
+        mates={mates}
+        visitPostcards={visitPostcards}
+        outing={outing}
+        together={together}
+        visitPrice={price.get('visit')?.treats ?? null}
+        onVisit={visitFriend}
+        onPassport={() => router.push('/passport')}
+      />
+    );
+  }
+
   const mouth = art.pet?.mouth;
   const box = art.pet?.box;
 
@@ -497,59 +561,25 @@ function Shop({
         tabs={TABS}
       />
 
-      {/* Keyed by tab, so each one opens at the top. */}
-      <ScrollView key={tab} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
-        <Animated.View entering={FadeIn.duration(180)}>
-          {tab === 'looks' ? (
-            <LooksTab
-              def={def}
-              level={level}
-              visited={visited}
-              newSouvenir={newSouvenir}
-              picks={picks}
-              fresh={fresh}
-              name={saved?.name ?? ''}
-              placeholder={`Your ${def.title.toLowerCase()}`}
-              onRename={editor.rename}
-              onPick={pick}
-              owned={owned}
-              prices={price}
-              available={available}
-              buying={buying}
-              trying={trying}
-              onTry={tryOn}
-              onBuy={buy}
-            />
-          ) : !treats ? (
-            <Text style={styles.message}>Treats aren&apos;t switched on yet, so there&apos;s nothing to buy here.</Text>
-          ) : tab === 'tricks' ? (
-            <TricksTab
-              fed={fed}
-              available={available}
-              buying={buying}
-              justLearned={justLearned}
-              onLearn={learn}
-              onShowOff={(trick) => play.showOff(trick)}
-            />
-          ) : (
-            <TripsTab
-              name={name}
-              available={available}
-              adventures={adventures}
-              busy={buying}
-              onBook={book}
-              onOpen={setPostcard}
-              mates={mates}
-              visitPostcards={visitPostcards}
-              outing={outing}
-              together={together}
-              visitPrice={price.get('visit')?.treats ?? null}
-              onVisit={visitFriend}
-              onPassport={() => router.push('/passport')}
-            />
-          )}
-        </Animated.View>
-      </ScrollView>
+      {/* Each tab stays built once it's been opened, just hidden while another shows, and keeps its
+          own scroll: tearing a big one down (the wardrobe, the album) and building the next froze
+          Android on a switch. */}
+      <View style={styles.flex}>
+        {TABS.map(({ value }) =>
+          opened.has(value) ? (
+            <View
+              key={value}
+              style={[StyleSheet.absoluteFill, value !== page && styles.hidden]}
+              pointerEvents={value === page ? 'auto' : 'none'}
+              importantForAccessibility={value === page ? 'auto' : 'no-hide-descendants'}
+              accessibilityElementsHidden={value !== page}>
+              <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
+                <Animated.View entering={FadeIn.duration(180)}>{renderTab(value)}</Animated.View>
+              </ScrollView>
+            </View>
+          ) : null
+        )}
+      </View>
 
       {ticket ? (
         <TripTicket
@@ -615,5 +645,6 @@ const styles = StyleSheet.create({
   stageScale: { transformOrigin: 'top' },
   mouth: { position: 'absolute', width: 4, height: 4 },
   content: { padding: 16, paddingTop: 12 },
+  hidden: { opacity: 0 },
   message: { textAlign: 'center', marginTop: 24 },
 });

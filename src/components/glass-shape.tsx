@@ -24,8 +24,14 @@ const WAVES: Record<ExpressiveShape, { lobes: number; depth: number; point?: num
 
 const STEPS = 144;
 
+/** Outlines already worked out: there are only a few shapes and sizes, and a screen can show dozens. */
+const outlines = new Map<string, string>();
+
 /** The shape's outline, `size` across, inset by `inset` all round (so a stroke stays inside the box). */
 function shapePath(shape: ExpressiveShape, size: number, inset = 0): string {
+  const key = `${shape}:${size}:${inset}`;
+  const known = outlines.get(key);
+  if (known) return known;
   const { lobes, depth, point = 1 } = WAVES[shape];
   const c = size / 2;
   const outer = c - inset;
@@ -40,6 +46,7 @@ function shapePath(shape: ExpressiveShape, size: number, inset = 0): string {
     const y = c - r * Math.cos(a);
     d += `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`;
   }
+  outlines.set(key, `${d}Z`);
   return `${d}Z`;
 }
 

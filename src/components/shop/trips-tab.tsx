@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
@@ -29,6 +29,8 @@ import { glassCard, useAppTheme, withAlpha } from '@/theme';
 
 /** A passport stamp's size. */
 const STAMP = 46;
+/** Postcards shown before "See all": each is a little picture to build, and an album can run long. */
+const ALBUM_START = 6;
 
 /** Where the pet went today: off on trips, or round at a friend's (whose name this is). */
 export type Outing = { trip: Place } | { friend: string };
@@ -80,6 +82,7 @@ export function TripsTab({
   const theme = useAppTheme();
   const visited = adventures.map((a) => a.place);
   const points = passportPoints(visited);
+  const [wholeAlbum, setWholeAlbum] = useState(false);
   // Round at a friend's today: no trips until tomorrow.
   const visiting = outing && 'friend' in outing ? outing.friend : null;
   // Postcards from its trips and its visits to friends, newest first. Places since removed from the
@@ -207,8 +210,9 @@ export function TripsTab({
       <SectionHeader title="Postcards" note={`${postcards.length}`} />
       {postcards.length ? (
         <View style={styles.grid}>
-          {postcards.map(({ key, from, open }, i) => (
-            <PostcardThumb key={key} stop={from} index={i} onPress={() => onOpen(open)} />
+          {(wholeAlbum ? postcards : postcards.slice(0, ALBUM_START)).map(({ key, from, open }, i) => (
+            // The rest of the album rises in together, not one after another.
+            <PostcardThumb key={key} stop={from} index={Math.min(i, ALBUM_START)} onPress={() => onOpen(open)} />
           ))}
         </View>
       ) : (
@@ -216,6 +220,11 @@ export function TripsTab({
           No postcards yet. Send {name} somewhere, or round to a friend&apos;s, and one will come home.
         </Text>
       )}
+      {postcards.length > ALBUM_START ? (
+        <Button mode="text" onPress={() => setWholeAlbum(!wholeAlbum)}>
+          {wholeAlbum ? 'Show fewer' : `See all ${postcards.length}`}
+        </Button>
+      ) : null}
     </View>
   );
 }
