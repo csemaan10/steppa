@@ -170,7 +170,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   rank: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  name: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Name above the streak and medals, so the badges never squeeze the name.
+  name: { flex: 1, gap: 2 },
   nameText: { flexShrink: 1 },
   right: { alignItems: 'flex-end', minWidth: 56 },
   steps: { fontVariant: ['tabular-nums'], fontWeight: '700' },
