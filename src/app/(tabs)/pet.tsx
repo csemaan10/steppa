@@ -1,7 +1,7 @@
 import 'expo-sqlite/localStorage/install';
 
 import { router } from 'expo-router';
-import { useEffect, useEffectEvent, useRef, useState, type RefObject } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Alert, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, Card, Text } from 'react-native-paper';
 import Animated from 'react-native-reanimated';
@@ -17,6 +17,7 @@ import { TreatCounter } from '@/components/game/treat-counter';
 import { GlassAction } from '@/components/glass-action';
 import { PetPostcardModal, type OpenPostcard } from '@/components/pet-adventures';
 import { PetCreator } from '@/components/pet-creator';
+import { PlaceIcon } from '@/components/place-icon';
 import { usePetPlay } from '@/components/pet-play';
 import { AdventuresPreview, LooksPreview, MilestonesPreview, TricksPreview } from '@/components/pet-previews';
 import { NewTreatsCard, TreatsSheet } from '@/components/pet-treats';
@@ -35,7 +36,7 @@ import {
   getMateWorld,
   getProfile,
   getStepHistory,
-  getTodaysVisit,
+  getTodaysVisits,
   getTreatGifts,
   getTreats,
   getWorld,
@@ -56,6 +57,7 @@ import { timeOfDay } from '@/lib/scene-art';
 import { freshParam } from '@/lib/shop';
 import {
   drawAway,
+  drawVisit,
   drawWorld,
   learnedTricks,
   levelOf,
@@ -147,8 +149,27 @@ function markTreatsSeen(userId: string, earned: number) {
   } catch {}
 }
 
-/** A group mate's pet spending today in your yard (or yours in theirs), and whose it is. */
-type Visiting = Visitor & { owner: string; name: string; yours: boolean };
+/** A group mate's pet yours has been with today, as it looks now, and whose it is. */
+type Friend = Visitor & { owner: string; name: string };
+
+/**
+ * Today's company: the friend's pet yours went round to (and where that pet had gone, if it was off
+ * on a trip), and the newest one to come over to yours.
+ */
+type Company = { out: (Friend & { away: Place | null }) | null; over: Friend | null };
+
+/** A friend's pet as it looks now, and where it has gone today; null if it can't be seen. */
+async function friendFor(id: string): Promise<(Friend & { away: Place | null }) | null> {
+  const [mate, owner, trips] = await Promise.all([
+    getMateWorld(id).catch(() => null),
+    getProfile(id).catch(() => null),
+    getAdventures(id).catch(() => []),
+  ]);
+  if (!mate) return null;
+  const saved = mate.world.picks.pet;
+  const who = owner?.display_name ?? 'A friend';
+  return { steps: mate.steps, saved, owner: who, name: saved?.name || `${who}'s pet`, away: awayToday(trips) };
+}
 
 export default function PetScreen() {
   const theme = useAppTheme();
@@ -172,27 +193,21 @@ export default function PetScreen() {
     // Then collect any bonus treats, so the count includes them, and any keepsakes the pet's trips
     // have earned.
     const [bonuses, keepsakes] = await Promise.all([claimTreats(), claimKeepsakes()]);
-    const [status, history, profile, treats, adventures, gifts, visit] = await Promise.all([
+    const [status, history, profile, treats, adventures, gifts, todays] = await Promise.all([
       getWorld(userId),
       getStepHistory(userId, 14),
       getProfile(userId),
       getTreats(),
       getAdventures(userId),
       getTreatGifts(userId),
-      getTodaysVisit(userId),
+      getTodaysVisits(userId),
     ]);
     if (status) markPetMilestoneShown(userId, levelOf(status.steps));
-    let visiting: Visiting | null = null;
-    if (visit) {
-      const other = visit.guest === userId ? visit.host : visit.guest;
-      const [mate, owner] = await Promise.all([getMateWorld(other).catch(() => null), getProfile(other).catch(() => null)]);
-      if (mate) {
-        const saved = mate.world.picks.pet;
-        const who = owner?.display_name ?? 'A friend';
-        visiting = { steps: mate.steps, saved, owner: who, name: saved?.name || `${who}'s pet`, yours: visit.guest === userId };
-      }
-    }
-    return { status, history, profile, treats, adventures, gifts, bonuses, keepsakes, visiting };
+    const out = todays.find((v) => v.guest === userId);
+    const over = todays.find((v) => v.host === userId);
+    const [outWith, overFrom] = await Promise.all([out ? friendFor(out.host) : null, over ? friendFor(over.guest) : null]);
+    const company: Company = { out: outWith, over: overFrom };
+    return { status, history, profile, treats, adventures, gifts, bonuses, keepsakes, company };
   }, userId);
   const editor = useWorldEditor(userId, data?.status?.world ?? null);
   // A row left from testing the worlds that were dropped counts as no pet yet.
@@ -273,7 +288,7 @@ export default function PetScreen() {
                 loadedGifts={data.gifts}
                 bonuses={data.bonuses}
                 keepsakes={data.keepsakes}
-                visiting={data.visiting}
+                company={data.company}
                 cardWidth={cardWidth}
                 animate={focused}
                 editor={editor}
@@ -317,7 +332,7 @@ function PetHome({
   loadedGifts,
   bonuses,
   keepsakes,
-  visiting,
+  company,
   cardWidth,
   animate,
   editor,
@@ -342,7 +357,8 @@ function PetHome({
   bonuses: TreatBonus[];
   /** Keepsakes that just came home with a full passport page. */
   keepsakes: string[];
-  visiting: Visiting | null;
+  /** Friends' pets it has been with today. */
+  company: Company;
   cardWidth: number;
   animate: boolean;
   editor: ReturnType<typeof useWorldEditor>;
@@ -387,8 +403,12 @@ function PetHome({
   const revealing = nextKeepsake ? keepsakeNamed(nextKeepsake) : undefined;
 
   const art = away
-    ? drawAway(away.stop, steps, saved, time, mood, visiting ?? undefined)
-    : drawWorld(world.kind, steps, saved, time, mood, visiting ?? undefined);
+    ? drawAway(away.stop, steps, saved, time, mood, company.over ?? undefined)
+    : company.out
+      ? drawVisit({ ...company.out, away: company.out.away?.stop }, steps, saved, time, mood)
+      : drawWorld(world.kind, steps, saved, time, mood, company.over ?? undefined);
+  // Where it is, if not at home: off on a trip, or with a friend's pet (in their yard, or wherever it went).
+  const where = away ?? company.out?.away ?? null;
   const toy = resolvePicks(def, level, saved).toy;
   const play = usePetPlay(art.pet, { tricks: learnedTricks(fed).map((t) => t.id), says: MOOD_SAYS[mood] });
   const muted = { color: theme.colors.onSurfaceVariant };
@@ -494,15 +514,24 @@ function PetHome({
             art={art}
             width={sceneWidth}
             animate={animate}
-            version={`${level}:${time}:${mood}:${away?.key ?? 'home'}:${visiting?.name ?? ''}:${JSON.stringify(saved ?? {})}`}
+            version={`${level}:${time}:${mood}:${where?.key ?? company.out?.owner ?? 'home'}:${company.over?.name ?? ''}:${JSON.stringify(saved ?? {})}`}
             play={play}
             radius={18}
           />
-          {away ? <PlaceBadge place={away} /> : <StageBadge def={def} level={level} />}
+          {where ? (
+            <PlaceBadge icon={<FlagIcon flag={where.route.flag} size={20} />} label={where.stop.name} />
+          ) : company.out ? (
+            <PlaceBadge
+              icon={<PlaceIcon emoji="🏡" size={18} color={theme.colors.onSurface} />}
+              label={`${company.out.owner}'s yard`}
+            />
+          ) : (
+            <StageBadge def={def} level={level} />
+          )}
         </View>
         <View ref={lineRef} collapsable={false}>
           <Text variant="bodyMedium" style={[styles.line, muted]}>
-            {sceneLine(name, mood, today, goal, away, visiting)}
+            {sceneLine(name, mood, today, goal, away, company)}
           </Text>
         </View>
         <View style={styles.buttons}>
@@ -605,32 +634,37 @@ function PetHome({
   );
 }
 
-/** Under the scene: where the pet is if it's away, who's visiting, or else how it feels. */
+/** Under the scene: where the pet is if it's out, who's with it, or else how it feels. */
 function sceneLine(
   name: string,
   mood: ReturnType<typeof moodOf>,
   today: number,
   goal: number,
   away: Place | null,
-  visiting: Visiting | null
+  { out, over }: Company
 ): string {
-  if (away) return `${name} is exploring ${away.stop.name} today, home tomorrow`;
-  if (visiting) {
-    return visiting.yours
-      ? `${name} is round at ${visiting.owner}'s with ${visiting.name} today`
-      : `${visiting.name} came over from ${visiting.owner}'s for the day`;
+  if (away) {
+    return over
+      ? `${name} is exploring ${away.stop.name} today, and ${over.name} came along`
+      : `${name} is exploring ${away.stop.name} today, home tomorrow`;
   }
+  if (out) {
+    return out.away
+      ? `${name} went to find ${out.name} in ${out.away.stop.name} today`
+      : `${name} is round at ${out.owner}'s with ${out.name} today`;
+  }
+  if (over) return `${over.name} came over from ${over.owner}'s for the day`;
   return moodLine(mood, name, today, goal);
 }
 
 /** Where the pet is today, in a pill at the top of the scene. */
-function PlaceBadge({ place }: { place: Place }) {
+function PlaceBadge({ icon, label }: { icon: ReactNode; label: string }) {
   const theme = useAppTheme();
   return (
     <View style={[glass(theme, 'strong'), styles.place]}>
-      <FlagIcon flag={place.route.flag} size={20} />
+      {icon}
       <Text variant="labelLarge" style={styles.bold}>
-        {place.stop.name}
+        {label}
       </Text>
     </View>
   );

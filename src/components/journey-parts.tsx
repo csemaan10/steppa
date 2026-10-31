@@ -26,9 +26,9 @@ export function PostcardCollection({
       <View style={styles.grid}>
         {route.stops.map((stop, i) =>
           i < progress.reached ? (
-            <PostcardThumb key={stop.name} route={route} stop={stop} index={i} onPress={() => onOpen(stop)} />
+            <PostcardThumb key={stop.name} stop={stop} index={i} onPress={() => onOpen(stop)} />
           ) : (
-            <PostcardThumb key={stop.name} route={route} stop={stop} index={i} kmAway={stop.km - progress.km} />
+            <PostcardThumb key={stop.name} stop={stop} index={i} kmAway={stop.km - progress.km} />
           )
         )}
       </View>

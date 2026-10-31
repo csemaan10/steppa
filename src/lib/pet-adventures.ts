@@ -2,6 +2,7 @@
 // somewhere in a fantasy land, sending back a postcard of itself there. Each place is visited once
 // until it has seen them all.
 
+import { toDayKey } from '@/lib/dates';
 import { FANTASY_LANDS } from '@/lib/fantasy-lands';
 import { GROUP_ROUTES, ROUTES, type Route, type Stop } from '@/lib/journeys';
 
@@ -123,10 +124,12 @@ export function visitedIn(destination: Destination, visited: readonly string[]):
  * clock). It stays there until tomorrow.
  */
 export function awayToday(adventures: readonly { place: string; created_at: string }[], now = new Date()): Place | null {
-  const latest = adventures[0];
-  if (!latest) return null;
-  const left = new Date(latest.created_at);
-  const sameDay =
-    left.getFullYear() === now.getFullYear() && left.getMonth() === now.getMonth() && left.getDate() === now.getDate();
-  return sameDay ? (placeFor(latest.place) ?? null) : null;
+  return awayOn(adventures, toDayKey(now));
+}
+
+/** Where the pet was on `day` ("2026-10-31"): the place of the last adventure it set off on that day, if any. */
+export function awayOn(adventures: readonly { place: string; created_at: string }[], day: string): Place | null {
+  // Newest first, so the first one that day is the last it set off on.
+  const went = adventures.find((a) => toDayKey(new Date(a.created_at)) === day);
+  return went ? (placeFor(went.place) ?? null) : null;
 }

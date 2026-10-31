@@ -17,6 +17,7 @@ import Svg, { Path } from 'react-native-svg';
 import { Button } from '@/components/button';
 import { SparkleBurst } from '@/components/game/game-fx';
 import { PostcardFrame } from '@/components/postcard';
+import { VisitPostcard, type VisitCard } from '@/components/visit-postcard';
 import type { Place } from '@/lib/pet-adventures';
 import { drawScene, SCENE_HEIGHT, SCENE_WIDTH, type TimeOfDay } from '@/lib/scene-art';
 import { drawPetPhoto, levelOf, stageOf, type KindPicks } from '@/lib/world';
@@ -183,8 +184,10 @@ function PetPostcard({ place, steps, picks, name, recipient, number, width, arri
 
 const BACKDROP_THEME = { colors: { backdrop: 'rgba(10, 12, 22, 0.92)' } };
 
-/** The postcard in focus: a new one just in, or one from the album. */
-export type OpenPostcard = { place: Place; number: number; isNew: boolean };
+/** The postcard in focus, from a trip or a visit to a friend: a new one just in, or one from the album. */
+export type OpenPostcard =
+  | { place: Place; number: number; isNew: boolean }
+  | { visit: VisitCard; number: number; isNew: boolean };
 
 export function PetPostcardModal({
   open,
@@ -202,26 +205,50 @@ export function PetPostcardModal({
   onClose: () => void;
 }) {
   const { width } = useWindowDimensions();
+  const cardWidth = Math.min(width - 32, 400);
+  const key = open ? ('visit' in open ? `visit-${open.visit.day}` : `${open.place.key}-${open.number}`) : '';
+  const title = !open
+    ? ''
+    : open.isNew
+      ? `${name} sent a postcard!`
+      : 'visit' in open
+        ? open.visit.away
+          ? `${name} with ${open.visit.pet} in ${open.visit.away.stop.name}`
+          : `${name} at ${open.visit.owner}'s`
+        : `${name} in ${open.place.stop.name}`;
   return (
     <Portal>
       {/* The same deep backdrop as the trip that leads here, so the postcard reads as part of it. */}
       <Modal visible={!!open} onDismiss={onClose} contentContainerStyle={styles.modal} theme={BACKDROP_THEME}>
         {open ? (
           <>
-            <Animated.Text key={`title-${open.place.key}`} entering={FadeInDown.duration(300)} style={styles.modalTitle}>
-              {open.isNew ? `${name} sent a postcard!` : `${name} in ${open.place.stop.name}`}
+            <Animated.Text key={`title-${key}`} entering={FadeInDown.duration(300)} style={styles.modalTitle}>
+              {title}
             </Animated.Text>
-            <PetPostcard
-              key={`card-${open.place.key}-${open.number}`}
-              place={open.place}
-              steps={steps}
-              picks={picks}
-              name={name}
-              recipient={recipient}
-              number={open.number}
-              width={Math.min(width - 32, 400)}
-              arriving={open.isNew}
-            />
+            {'visit' in open ? (
+              <VisitPostcard
+                key={`card-${key}`}
+                visit={open.visit}
+                steps={steps}
+                picks={picks}
+                name={name}
+                recipient={recipient}
+                number={open.number}
+                width={cardWidth}
+              />
+            ) : (
+              <PetPostcard
+                key={`card-${key}`}
+                place={open.place}
+                steps={steps}
+                picks={picks}
+                name={name}
+                recipient={recipient}
+                number={open.number}
+                width={cardWidth}
+                arriving={open.isNew}
+              />
+            )}
             <Animated.Text entering={FadeIn.delay(1400)} style={styles.hint}>
               Tap the postcard to turn it over
             </Animated.Text>

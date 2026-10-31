@@ -791,8 +791,8 @@ export async function buyItem(item: string): Promise<boolean> {
 /** A day your pet spends in a group mate's yard (migration 021): `guest` sent theirs over. */
 export type Visit = { id: number; guest: string; host: string; day: string; created_at: string };
 
-/** Today's visit, your pet's or one to you (the newest), or null. */
-export async function getTodaysVisit(userId: string): Promise<Visit | null> {
+/** Today's visits, newest first: your pet's to a friend (one at most) and friends' pets to yours. */
+export async function getTodaysVisits(userId: string): Promise<Visit[]> {
   const today = toDayKey(new Date());
   const { data, error } = await supabase
     .from('pet_visits')
@@ -800,8 +800,8 @@ export async function getTodaysVisit(userId: string): Promise<Visit | null> {
     .or(`guest.eq.${userId},host.eq.${userId}`)
     .gte('day', toDayKey(addDays(new Date(), -1)))
     .order('id', { ascending: false });
-  if (error) return null;
-  return (data as Visit[]).find((v) => v.day === today) ?? null;
+  if (error) return [];
+  return (data as Visit[]).filter((v) => v.day === today);
 }
 
 /** Sends your pet to spend today in a group mate's yard. False if you're short of treats or it's already been. */
@@ -810,6 +810,12 @@ export async function visitMate(mate: string): Promise<boolean> {
 }
 
 /** A group mate with a pet: who they are, and the pet. */
+/** Your pet's visits to friends, newest first; empty before migration 021. */
+export async function getVisits(userId: string): Promise<Visit[]> {
+  const { data, error } = await supabase.from('pet_visits').select('*').eq('guest', userId).order('day', { ascending: false });
+  return error ? [] : (data as Visit[]);
+}
+
 export type PetMate = { id: string; name: string; world: World };
 
 /** Everyone in your groups who has a pet, by name. */

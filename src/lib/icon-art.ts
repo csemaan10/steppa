@@ -4,9 +4,9 @@
 // This file holds the parts' type and the shared shape helpers.
 
 import { circle, ellipse, n, poly, rect } from '@/lib/scene-art';
-import { roundRect, star } from '@/lib/world/common';
+import { heart, roundRect, star } from '@/lib/world/common';
 
-export { circle, ellipse, n, poly, rect, roundRect, star };
+export { circle, ellipse, heart, n, poly, rect, roundRect, star };
 
 /** One shape of a one-colour icon. */
 export type IconPart = {

@@ -37,7 +37,7 @@ export function TricksTab({ fed, available, buying, justLearned, onLearn, onShow
   return (
     <View style={styles.page}>
       <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-        Teach the next trick in one go with the treats it still needs, then ask for it from the Tricks button on the Pet tab.
+        Tricks are learned in order, each for a set number of treats.
       </Text>
       {TRICKS.map((trick, i) => {
         const state = knows.has(trick.id) ? 'learned' : learning?.trick.id === trick.id ? 'learning' : 'locked';

@@ -1912,6 +1912,9 @@ function petSpot(art: Art, look: Look, x: number, feet: number, s: number, hb: n
   };
 }
 
+/** The slots that are the pet itself, wherever it goes; the rest are its yard and the things in it. */
+export const LOOK_SLOTS = ['species', 'coat', 'pattern', 'eyes', 'collar', 'hat', 'glasses', 'outfit', 'kicks', 'aura'];
+
 /** What it looks like at this stage with these choices. */
 function lookFor(picks: Picks, stage: number): Look {
   const species = (SPECIES as readonly string[]).includes(picks.species ?? '') ? (picks.species as Species) : 'cat';

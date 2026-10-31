@@ -21,7 +21,7 @@ import {
   type WorldKind,
 } from '@/lib/world/common';
 import type { Mood } from '@/lib/world/mood';
-import { awayBackdrop, PET, petAway, petPhoto } from '@/lib/world/pet';
+import { awayBackdrop, LOOK_SLOTS, PET, petAway, petPhoto } from '@/lib/world/pet';
 
 export {
   LEVELS,
@@ -128,6 +128,31 @@ export function drawAway(
   }
   const level = levelOf(steps);
   return petAway(level, resolvePicks(PET, level, saved), time, mood, backdrop, guestOf(visitor));
+}
+
+/** A friend's pet that yours is round with today, and where it is if it's off on a trip. */
+export type Host = Visitor & { away?: Stop };
+
+/**
+ * Your pet round at a friend's for the day: in their yard, with their things, standing where their
+ * pet usually does and playable as at home, with theirs beside it. If their pet is off on a trip,
+ * yours has gone to find it there.
+ */
+export function drawVisit(
+  host: Host,
+  steps: number,
+  saved: KindPicks | undefined,
+  time: TimeOfDay,
+  mood: Mood = 'awake'
+): WorldArt {
+  if (host.away) return drawAway(host.away, steps, saved, time, mood, host);
+  const level = levelOf(steps);
+  const theirs = resolvePicks(PET, levelOf(host.steps), host.saved);
+  const mine = resolvePicks(PET, level, saved);
+  const yard = Object.entries(theirs).filter(([slot]) => !LOOK_SLOTS.includes(slot));
+  const look = Object.entries(mine).filter(([slot]) => LOOK_SLOTS.includes(slot));
+  const picks: Picks = Object.fromEntries([...yard, ...look]);
+  return PET.draw(level, picks, time, steps, mood, guestOf(host));
 }
 
 /**

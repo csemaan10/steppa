@@ -21,7 +21,8 @@ import { TreatIcon } from '@/components/treat-icon';
 import { PrimaryTabs } from '@/components/primary-tabs';
 import { LooksTab } from '@/components/shop/looks-tab';
 import { TricksTab } from '@/components/shop/tricks-tab';
-import { TripsTab } from '@/components/shop/trips-tab';
+import { TripsTab, type Outing } from '@/components/shop/trips-tab';
+import { visitCardFor, type VisitCard } from '@/components/visit-postcard';
 import { worldTitle } from '@/components/world-parts';
 import { WorldScene } from '@/components/world-scene';
 import { useLoader } from '@/hooks/use-loader';
@@ -30,12 +31,14 @@ import {
   buyItem,
   feedPetMany,
   getAdventures,
+  getMateWorld,
   getPetMates,
   getProfile,
   getPurchases,
   getShopPrices,
-  getTodaysVisit,
+  getTodaysVisits,
   getTreats,
+  getVisits,
   getWorld,
   goOnAdventure,
   visitMate,
@@ -48,6 +51,8 @@ import {
 } from '@/lib/api';
 import {
   ADVENTURE_COST,
+  awayOn,
+  awayToday,
   destinationNamed,
   nextPlace,
   visitedDestinations,
@@ -55,6 +60,7 @@ import {
   type Destination,
   type Place,
 } from '@/lib/pet-adventures';
+import { toDayKey } from '@/lib/dates';
 import { timeOfDay } from '@/lib/scene-art';
 import { isShopTab, parseFresh, priceList, type Fresh, type ShopTab, type ShopThing } from '@/lib/shop';
 import {
@@ -100,17 +106,45 @@ export default function ShopScreen() {
   const userId = useUserId();
   const params = useLocalSearchParams<{ tab?: string; fresh?: string }>();
   const { data, error } = useLoader(async () => {
-    const [status, treats, adventures, profile, owned, prices, visit, mates] = await Promise.all([
+    const [status, treats, adventures, profile, owned, prices, todays, mates, visits] = await Promise.all([
       getWorld(userId),
       getTreats(),
       getAdventures(userId),
       getProfile(userId),
       getPurchases(userId),
       getShopPrices(),
-      getTodaysVisit(userId),
+      getTodaysVisits(userId),
       getPetMates(userId).catch(() => []),
+      getVisits(userId),
     ]);
-    return { status, treats, adventures, you: profile.display_name, owned, prices, visit, mates };
+    // Postcards from its visits, with each friend's pet as it looks now and wherever it was that day.
+    // A friend who has left your groups can't be drawn any more, so theirs are left out.
+    const hosts = [...new Set(visits.map((v) => v.host))].filter((id) => mates.some((m) => m.id === id));
+    const found = await Promise.all(
+      hosts.map(async (id) => {
+        const [host, trips] = await Promise.all([getMateWorld(id).catch(() => null), getAdventures(id).catch(() => [])]);
+        return host ? ([id, { steps: host.steps, trips }] as const) : null;
+      })
+    );
+    const hostsFound = new Map(found.flatMap((h) => (h ? [h] : [])));
+    const visitPostcards = visits.flatMap((v, i) => {
+      const mate = mates.find((m) => m.id === v.host);
+      const host = hostsFound.get(v.host);
+      if (!mate || !host) return [];
+      return [{ card: visitCardFor(v.day, mate, host.steps, awayOn(host.trips, v.day)), number: visits.length - i }];
+    });
+    return {
+      status,
+      treats,
+      adventures,
+      you: profile.display_name,
+      owned,
+      prices,
+      todays,
+      mates,
+      visitPostcards,
+      visitCount: visits.length,
+    };
   }, userId);
   const editor = useWorldEditor(userId, data?.status?.world ?? null);
   // Only a pet has a shop (a row left from testing the dropped worlds doesn't).
@@ -142,8 +176,10 @@ export default function ShopScreen() {
           loadedAdventures={data.adventures}
           loadedOwned={data.owned}
           prices={data.prices}
-          visit={data.visit}
+          todays={data.todays}
           mates={data.mates}
+          loadedVisitPostcards={data.visitPostcards}
+          visitCount={data.visitCount}
           you={data.you}
           initialTab={isShopTab(params.tab) ? params.tab : 'looks'}
           fresh={parseFresh(params.fresh)}
@@ -161,8 +197,10 @@ function Shop({
   loadedAdventures,
   loadedOwned,
   prices,
-  visit: loadedVisit,
+  todays: loadedTodays,
   mates,
+  loadedVisitPostcards,
+  visitCount,
   you,
   initialTab,
   fresh,
@@ -177,10 +215,14 @@ function Shop({
   loadedOwned: string[];
   /** The shop's prices (empty before migration 021). */
   prices: ShopPrice[];
-  /** Today's visit, if your pet is on one or has a friend over. */
-  visit: Visit | null;
+  /** Today's visits: your pet's to a friend, and friends' pets to yours. */
+  todays: Visit[];
   /** Group mates with pets, to visit. */
   mates: PetMate[];
+  /** Postcards from its visits to friends, newest first. */
+  loadedVisitPostcards: { card: VisitCard; number: number }[];
+  /** How many visits it has been on. */
+  visitCount: number;
   you: string;
   initialTab: ShopTab;
   fresh: Fresh | null;
@@ -205,11 +247,17 @@ function Shop({
   // Spending shows at once; a reload brings back the server's counts.
   const [treats, setTreats] = useState(loadedTreats);
   const [adventures, setAdventures] = useState(loadedAdventures);
-  const [loaded, setLoaded] = useState({ loadedTreats, loadedAdventures });
-  if (loaded.loadedTreats !== loadedTreats || loaded.loadedAdventures !== loadedAdventures) {
-    setLoaded({ loadedTreats, loadedAdventures });
+  const [visitPostcards, setVisitPostcards] = useState(loadedVisitPostcards);
+  const [loaded, setLoaded] = useState({ loadedTreats, loadedAdventures, loadedVisitPostcards });
+  if (
+    loaded.loadedTreats !== loadedTreats ||
+    loaded.loadedAdventures !== loadedAdventures ||
+    loaded.loadedVisitPostcards !== loadedVisitPostcards
+  ) {
+    setLoaded({ loadedTreats, loadedAdventures, loadedVisitPostcards });
     setTreats(loadedTreats);
     setAdventures(loadedAdventures);
+    setVisitPostcards(loadedVisitPostcards);
   }
   const fed = treats?.fed ?? world.treats_fed ?? 0;
   const available = treats ? treats.earned - treats.fed - treats.spent : 0;
@@ -217,8 +265,18 @@ function Shop({
   const [bought, setBought] = useState<string[]>([]);
   const owned = new Set([...loadedOwned, ...bought]);
   const price = priceList(prices);
-  const [visit, setVisit] = useState<{ base: Visit | null; visit: Visit | null }>({ base: loadedVisit, visit: loadedVisit });
-  const today = visit.base === loadedVisit ? visit.visit : loadedVisit;
+  const [visits, setVisits] = useState<{ base: Visit[]; today: Visit[] }>({ base: loadedTodays, today: loadedTodays });
+  const todays = visits.base === loadedTodays ? visits.today : loadedTodays;
+  // One outing a day: trips, or a visit to a friend's.
+  const out = todays.find((v) => v.guest === world.user_id);
+  const trip = awayToday(adventures);
+  const outing: Outing | null = trip
+    ? { trip }
+    : out
+      ? { friend: mates.find((m) => m.id === out.host)?.name ?? 'a friend' }
+      : null;
+  // Friends whose pet has been with yours today, either way round.
+  const together = new Set(todays.map((v) => (v.guest === world.user_id ? v.host : v.guest)));
   const [sheetOpen, setSheetOpen] = useState(false);
   const play = usePetPlay(art.pet, { tricks: learnedTricks(fed).map((t) => t.id) });
 
@@ -349,23 +407,35 @@ function Shop({
     }
   }
 
-  /** Sends the pet to a friend's yard for the day. */
+  /** Sends the pet to a friend's yard for the day: the treats fly onto their card, then a postcard comes home. */
   async function visitFriend(mate: PetMate, cost: number, card: RefObject<View | null>) {
     if (!treats || buying) return;
     setBuying(`visit:${mate.id}`);
     try {
-      if (!(await visitMate(mate.id))) {
-        show(today ? `${name} has already been on a visit today` : 'Not enough treats yet', <TreatIcon size={20} />);
+      // Their pet as it looks now and where it is today, for the postcard.
+      const [went, host, trips] = await Promise.all([
+        visitMate(mate.id),
+        getMateWorld(mate.id).catch(() => null),
+        getAdventures(mate.id).catch(() => []),
+      ]);
+      if (!went) {
+        show(outing ? `${name} has already been out today` : 'Not enough treats yet', <TreatIcon size={20} />);
         return;
       }
       setTreats({ ...treats, spent: treats.spent + cost });
-      const day = new Date();
-      setVisit({
-        base: loadedVisit,
-        visit: { id: Date.now(), guest: world.user_id, host: mate.id, day: `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`, created_at: day.toISOString() },
+      const now = new Date();
+      const day = toDayKey(now);
+      setVisits({
+        base: loadedTodays,
+        today: [{ id: now.getTime(), guest: world.user_id, host: mate.id, day, created_at: now.toISOString() }, ...todays],
       });
+      const sent = host ? { card: visitCardFor(day, mate, host.steps, awayToday(trips)), number: visitCount + 1 } : null;
+      if (sent) setVisitPostcards([sent, ...visitPostcards]);
       fly(counterRef, card, Math.min(cost, 12), {
-        onDone: () => show(`${name} is off to ${mate.world.picks.pet?.name || `${mate.name}'s pet`} for the day`, '🏡'),
+        onDone: () =>
+          sent
+            ? setPostcard({ visit: sent.card, number: sent.number, isNew: true })
+            : show(`${name} is off to ${mate.world.picks.pet?.name || `${mate.name}'s pet`} for the day`, '🏡'),
       });
     } catch (e) {
       failed(e);
@@ -394,7 +464,9 @@ function Shop({
 
       <Animated.View style={[styles.stage, stageBox]}>
         <Animated.View style={[styles.stageScale, stageScale]}>
-          <WorldScene art={art} width={sceneWidth} version={JSON.stringify(picks)} play={play} radius={24} />
+          {/* No version: a new look swaps in place under the poof. Crossfading a whole second scene in
+              stuttered on Android, and the old pet stood still under the new one while it twirled. */}
+          <WorldScene art={art} width={sceneWidth} play={play} radius={24} />
           {/* Where bought treats fly to. */}
           {mouth ? (
             <View
@@ -468,7 +540,9 @@ function Shop({
               onBook={book}
               onOpen={setPostcard}
               mates={mates}
-              visit={today}
+              visitPostcards={visitPostcards}
+              outing={outing}
+              together={together}
               visitPrice={price.get('visit')?.treats ?? null}
               onVisit={visitFriend}
               onPassport={() => router.push('/passport')}

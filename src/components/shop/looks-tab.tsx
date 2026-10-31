@@ -104,6 +104,9 @@ export function LooksTab({
   const theme = useAppTheme();
   const { width } = useWindowDimensions();
   const [part, setPart] = useState<Part>('wardrobe');
+  // Each part stays built once it's been opened, just hidden while another shows: the wardrobe has a
+  // hundred-odd tiles, and tearing them down and building them again made every switch slow.
+  const [opened, setOpened] = useState<ReadonlySet<Part>>(() => new Set<Part>(['wardrobe']));
   const [draft, setDraft] = useState(name);
   // Rounded down: three tiles that add up to exactly the row would wrap the last one on rounding.
   const tile = Math.floor((Math.min(width, 520) - 32 - GAP * (COLUMNS - 1)) / COLUMNS) - 1;
@@ -118,94 +121,90 @@ export function LooksTab({
   const shelves = [...unlocked].sort((a, b) => Number(hasFresh(b)) - Number(hasFresh(a)));
   const identity = def.slots.filter((s) => IDENTITY_SLOTS.includes(s.id) && s.level <= level);
 
+  function open(next: Part) {
+    setPart(next);
+    setOpened((was) => (was.has(next) ? was : new Set([...was, next])));
+  }
+
   function saveName() {
     if (draft.trim() !== name) onRename(draft);
   }
 
-  if (part === 'sale') {
-    return (
-      <View style={styles.page}>
-        <ButtonGroup value={part} onChange={setPart} options={PARTS} />
-        {prices.size ? (
-          SECTIONS.map((section) => {
-            const things = SHOP.filter((t) => t.section === section && prices.get(t.id)?.treats);
-            if (!things.length) return null;
-            const tryingHere = trying && things.includes(trying) ? trying : null;
-            const price = tryingHere ? prices.get(tryingHere.id)! : null;
-            return (
-              <View key={section} style={styles.shelf}>
-                <Shelf title={SECTION_TITLES[section]} note={`${things.filter((t) => owned.has(t.id)).length} of ${things.length} yours`}>
-                  {things.map((thing) => {
-                    const choice = def.slots.find((sl) => sl.id === thing.slot)?.choices.find((c) => c.id === thing.id);
-                    if (!choice) return null;
-                    const cost = prices.get(thing.id)!;
-                    const mine = owned.has(thing.id);
-                    const forSale = onSale(cost);
-                    return (
-                      <ItemTile
-                        key={thing.id}
-                        choice={choice}
-                        size={tile}
-                        equipped={mine && picks[thing.slot] === thing.id}
-                        lock={
-                          mine || forSale
-                            ? null
-                            : { note: cost.months ? saleMonths(cost.months) : '', spoken: 'not on sale this month', icon: 'calendar' }
-                        }
-                        tag={
-                          mine
-                            ? undefined
-                            : { note: `${cost.treats}`, spoken: `${cost.treats} treats`, icon: 'treat' }
-                        }
-                        trying={trying?.id === thing.id}
-                        fresh={false}
-                        onPress={() => (mine ? onPick(thing.slot, thing.id) : onTry(trying?.id === thing.id ? null : thing))}
-                      />
-                    );
-                  })}
-                </Shelf>
-                {tryingHere && price?.treats ? (
-                  <View style={[glass(theme, 'card'), styles.buy]}>
-                    <View style={styles.flex}>
-                      <Text variant="titleSmall" style={styles.bold}>
-                        {tryingHere.name}
-                      </Text>
-                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                        {tryingHere.blurb}
-                      </Text>
-                    </View>
-                    <View style={styles.buyActions}>
-                      <SpendButton
-                        label="Buy"
-                        price={price.treats}
-                        compact
-                        disabled={available < price.treats || !!buying}
-                        loading={buying === tryingHere.id}
-                        onPress={() => onBuy(tryingHere, price.treats!)}
-                        accessibilityLabel={`Buy ${tryingHere.name} for ${price.treats} treats`}
-                      />
-                      <Button compact onPress={() => onTry(null)}>
-                        Not now
-                      </Button>
-                    </View>
-                  </View>
-                ) : null}
+  function renderSale() {
+    if (!prices.size) {
+      return (
+        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+          Nothing for sale yet.
+        </Text>
+      );
+    }
+    return SECTIONS.map((section) => {
+      const things = SHOP.filter((t) => t.section === section && prices.get(t.id)?.treats);
+      if (!things.length) return null;
+      const tryingHere = trying && things.includes(trying) ? trying : null;
+      const price = tryingHere ? prices.get(tryingHere.id)! : null;
+      return (
+        <View key={section} style={styles.shelf}>
+          <Shelf title={SECTION_TITLES[section]} note={`${things.filter((t) => owned.has(t.id)).length} of ${things.length} yours`}>
+            {things.map((thing) => {
+              const choice = def.slots.find((sl) => sl.id === thing.slot)?.choices.find((c) => c.id === thing.id);
+              if (!choice) return null;
+              const cost = prices.get(thing.id)!;
+              const mine = owned.has(thing.id);
+              const forSale = onSale(cost);
+              return (
+                <ItemTile
+                  key={thing.id}
+                  choice={choice}
+                  size={tile}
+                  equipped={mine && picks[thing.slot] === thing.id}
+                  lock={
+                    mine || forSale
+                      ? null
+                      : { note: cost.months ? saleMonths(cost.months) : '', spoken: 'not on sale this month', icon: 'calendar' }
+                  }
+                  tag={mine ? undefined : { note: `${cost.treats}`, spoken: `${cost.treats} treats`, icon: 'treat' }}
+                  trying={trying?.id === thing.id}
+                  fresh={false}
+                  onPress={() => (mine ? onPick(thing.slot, thing.id) : onTry(trying?.id === thing.id ? null : thing))}
+                />
+              );
+            })}
+          </Shelf>
+          {tryingHere && price?.treats ? (
+            <View style={[glass(theme, 'card'), styles.buy]}>
+              <View style={styles.flex}>
+                <Text variant="titleSmall" style={styles.bold}>
+                  {tryingHere.name}
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  {tryingHere.blurb}
+                </Text>
               </View>
-            );
-          })
-        ) : (
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Nothing for sale yet.
-          </Text>
-        )}
-      </View>
-    );
+              <View style={styles.buyActions}>
+                <SpendButton
+                  label="Buy"
+                  price={price.treats}
+                  compact
+                  disabled={available < price.treats || !!buying}
+                  loading={buying === tryingHere.id}
+                  onPress={() => onBuy(tryingHere, price.treats!)}
+                  accessibilityLabel={`Buy ${tryingHere.name} for ${price.treats} treats`}
+                />
+                <Button compact onPress={() => onTry(null)}>
+                  Not now
+                </Button>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      );
+    });
   }
 
-  if (part === 'pet') {
+  function renderPet() {
     return (
-      <View style={styles.page}>
-        <ButtonGroup value={part} onChange={setPart} options={PARTS} />
+      <>
         <TextInput
           mode="outlined"
           label="Name"
@@ -233,7 +232,7 @@ export function LooksTab({
             ))}
           </Shelf>
         ))}
-      </View>
+      </>
     );
   }
 
@@ -260,74 +259,98 @@ export function LooksTab({
     );
   }
 
-  const souvenirs = def.souvenirs ?? [];
-  // A trip's souvenir is yours once it has been there; a keepsake once the server says the page is full.
-  const has = (s: (typeof souvenirs)[number]) => (s.full ? owned.has(s.choice.id) : visited.has(s.from));
-  const souvenirShelf = souvenirs.length ? (
-    <Shelf
-      key="souvenirs"
-      title="Souvenirs"
-      note={`${souvenirs.filter(has).length} of ${souvenirs.length}`}
-      fresh={!!newSouvenir}>
-      {souvenirs.map((souvenir) => {
-        const { from, slot, choice, full } = souvenir;
-        const where = destinationNamed(from);
-        const mine = has(souvenir);
-        const worn = picks[slot] === choice.id;
-        const place = where?.name ?? from;
-        return (
-          <ItemTile
-            key={choice.id}
-            choice={choice}
-            size={tile}
-            equipped={worn}
-            lock={
-              mine
-                ? null
-                : full
-                  ? { note: `Fill ${place}`, spoken: `for filling the ${place} page of the passport`, icon: 'passport' }
-                  : { note: place, spoken: `a souvenir from ${place}`, icon: 'airplane' }
-            }
-            fresh={choice.id === newSouvenir}
-            // Tap one you're wearing to take it off.
-            onPress={() => onPick(slot, worn ? 'none' : choice.id)}
-            canTakeOff
-          />
-        );
-      })}
-    </Shelf>
-  ) : null;
-  const firstShelves = newSouvenir ? [] : shelves.filter(hasFresh);
-  const restShelves = shelves.filter((slot) => !firstShelves.includes(slot));
+  function renderWardrobe() {
+    const souvenirs = def.souvenirs ?? [];
+    // A trip's souvenir is yours once it has been there; a keepsake once the server says the page is full.
+    const has = (s: (typeof souvenirs)[number]) => (s.full ? owned.has(s.choice.id) : visited.has(s.from));
+    const souvenirShelf = souvenirs.length ? (
+      <Shelf
+        key="souvenirs"
+        title="Souvenirs"
+        note={`${souvenirs.filter(has).length} of ${souvenirs.length}`}
+        fresh={!!newSouvenir}>
+        {souvenirs.map((souvenir) => {
+          const { from, slot, choice, full } = souvenir;
+          const where = destinationNamed(from);
+          const mine = has(souvenir);
+          const worn = picks[slot] === choice.id;
+          const place = where?.name ?? from;
+          return (
+            <ItemTile
+              key={choice.id}
+              choice={choice}
+              size={tile}
+              equipped={worn}
+              lock={
+                mine
+                  ? null
+                  : full
+                    ? { note: `Fill ${place}`, spoken: `for filling the ${place} page of the passport`, icon: 'passport' }
+                    : { note: place, spoken: `a souvenir from ${place}`, icon: 'airplane' }
+              }
+              fresh={choice.id === newSouvenir}
+              // Tap one you're wearing to take it off.
+              onPress={() => onPick(slot, worn ? 'none' : choice.id)}
+              canTakeOff
+            />
+          );
+        })}
+      </Shelf>
+    ) : null;
+    const firstShelves = newSouvenir ? [] : shelves.filter(hasFresh);
+    const restShelves = shelves.filter((slot) => !firstShelves.includes(slot));
+
+    return (
+      <>
+        {firstShelves.map((slot) => renderShelf(slot))}
+        {souvenirShelf}
+        {restShelves.map((slot) => renderShelf(slot))}
+
+        {locked.length ? (
+          <>
+            <Text variant="labelLarge" style={[styles.coming, { color: theme.colors.onSurfaceVariant }]}>
+              COMING UP
+            </Text>
+            {locked.map((slot) => (
+              <Shelf key={slot.id} title={slot.title} note={`${shortSteps(LEVELS[slot.level]!)} steps`} locked>
+                {slot.choices.filter((c) => !c.shop).map((choice) => (
+                  <ItemTile
+                    key={choice.id}
+                    choice={choice}
+                    size={tile}
+                    equipped={false}
+                    lock={stepsLock(choiceLevel(slot, choice))}
+                    fresh={false}
+                  />
+                ))}
+              </Shelf>
+            ))}
+          </>
+        ) : null}
+      </>
+    );
+  }
+
+  const render: Record<Part, () => ReactNode> = { wardrobe: renderWardrobe, sale: renderSale, pet: renderPet };
 
   return (
     <View style={styles.page}>
-      <ButtonGroup value={part} onChange={setPart} options={PARTS} />
-      {firstShelves.map((slot) => renderShelf(slot))}
-      {souvenirShelf}
-      {restShelves.map((slot) => renderShelf(slot))}
-
-      {locked.length ? (
-        <>
-          <Text variant="labelLarge" style={[styles.coming, { color: theme.colors.onSurfaceVariant }]}>
-            COMING UP
-          </Text>
-          {locked.map((slot) => (
-            <Shelf key={slot.id} title={slot.title} note={`${shortSteps(LEVELS[slot.level]!)} steps`} locked>
-              {slot.choices.filter((c) => !c.shop).map((choice) => (
-                <ItemTile
-                  key={choice.id}
-                  choice={choice}
-                  size={tile}
-                  equipped={false}
-                  lock={stepsLock(choiceLevel(slot, choice))}
-                  fresh={false}
-                />
-              ))}
-            </Shelf>
-          ))}
-        </>
-      ) : null}
+      <ButtonGroup value={part} onChange={open} options={PARTS} />
+      <View>
+        {PARTS.map(({ value }) =>
+          opened.has(value) ? (
+            // The part showing sets the height; the others lie over it unseen and untouchable.
+            <View
+              key={value}
+              style={value === part ? styles.part : [styles.part, styles.hidden]}
+              pointerEvents={value === part ? 'auto' : 'none'}
+              importantForAccessibility={value === part ? 'auto' : 'no-hide-descendants'}
+              accessibilityElementsHidden={value !== part}>
+              {render[value]()}
+            </View>
+          ) : null
+        )}
+      </View>
     </View>
   );
 }
@@ -481,6 +504,8 @@ function ItemTile({
 
 const styles = StyleSheet.create({
   page: { gap: 20 },
+  part: { gap: 20 },
+  hidden: { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
   flex: { flex: 1 },
   bold: { fontWeight: '700' },
   coming: { letterSpacing: 1.5, marginBottom: -8 },

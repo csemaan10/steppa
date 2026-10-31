@@ -56,6 +56,9 @@ const POSTCARD_TIME: Record<Sky, TimeOfDay> = {
 
 const POSES: Motion[] = ['p-peace', 'p-salute', 'p-crossed', 'p-hips', 'flex'];
 
+/** Where a postcard is from: a stop on a route, or somewhere off the map, like a friend's yard. */
+export type PostcardPlace = Pick<Stop, 'name' | 'fact' | 'sky' | 'emoji'>;
+
 /**
  * The pose for a stop's photo: everyone cheers at the finish; otherwise the next pose along the
  * route, so neighbouring postcards differ, and in a group photo each person strikes a different one.
@@ -66,13 +69,13 @@ function postcardPose(route: Route, stop: Stop, person: number): Motion {
   return POSES[(index + person + hashString(route.key)) % POSES.length]!;
 }
 
-function sky(stop: Stop): string {
+function sky(stop: PostcardPlace): string {
   const [top, bottom] = SKIES[stop.sky];
   return `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
 }
 
 /** The picture side: gradient sky, sun, rolling hills and the stop's picture standing in the sun. */
-function PostcardArt({ stop, iconSize }: { stop: Stop; iconSize: number }) {
+function PostcardArt({ stop, iconSize }: { stop: PostcardPlace; iconSize: number }) {
   return (
     <View style={[StyleSheet.absoluteFill, { experimental_backgroundImage: sky(stop) }]}>
       <Svg width="100%" height="100%" viewBox="0 0 300 192" preserveAspectRatio="none" style={StyleSheet.absoluteFill}>
@@ -93,12 +96,12 @@ function PostcardArt({ stop, iconSize }: { stop: Stop; iconSize: number }) {
   );
 }
 
-/** Perforated stamp with the route's flag and a word or two: how far along the stop is. */
-function Stamp({ flag, label, stop }: { flag: string; label: string; stop: Stop }) {
+/** Perforated stamp with the route's flag (or the place's picture) and a word or two: how far along it is. */
+function Stamp({ flag, label, stop }: { flag?: string; label: string; stop: PostcardPlace }) {
   return (
     <View style={styles.stamp}>
       <View style={[styles.stampInner, { experimental_backgroundImage: sky(stop) }]}>
-        <FlagIcon flag={flag} size={30} />
+        {flag ? <FlagIcon flag={flag} size={30} /> : <PlaceIcon emoji={stop.emoji} size={26} color="#FFFFFF" />}
         <Text style={styles.stampKm}>{label}</Text>
       </View>
     </View>
@@ -165,10 +168,11 @@ export function Postcard({ route, stop, people, you, recipient, width }: Postcar
 }
 
 type FrameProps = {
-  stop: Stop;
+  stop: PostcardPlace;
   /** The picture: the stop's place with someone in it, `height` tall at the hour given. */
   scene: (height: number, time: TimeOfDay) => ReactNode;
-  flag: string;
+  /** The route's flag; none for somewhere off the routes, like a friend's yard. */
+  flag?: string;
   /** Bottom right of the picture after the flag, e.g. "Toronto to Ottawa · Stop 3 of 8". */
   caption: string;
   /** On the stamp under the flag, e.g. "260 KM". */
@@ -249,8 +253,8 @@ export function PostcardFrame({ stop, scene, flag, caption, stamp: stampLabel, s
                 {stop.name}
               </Text>
             </View>
-            <View style={styles.caption}>
-              <FlagIcon flag={flag} size={16} />
+            <View style={[styles.caption, !flag && styles.captionPlain]}>
+              {flag ? <FlagIcon flag={flag} size={16} /> : null}
               <Text style={styles.captionText}>{caption}</Text>
             </View>
           </View>
@@ -288,8 +292,7 @@ export function PostcardFrame({ stop, scene, flag, caption, stamp: stampLabel, s
 }
 
 type ThumbProps = {
-  route: Route;
-  stop: Stop;
+  stop: PostcardPlace;
   /** Kilometres still to go; set while the postcard is locked. */
   kmAway?: number;
   index: number;
@@ -475,6 +478,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
+  captionPlain: { paddingLeft: 8 },
   captionText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
   stampSpot: { position: 'absolute', top: 16, right: 16 },
   // Ring centred on the stamp's bottom-left corner (stamp is 50×60 at 16,16).

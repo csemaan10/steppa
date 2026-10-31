@@ -9,9 +9,10 @@ import { SpendButton } from '@/components/game/spend-button';
 import { EXPRESSIVE_SHAPES, GlassShape, type ExpressiveShape } from '@/components/glass-shape';
 import type { OpenPostcard } from '@/components/pet-adventures';
 import { PlaceIcon } from '@/components/place-icon';
-import { PostcardThumb } from '@/components/postcard';
+import { PostcardThumb, type PostcardPlace } from '@/components/postcard';
 import { SectionHeader } from '@/components/section-header';
-import type { Adventure, PetMate, Visit } from '@/lib/api';
+import { visitPlace, type VisitCard } from '@/components/visit-postcard';
+import type { Adventure, PetMate } from '@/lib/api';
 import { SKIES } from '@/lib/journeys';
 import {
   ADVENTURE_COST,
@@ -22,11 +23,15 @@ import {
   PLACES,
   visitedIn,
   type Destination,
+  type Place,
 } from '@/lib/pet-adventures';
 import { glassCard, useAppTheme, withAlpha } from '@/theme';
 
 /** A passport stamp's size. */
 const STAMP = 46;
+
+/** Where the pet went today: off on trips, or round at a friend's (whose name this is). */
+export type Outing = { trip: Place } | { friend: string };
 
 type Props = {
   /** The pet's name. */
@@ -40,8 +45,12 @@ type Props = {
   onOpen: (postcard: OpenPostcard) => void;
   /** Group mates with pets, to send yours to for the day. */
   mates: PetMate[];
-  /** Today's visit, if there's been one. */
-  visit: Visit | null;
+  /** Postcards from its visits to friends, newest first. */
+  visitPostcards: { card: VisitCard; number: number }[];
+  /** Where it has been today, if anywhere: trips and a visit don't mix on the same day. */
+  outing: Outing | null;
+  /** Friends whose pet has been with yours today, either way round. */
+  together: ReadonlySet<string>;
   /** What a visit costs (null before migration 021: no visits). */
   visitPrice: number | null;
   onVisit: (mate: PetMate, price: number, card: RefObject<View | null>) => void;
@@ -61,7 +70,9 @@ export function TripsTab({
   onBook,
   onOpen,
   mates,
-  visit,
+  visitPostcards,
+  outing,
+  together,
   visitPrice,
   onVisit,
   onPassport,
@@ -69,11 +80,24 @@ export function TripsTab({
   const theme = useAppTheme();
   const visited = adventures.map((a) => a.place);
   const points = passportPoints(visited);
-  // Places since removed from the app are skipped.
-  const postcards = adventures.flatMap((a, i) => {
-    const place = placeFor(a.place);
-    return place ? [{ id: a.id, place, number: adventures.length - i }] : [];
-  });
+  // Round at a friend's today: no trips until tomorrow.
+  const visiting = outing && 'friend' in outing ? outing.friend : null;
+  // Postcards from its trips and its visits to friends, newest first. Places since removed from the
+  // app are skipped.
+  const postcards: { key: string; at: string; from: PostcardPlace; open: OpenPostcard }[] = [
+    ...adventures.flatMap((a, i) => {
+      const place = placeFor(a.place);
+      if (!place) return [];
+      const open = { place, number: adventures.length - i, isNew: false };
+      return [{ key: `trip-${a.id}`, at: a.created_at, from: place.stop, open }];
+    }),
+    ...visitPostcards.map(({ card, number }) => ({
+      key: `visit-${card.day}`,
+      at: card.day,
+      from: visitPlace(card, name),
+      open: { visit: card, number, isNew: false },
+    })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <View style={styles.page}>
@@ -115,6 +139,11 @@ export function TripsTab({
       </View>
 
       <SectionHeader title="Where to?" note={`${ADVENTURE_COST} treats a trip`} />
+      {visiting ? (
+        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+          {name}&apos;s round at {visiting}&apos;s today, so trips are back tomorrow.
+        </Text>
+      ) : null}
       {COUNTRIES.map((destination) => (
         <DestinationCard
           key={destination.flag}
@@ -122,7 +151,7 @@ export function TripsTab({
           seen={visitedIn(destination, visited)}
           available={available}
           busy={busy === destination.flag}
-          disabled={!!busy}
+          disabled={!!busy || !!visiting}
           onBook={onBook}
         />
       ))}
@@ -135,7 +164,7 @@ export function TripsTab({
           seen={visitedIn(destination, visited)}
           available={available}
           busy={busy === destination.flag}
-          disabled={!!busy}
+          disabled={!!busy || !!visiting}
           onBook={onBook}
         />
       ))}
@@ -144,9 +173,16 @@ export function TripsTab({
         <>
           <SectionHeader title="Visit a friend" note={`${visitPrice} treats a day`} />
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            {name} spends the day in a group mate&apos;s yard, and you both see them together. They get 2 treats for having{' '}
-            {name} over.
+            {name} spends the day with a group mate&apos;s pet and sends you a postcard of the two of them. It&apos;s one
+            outing a day, a visit or trips, and your friend gets 2 treats for having {name} over.
           </Text>
+          {outing ? (
+            <Text variant="bodyMedium" style={[styles.bold, { color: theme.colors.onSurfaceVariant }]}>
+              {'trip' in outing
+                ? `${name}'s in ${outing.trip.stop.name} today, so visits are back tomorrow.`
+                : `${name}'s round at ${outing.friend}'s today, so the next visit is tomorrow.`}
+            </Text>
+          ) : null}
           {mates.length ? (
             mates.map((mate) => (
               <MateCard
@@ -155,8 +191,8 @@ export function TripsTab({
                 price={visitPrice}
                 available={available}
                 busy={busy === `visit:${mate.id}`}
-                visit={visit}
-                disabled={!!busy || !!visit}
+                together={together.has(mate.id)}
+                disabled={!!busy || !!outing}
                 onVisit={onVisit}
               />
             ))
@@ -171,19 +207,13 @@ export function TripsTab({
       <SectionHeader title="Postcards" note={`${postcards.length}`} />
       {postcards.length ? (
         <View style={styles.grid}>
-          {postcards.map(({ id, place, number }, i) => (
-            <PostcardThumb
-              key={id}
-              route={place.route}
-              stop={place.stop}
-              index={i}
-              onPress={() => onOpen({ place, number, isNew: false })}
-            />
+          {postcards.map(({ key, from, open }, i) => (
+            <PostcardThumb key={key} stop={from} index={i} onPress={() => onOpen(open)} />
           ))}
         </View>
       ) : (
         <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-          No postcards yet. Send {name} somewhere and one will come home.
+          No postcards yet. Send {name} somewhere, or round to a friend&apos;s, and one will come home.
         </Text>
       )}
     </View>
@@ -196,7 +226,7 @@ function MateCard({
   price,
   available,
   busy,
-  visit,
+  together,
   disabled,
   onVisit,
 }: {
@@ -204,7 +234,8 @@ function MateCard({
   price: number;
   available: number;
   busy: boolean;
-  visit: Visit | null;
+  /** Its pet and yours have been together today. */
+  together: boolean;
   disabled: boolean;
   onVisit: (mate: PetMate, price: number, card: RefObject<View | null>) => void;
 }) {
@@ -212,7 +243,6 @@ function MateCard({
   const ref = useRef<View>(null);
   const pet = mate.world.picks.pet;
   const petName = pet?.name || `${mate.name}'s pet`;
-  const here = visit && (visit.host === mate.id || visit.guest === mate.id);
   return (
     <View ref={ref} collapsable={false} style={[glassCard(theme), styles.country]}>
       <View style={styles.flex}>
@@ -220,7 +250,7 @@ function MateCard({
           {petName}
         </Text>
         <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-          {here ? 'Together today' : `${mate.name}'s ${pet?.species ?? 'pet'}`}
+          {together ? 'Together today' : `${mate.name}'s ${pet?.species ?? 'pet'}`}
         </Text>
       </View>
       <SpendButton
