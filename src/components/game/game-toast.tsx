@@ -7,20 +7,24 @@ import { popIn } from '@/components/game/game-motion';
 
 const SHOWN_MS = 2400;
 
-type Toast = { id: number; text: string; emoji: string };
+type Toast = { id: number; text: string; icon: ReactNode };
 
 /**
  * A little pill that pops up near the bottom ("+3 treats for walking!", "Not enough treats yet"),
  * in place of a system alert. Render `toast` anywhere: it floats over the whole screen.
  */
-export function useGameToast(bottom: number): { show: (text: string, emoji?: string) => void; toast: ReactNode } {
+export function useGameToast(bottom: number): {
+  /** Pops up `text` with an emoji or an icon (the treat icon, say) before it. */
+  show: (text: string, icon?: ReactNode) => void;
+  toast: ReactNode;
+} {
   const [current, setCurrent] = useState<Toast | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  function show(text: string, emoji = '✨') {
+  function show(text: string, icon: ReactNode = '✨') {
     clearTimeout(timer.current);
-    setCurrent((t) => ({ id: (t?.id ?? 0) + 1, text, emoji }));
+    setCurrent((t) => ({ id: (t?.id ?? 0) + 1, text, icon }));
     timer.current = setTimeout(() => setCurrent(null), SHOWN_MS);
   }
 
@@ -33,7 +37,7 @@ export function useGameToast(bottom: number): { show: (text: string, emoji?: str
           exiting={FadeOutDown.duration(180)}
           accessibilityLiveRegion="polite"
           style={styles.pill}>
-          <Text style={styles.emoji}>{current.emoji}</Text>
+          {typeof current.icon === 'string' ? <Text style={styles.emoji}>{current.icon}</Text> : current.icon}
           <Text style={styles.text}>{current.text}</Text>
         </Animated.View>
       </View>

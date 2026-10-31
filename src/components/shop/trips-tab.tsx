@@ -2,13 +2,16 @@ import { useRef, type RefObject } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 
+import { Button } from '@/components/button';
 import { MAGIC_COLOR, TRIP_COLOR } from '@/components/game/colors';
+import { FlagIcon } from '@/components/flag-icon';
 import { SpendButton } from '@/components/game/spend-button';
 import { EXPRESSIVE_SHAPES, GlassShape, type ExpressiveShape } from '@/components/glass-shape';
 import type { OpenPostcard } from '@/components/pet-adventures';
+import { PlaceIcon } from '@/components/place-icon';
 import { PostcardThumb } from '@/components/postcard';
 import { SectionHeader } from '@/components/section-header';
-import type { Adventure } from '@/lib/api';
+import type { Adventure, PetMate, Visit } from '@/lib/api';
 import { SKIES } from '@/lib/journeys';
 import {
   ADVENTURE_COST,
@@ -35,13 +38,34 @@ type Props = {
   /** Books a trip; `ticket` is the destination's card, for the treats to fly to. */
   onBook: (destination: Destination, ticket: RefObject<View | null>) => void;
   onOpen: (postcard: OpenPostcard) => void;
+  /** Group mates with pets, to send yours to for the day. */
+  mates: PetMate[];
+  /** Today's visit, if there's been one. */
+  visit: Visit | null;
+  /** What a visit costs (null before migration 021: no visits). */
+  visitPrice: number | null;
+  onVisit: (mate: PetMate, price: number, card: RefObject<View | null>) => void;
+  onPassport: () => void;
 };
 
 /**
  * Trips: your pet's passport (a point for every new place, a stamp for every country and fantasy
- * land), where to send it next, and every postcard it has sent home.
+ * land, and the way into the whole passport), where to send it next, friends' yards to visit for the
+ * day, and every postcard it has sent home.
  */
-export function TripsTab({ name, available, adventures, busy, onBook, onOpen }: Props) {
+export function TripsTab({
+  name,
+  available,
+  adventures,
+  busy,
+  onBook,
+  onOpen,
+  mates,
+  visit,
+  visitPrice,
+  onVisit,
+  onPassport,
+}: Props) {
   const theme = useAppTheme();
   const visited = adventures.map((a) => a.place);
   const points = passportPoints(visited);
@@ -85,6 +109,9 @@ export function TripsTab({ name, available, adventures, busy, onBook, onOpen }: 
             ))}
           </View>
         ))}
+        <Button mode="outlined" icon="passport" onPress={onPassport}>
+          Open the passport
+        </Button>
       </View>
 
       <SectionHeader title="Where to?" note={`${ADVENTURE_COST} treats a trip`} />
@@ -113,6 +140,34 @@ export function TripsTab({ name, available, adventures, busy, onBook, onOpen }: 
         />
       ))}
 
+      {visitPrice ? (
+        <>
+          <SectionHeader title="Visit a friend" note={`${visitPrice} treats a day`} />
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            {name} spends the day in a group mate&apos;s yard, and you both see them together. They get 2 treats for having{' '}
+            {name} over.
+          </Text>
+          {mates.length ? (
+            mates.map((mate) => (
+              <MateCard
+                key={mate.id}
+                mate={mate}
+                price={visitPrice}
+                available={available}
+                busy={busy === `visit:${mate.id}`}
+                visit={visit}
+                disabled={!!busy || !!visit}
+                onVisit={onVisit}
+              />
+            ))
+          ) : (
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Nobody in your groups has a pet yet.
+            </Text>
+          )}
+        </>
+      ) : null}
+
       <SectionHeader title="Postcards" note={`${postcards.length}`} />
       {postcards.length ? (
         <View style={styles.grid}>
@@ -135,6 +190,53 @@ export function TripsTab({ name, available, adventures, busy, onBook, onOpen }: 
   );
 }
 
+/** A group mate's pet, to send yours to for the day. */
+function MateCard({
+  mate,
+  price,
+  available,
+  busy,
+  visit,
+  disabled,
+  onVisit,
+}: {
+  mate: PetMate;
+  price: number;
+  available: number;
+  busy: boolean;
+  visit: Visit | null;
+  disabled: boolean;
+  onVisit: (mate: PetMate, price: number, card: RefObject<View | null>) => void;
+}) {
+  const theme = useAppTheme();
+  const ref = useRef<View>(null);
+  const pet = mate.world.picks.pet;
+  const petName = pet?.name || `${mate.name}'s pet`;
+  const here = visit && (visit.host === mate.id || visit.guest === mate.id);
+  return (
+    <View ref={ref} collapsable={false} style={[glassCard(theme), styles.country]}>
+      <View style={styles.flex}>
+        <Text variant="titleMedium" style={styles.bold}>
+          {petName}
+        </Text>
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          {here ? 'Together today' : `${mate.name}'s ${pet?.species ?? 'pet'}`}
+        </Text>
+      </View>
+      <SpendButton
+        label="Visit"
+        price={price}
+        mode="contained-tonal"
+        compact
+        disabled={available < price || disabled}
+        loading={busy}
+        onPress={() => onVisit(mate, price, ref)}
+        accessibilityLabel={`Send your pet to ${petName} for the day, for ${price} treats`}
+      />
+    </View>
+  );
+}
+
 /** Each destination's shape, on its stamp and its card alike: no two in a row the same. */
 function shapeOf(destination: Destination): ExpressiveShape {
   const row = destination.fantasy ? FANTASY_DESTINATIONS : COUNTRIES;
@@ -144,6 +246,15 @@ function shapeOf(destination: Destination): ExpressiveShape {
 /** A fantasy land's sky shows through its glass; a country's glass is clear. */
 function tintOf(destination: Destination): readonly [string, string] | undefined {
   return destination.fantasy ? SKIES[destination.places[0]!.stop.sky] : undefined;
+}
+
+/** What's on a destination's glass: a country's flag, or a fantasy land's emblem in white over its sky. */
+function DestinationMark({ destination, size }: { destination: Destination; size: number }) {
+  return destination.fantasy ? (
+    <PlaceIcon emoji={destination.flag} size={size} color="#FFFFFF" />
+  ) : (
+    <FlagIcon flag={destination.flag} size={size} />
+  );
 }
 
 /** A stamp in the passport: faint until visited, inked in after, ticked once it's all seen. */
@@ -166,7 +277,7 @@ function DestinationStamp({ destination, seen, tilt }: { destination: Destinatio
           wash={all ? color : undefined}
           dim={!inked}
           style={{ transform: [{ rotate: `${inked ? tilt : 0}deg` }] }}>
-          <Text style={styles.stampFlag}>{destination.flag}</Text>
+          <DestinationMark destination={destination} size={30} />
         </GlassShape>
         {all ? (
           <View style={[styles.done, { backgroundColor: color, borderColor: theme.colors.surface }]}>
@@ -181,7 +292,7 @@ function DestinationStamp({ destination, seen, tilt }: { destination: Destinatio
   );
 }
 
-/** Somewhere to send the pet: a country's flag, or a fantasy land's emoji, in its glass shape. */
+/** Somewhere to send the pet: a country's flag, or a fantasy land's emblem, in its glass shape. */
 function DestinationCard({
   destination,
   seen,
@@ -199,7 +310,7 @@ function DestinationCard({
 }) {
   const theme = useAppTheme();
   const ref = useRef<View>(null);
-  const { name, flag, places, fantasy } = destination;
+  const { name, places, fantasy } = destination;
   const color = fantasy ? MAGIC_COLOR : TRIP_COLOR;
   const left = places.length - seen;
   const short = ADVENTURE_COST - available;
@@ -207,7 +318,7 @@ function DestinationCard({
   return (
     <View ref={ref} collapsable={false} style={[glassCard(theme), styles.country]}>
       <GlassShape shape={shapeOf(destination)} size={48} tint={tintOf(destination)}>
-        <Text style={styles.cardIcon}>{flag}</Text>
+        <DestinationMark destination={destination} size={32} />
       </GlassShape>
       <View style={styles.flex}>
         <Text variant="titleMedium" style={styles.bold}>
@@ -251,7 +362,6 @@ const styles = StyleSheet.create({
   magicStamps: { borderTopWidth: 1, borderStyle: 'dashed', paddingTop: 14 },
   stampCell: { alignItems: 'center', gap: 4, width: '15%', minWidth: 46 },
   stamp: { width: STAMP, height: STAMP },
-  stampFlag: { fontSize: 22, lineHeight: 28 },
   done: {
     position: 'absolute',
     right: -4,
@@ -265,7 +375,6 @@ const styles = StyleSheet.create({
   },
   stampCount: { fontSize: 11, fontWeight: '700' },
   country: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  cardIcon: { fontSize: 24, lineHeight: 30 },
   track: { height: 6, borderRadius: 3, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 3 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 14 },

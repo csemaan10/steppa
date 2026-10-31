@@ -7,31 +7,35 @@ import { ActivityIndicator, Appbar, Card, Text } from 'react-native-paper';
 import Animated from 'react-native-reanimated';
 
 import { Button } from '@/components/button';
+import { FlagIcon } from '@/components/flag-icon';
 import { useTabBarSpace } from '@/components/floating-tab-bar';
 import { useCookieFlights } from '@/components/game/cookie-flights';
 import { useGameToast } from '@/components/game/game-toast';
 import { LevelUp } from '@/components/game/level-up';
-import { NewTrick } from '@/components/game/new-trick';
+import { SouvenirReveal } from '@/components/game/souvenir-reveal';
 import { TreatCounter } from '@/components/game/treat-counter';
 import { GlassAction } from '@/components/glass-action';
-import { ProgressBar } from '@/components/journey-parts';
-import { AdventuresSection, PetPostcardModal, type OpenPostcard } from '@/components/pet-adventures';
+import { PetPostcardModal, type OpenPostcard } from '@/components/pet-adventures';
 import { PetCreator } from '@/components/pet-creator';
-import { usePetPlay, type Lesson } from '@/components/pet-play';
-import { TrickMenu, TricksSection } from '@/components/pet-tricks';
-import { SectionHeader } from '@/components/section-header';
-import { MilestoneList, shortSteps, StageBadge, worldTitle } from '@/components/world-parts';
+import { usePetPlay } from '@/components/pet-play';
+import { AdventuresPreview, LooksPreview, MilestonesPreview, TricksPreview } from '@/components/pet-previews';
+import { NewTreatsCard, TreatsSheet } from '@/components/pet-treats';
+import { TreatIcon } from '@/components/treat-icon';
+import { TrickMenu } from '@/components/pet-tricks';
+import { StageBadge, worldTitle } from '@/components/world-parts';
 import { WorldScene } from '@/components/world-scene';
-import { useCountUp } from '@/hooks/use-count-up';
 import { useKeyboardSpace } from '@/hooks/use-keyboard-space';
 import { useLoader } from '@/hooks/use-loader';
 import { useScreenFocused } from '@/hooks/use-screen-focused';
 import { useWorldEditor } from '@/hooks/use-world-editor';
 import {
-  feedPet,
+  claimKeepsakes,
+  claimTreats,
   getAdventures,
+  getMateWorld,
   getProfile,
   getStepHistory,
+  getTodaysVisit,
   getTreatGifts,
   getTreats,
   getWorld,
@@ -39,40 +43,41 @@ import {
   syncSteps,
   updateWorld,
   type Adventure,
+  type TreatBonus,
   type TreatGift,
   type Treats,
   type World,
 } from '@/lib/api';
-import { formatSteps } from '@/lib/dates';
 import { askForPushOnce } from '@/lib/notifications';
+import { keepsakeNamed, passportPages } from '@/lib/passport';
+import { awayToday, type Place } from '@/lib/pet-adventures';
 import { markPetMilestoneShown } from '@/lib/pet-milestones';
 import { timeOfDay } from '@/lib/scene-art';
 import { freshParam } from '@/lib/shop';
 import {
-  describeUnlock,
+  drawAway,
   drawWorld,
   learnedTricks,
   levelOf,
-  levelProgress,
   MAX_LEVEL,
   MOOD_SAYS,
   moodLine,
   moodOf,
-  training,
+  resolvePicks,
   unlockAt,
   WORLD_HEIGHT,
   WORLD_WIDTH,
   WORLDS,
   type KindPicks,
-  type Trick,
+  type Visitor,
 } from '@/lib/world';
 import { useUserId } from '@/providers/auth-provider';
-import { glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
+import { glass, glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
 /** The scene never takes more than this share of the screen's height, so there's room below it. */
 const SCENE_SHARE = 0.42;
-/** After a treat finishes teaching a trick: it eats, has its go, then the trick is announced. */
-const ANNOUNCE_AFTER_MS = 2400;
+/** The scene card's padding around the scene. */
+const INSET = 8;
 /** Treats earned since this phone last showed them, which rain into the counter. */
 const seenKey = (userId: string) => `steppa:treats-seen:${userId}`;
 
@@ -142,6 +147,9 @@ function markTreatsSeen(userId: string, earned: number) {
   } catch {}
 }
 
+/** A group mate's pet spending today in your yard (or yours in theirs), and whose it is. */
+type Visiting = Visitor & { owner: string; name: string; yours: boolean };
+
 export default function PetScreen() {
   const theme = useAppTheme();
   const userId = useUserId();
@@ -149,32 +157,48 @@ export default function PetScreen() {
   const focused = useScreenFocused();
   const { width, height } = useWindowDimensions();
   const [busy, setBusy] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   // The name field (adopting) scrolls above the keyboard.
   const keyboardSpace = useKeyboardSpace();
-  const sceneWidth = Math.min(width - 32, Math.round((height * SCENE_SHARE * WORLD_WIDTH) / WORLD_HEIGHT));
+  const cardWidth = Math.min(width - 32, Math.round((height * SCENE_SHARE * WORLD_WIDTH) / WORLD_HEIGHT) + INSET * 2);
   // The treat counter sits up here beside the shop; the pet below keeps the count (treats rain into
-  // it and leave it as they're given) and reports it, with the steps to the next one.
+  // it as they're earned) and reports it, with the steps to the next one.
   const counterRef = useRef<View>(null);
   const [treatCount, setTreatCount] = useState<HeaderTreats | null>(null);
 
   const { data, error, reload } = useLoader(async () => {
     // Catch up on today's steps first; a failed read still shows what's saved.
     await syncSteps(userId, 2).catch(() => {});
-    const [status, history, profile, treats, adventures, gifts] = await Promise.all([
+    // Then collect any bonus treats, so the count includes them, and any keepsakes the pet's trips
+    // have earned.
+    const [bonuses, keepsakes] = await Promise.all([claimTreats(), claimKeepsakes()]);
+    const [status, history, profile, treats, adventures, gifts, visit] = await Promise.all([
       getWorld(userId),
       getStepHistory(userId, 14),
       getProfile(userId),
       getTreats(),
       getAdventures(userId),
       getTreatGifts(userId),
+      getTodaysVisit(userId),
     ]);
     if (status) markPetMilestoneShown(userId, levelOf(status.steps));
-    return { status, history, profile, treats, adventures, gifts };
+    let visiting: Visiting | null = null;
+    if (visit) {
+      const other = visit.guest === userId ? visit.host : visit.guest;
+      const [mate, owner] = await Promise.all([getMateWorld(other).catch(() => null), getProfile(other).catch(() => null)]);
+      if (mate) {
+        const saved = mate.world.picks.pet;
+        const who = owner?.display_name ?? 'A friend';
+        visiting = { steps: mate.steps, saved, owner: who, name: saved?.name || `${who}'s pet`, yours: visit.guest === userId };
+      }
+    }
+    return { status, history, profile, treats, adventures, gifts, bonuses, keepsakes, visiting };
   }, userId);
   const editor = useWorldEditor(userId, data?.status?.world ?? null);
   // A row left from testing the worlds that were dropped counts as no pet yet.
   const world = editor.world && WORLDS[editor.world.kind] ? editor.world : null;
   const steps = data?.status?.steps ?? 0;
+  const petName = world ? worldTitle(WORLDS[world.kind], world.picks[world.kind]?.name) : 'Your pet';
 
   const [refreshing, setRefreshing] = useState(false);
   async function pullToRefresh() {
@@ -203,7 +227,7 @@ export default function PetScreen() {
     }
   }
 
-  const title = !data ? 'Pet' : world ? worldTitle(WORLDS[world.kind], world.picks[world.kind]?.name) : 'Adopt a pet';
+  const title = !data ? 'Pet' : world ? petName : 'Adopt a pet';
 
   return (
     <View style={[styles.flex, screenBackground(theme)]}>
@@ -215,7 +239,7 @@ export default function PetScreen() {
               count={treatCount.count}
               toNext={treatCount.toNext}
               targetRef={counterRef}
-              onPress={() => router.push({ pathname: '/shop', params: { tab: 'tricks' } })}
+              onPress={() => setSheetOpen(true)}
             />
           </View>
         ) : null}
@@ -245,20 +269,37 @@ export default function PetScreen() {
                 goal={data.profile.daily_goal}
                 you={data.profile.display_name}
                 loadedTreats={data.treats}
-                loadedAdventures={data.adventures}
+                adventures={data.adventures}
                 loadedGifts={data.gifts}
-                sceneWidth={sceneWidth}
+                bonuses={data.bonuses}
+                keepsakes={data.keepsakes}
+                visiting={data.visiting}
+                cardWidth={cardWidth}
                 animate={focused}
                 editor={editor}
                 counterRef={counterRef}
                 onTreatCount={setTreatCount}
               />
             ) : (
-              <PetCreator sceneWidth={sceneWidth} animate={focused} busy={busy} onAdopt={adopt} />
+              <PetCreator sceneWidth={cardWidth - INSET * 2} animate={focused} busy={busy} onAdopt={adopt} />
             )}
           </ScrollView>
         </Animated.View>
       )}
+
+      {world && data?.treats ? (
+        <TreatsSheet
+          open={sheetOpen}
+          name={petName}
+          available={treatCount?.count ?? data.treats.earned - data.treats.fed - data.treats.spent}
+          toNext={data.treats.toNext}
+          onClose={() => setSheetOpen(false)}
+          onShop={() => {
+            setSheetOpen(false);
+            router.push('/shop');
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -272,9 +313,12 @@ function PetHome({
   goal,
   you,
   loadedTreats,
-  loadedAdventures,
+  adventures,
   loadedGifts,
-  sceneWidth,
+  bonuses,
+  keepsakes,
+  visiting,
+  cardWidth,
   animate,
   editor,
   counterRef,
@@ -289,12 +333,17 @@ function PetHome({
   goal: number;
   /** Your name, for the pet's postcards. */
   you: string;
-  /** Null before migration 018: treats are then free and there are no tricks or adventures. */
+  /** Null before migration 018: then there are no treats, tricks or adventures. */
   loadedTreats: Treats | null;
-  loadedAdventures: Adventure[];
+  adventures: Adventure[];
   /** Treats friends have given it on playdates, newest first. */
   loadedGifts: TreatGift[];
-  sceneWidth: number;
+  /** Bonus treats that just came in. */
+  bonuses: TreatBonus[];
+  /** Keepsakes that just came home with a full passport page. */
+  keepsakes: string[];
+  visiting: Visiting | null;
+  cardWidth: number;
   animate: boolean;
   editor: ReturnType<typeof useWorldEditor>;
   /** The treat counter in the header, for treats to fly into. */
@@ -310,20 +359,16 @@ function PetHome({
   const name = worldTitle(def, saved?.name);
   const time = timeOfDay();
   const mood = moodOf(today, goal);
+  const away = awayToday(adventures);
+  const sceneWidth = cardWidth - INSET * 2;
+  const treats = loadedTreats;
 
-  // Treats given show straight away; each load brings back the server's count.
-  const [treats, setTreats] = useState(loadedTreats);
-  const [loaded, setLoaded] = useState(loadedTreats);
   // Treats earned since this phone last showed them: held back from the counter, then rained in.
   const [rain, setRain] = useState<{ source: Treats | null; total: number; incoming: number }>({
     source: null,
     total: 0,
     incoming: 0,
   });
-  if (loaded !== loadedTreats) {
-    setLoaded(loadedTreats);
-    setTreats(loadedTreats);
-  }
   if (rain.source !== loadedTreats) {
     const seen = loadedTreats ? seenTreats(userId) : null;
     const total = loadedTreats && seen !== null ? Math.max(0, loadedTreats.earned - seen) : 0;
@@ -332,14 +377,23 @@ function PetHome({
   const fed = treats?.fed ?? world.treats_fed ?? 0;
   const available = treats ? treats.earned - treats.fed - treats.spent : null;
   const [postcard, setPostcard] = useState<OpenPostcard | null>(null);
-  const [announcing, setAnnouncing] = useState<Trick | null>(null);
+  const [milestonesOpen, setMilestonesOpen] = useState(false);
+  // The receipt for new bonuses shows until you've seen it; a reload brings a new list.
+  const [seenBonuses, setSeenBonuses] = useState<TreatBonus[] | null>(null);
+  // Keepsakes just brought home, revealed one at a time.
+  const [revealed, setRevealed] = useState<{ from: string[]; seen: number }>({ from: [], seen: 0 });
+  const keepsakesSeen = revealed.from === keepsakes ? revealed.seen : 0;
+  const nextKeepsake = keepsakes[keepsakesSeen];
+  const revealing = nextKeepsake ? keepsakeNamed(nextKeepsake) : undefined;
 
-  const art = drawWorld(world.kind, steps, saved, time, mood);
+  const art = away
+    ? drawAway(away.stop, steps, saved, time, mood, visiting ?? undefined)
+    : drawWorld(world.kind, steps, saved, time, mood, visiting ?? undefined);
+  const toy = resolvePicks(def, level, saved).toy;
   const play = usePetPlay(art.pet, { tricks: learnedTricks(fed).map((t) => t.id), says: MOOD_SAYS[mood] });
-  const shownSteps = useCountUp(steps, 1200);
   const muted = { color: theme.colors.onSurfaceVariant };
 
-  const stepsRef = useRef<View>(null);
+  const lineRef = useRef<View>(null);
   const { fly, flights } = useCookieFlights();
   const { show, toast } = useGameToast(tabBarSpace + 12);
 
@@ -357,18 +411,30 @@ function PetHome({
     return () => clearInterval(timer);
   }, [animate, mood]);
 
-  // Walking earned treats while you were away: they fly up from your steps into the counter, one
-  // landing at a time, once the tab is on screen.
-  // Treats from friends come in with the rest, and say who they're from.
+  // Treats earned while you were away fly up from under the scene into the counter, one landing at a
+  // time, once the tab is on screen; the toast says where they came from (walking, bonuses, friends).
   const rainIn = useEffectEvent((total: number) => {
     const gifts = unseenGifts(userId, loadedGifts).slice(0, total);
     markGiftsSeen(userId, loadedGifts);
-    const walked = total - gifts.length;
-    if (!gifts.length) show(`+${total} ${total === 1 ? 'treat' : 'treats'} for walking!`, '🍪');
-    else if (walked) show(`+${walked} for walking, +${gifts.length} from ${whoGave(gifts)}!`, '🎁');
-    else show(`${whoGave(gifts)} gave ${name} ${gifts.length === 1 ? 'a treat' : `${gifts.length} treats`}!`, '🎁');
+    const bonus = Math.min(
+      total - gifts.length,
+      bonuses.reduce((sum, b) => sum + b.treats, 0)
+    );
+    const walked = total - gifts.length - bonus;
+    if (gifts.length && !walked && !bonus) {
+      show(`${whoGave(gifts)} gave ${name} ${gifts.length === 1 ? 'a treat' : `${gifts.length} treats`}!`, '🎁');
+    } else if (!gifts.length && !bonus) {
+      show(`+${total} ${total === 1 ? 'treat' : 'treats'} for walking!`, <TreatIcon size={20} />);
+    } else {
+      const parts = [
+        walked ? `+${walked} for walking` : null,
+        bonus ? `+${bonus} bonus` : null,
+        gifts.length ? `+${gifts.length} from ${whoGave(gifts)}` : null,
+      ].filter(Boolean);
+      show(`${parts.join(', ')}!`, gifts.length ? '🎁' : <TreatIcon size={20} />);
+    }
     const drawn = Math.min(total, 8);
-    fly(stepsRef, counterRef, total, {
+    fly(lineRef, counterRef, total, {
       onLand: (i) => setRain((r) => ({ ...r, incoming: total - Math.round(((i + 1) / drawn) * total) })),
       onDone: () => setRain((r) => ({ ...r, incoming: 0 })),
     });
@@ -388,32 +454,6 @@ function PetHome({
     }, 700);
     return () => clearTimeout(timer);
   }, [rain.source, rain.total, animate, userId, loadedGifts]);
-
-  async function giveTreat() {
-    // Before migration 018, treats are free and teach nothing.
-    if (!treats) {
-      play.treat();
-      return;
-    }
-    if (!available) return;
-    const learning = training(treats.fed);
-    const lesson: Lesson | undefined = learning
-      ? { trick: learning.trick.id, skill: (learning.given + 1) / learning.trick.treats }
-      : undefined;
-    setTreats({ ...treats, fed: treats.fed + 1 });
-    play.treat(lesson);
-    const undo = () => setTreats((t) => t && { ...t, fed: t.fed - 1 });
-    try {
-      if ((await feedPet()) === null) {
-        undo();
-        return;
-      }
-      // That treat finished a trick.
-      if (learning && lesson && lesson.skill >= 1) setTimeout(() => setAnnouncing(learning.trick), ANNOUNCE_AFTER_MS);
-    } catch {
-      undo();
-    }
-  }
 
   function openShop(tab?: 'tricks' | 'trips') {
     router.push(tab ? { pathname: '/shop', params: { tab } } : '/shop');
@@ -448,106 +488,91 @@ function PetHome({
 
   return (
     <>
-      <View style={styles.scene}>
-        <WorldScene
-          art={art}
-          width={sceneWidth}
-          animate={animate}
-          version={`${level}:${time}:${mood}:${JSON.stringify(saved ?? {})}`}
-          play={play}
-          radius={24}
-        />
-        <StageBadge def={def} level={level} />
-        {announcing ? <NewTrick key={announcing.id} trick={announcing} onDone={() => setAnnouncing(null)} /> : null}
-      </View>
-
-      <View style={[styles.actions, { width: sceneWidth }]}>
-        <Button mode="contained-tonal" icon="hand-heart" compact onPress={play.stroke} style={styles.action}>
-          Pet
-        </Button>
-        <Button
-          mode="contained-tonal"
-          icon="cookie"
-          compact
-          disabled={available === 0}
-          onPress={giveTreat}
-          accessibilityLabel={shownTreats === null ? 'Treat' : `Treat, ${shownTreats} left`}
-          style={shownTreats === null ? styles.action : styles.treat}>
-          {shownTreats === null ? 'Treat' : `Treat · ${shownTreats}`}
-        </Button>
-        <Button mode="contained-tonal" icon="tennis-ball" compact onPress={play.play} style={styles.action}>
-          Play
-        </Button>
-      </View>
-      {treats ? (
-        <TrickMenu
-          fed={fed}
-          width={sceneWidth}
-          onShowOff={(trick) => play.showOff(trick)}
-          onShop={() => openShop('tricks')}
-        />
-      ) : null}
-      <Text variant="labelMedium" style={[styles.hint, muted]}>
-        {moodLine(mood, name, today, goal)}
-      </Text>
-
-      <Card mode="contained" style={glassCard(theme)}>
-        <Card.Content style={styles.stats}>
-          <View>
-            <View ref={stepsRef} collapsable={false} style={styles.stepsSpot}>
-              <Text variant="displaySmall" style={styles.bold}>
-                {formatSteps(shownSteps)}
-              </Text>
-            </View>
-            <Text variant="bodyMedium" style={muted}>
-              steps walked together since {since}
-            </Text>
+      <Card mode="contained" style={[glassCard(theme), styles.sceneCard, { width: cardWidth }]}>
+        <View style={styles.scene}>
+          <WorldScene
+            art={art}
+            width={sceneWidth}
+            animate={animate}
+            version={`${level}:${time}:${mood}:${away?.key ?? 'home'}:${visiting?.name ?? ''}:${JSON.stringify(saved ?? {})}`}
+            play={play}
+            radius={18}
+          />
+          {away ? <PlaceBadge place={away} /> : <StageBadge def={def} level={level} />}
+        </View>
+        <View ref={lineRef} collapsable={false}>
+          <Text variant="bodyMedium" style={[styles.line, muted]}>
+            {sceneLine(name, mood, today, goal, away, visiting)}
+          </Text>
+        </View>
+        <View style={styles.buttons}>
+          <View style={styles.actions}>
+            <Button mode="contained-tonal" icon="hand-heart" onPress={play.stroke} style={styles.action}>
+              Pet
+            </Button>
+            <Button mode="contained-tonal" icon="tennis-ball" onPress={() => play.play(toy)} style={styles.action}>
+              Play
+            </Button>
           </View>
-          {next ? (
-            <View style={styles.next}>
-              <View style={styles.nextRow}>
-                <Text variant="titleSmall" style={styles.bold}>
-                  Next: {shortSteps(next.steps)}
-                </Text>
-                <Text variant="labelLarge" style={muted}>
-                  {formatSteps(toGo)} to go
-                </Text>
-              </View>
-              <ProgressBar fraction={levelProgress(steps)} />
-              <Text variant="bodySmall" numberOfLines={2} style={muted}>
-                {describeUnlock(next)}
-                {days ? ` · ${aboutDays(days)} at your pace` : ''}
-              </Text>
-            </View>
-          ) : (
-            <Text variant="bodyLarge">Fully grown, every last milestone! Every step still counts.</Text>
-          )}
-        </Card.Content>
+          {treats ? (
+            <TrickMenu fed={fed} onShowOff={(trick) => play.showOff(trick)} onShop={() => openShop('tricks')} />
+          ) : null}
+        </View>
       </Card>
+
+      {bonuses.length && seenBonuses !== bonuses ? (
+        <NewTreatsCard bonuses={bonuses} name={name} onDone={() => setSeenBonuses(bonuses)} />
+      ) : null}
 
       {treats && available !== null ? (
         <>
-          <TricksSection name={name} fed={fed} onShop={() => openShop('tricks')} />
-          <AdventuresSection
+          <TricksPreview
             name={name}
-            adventures={loadedAdventures}
+            fed={fed}
+            onShowOff={(trick) => play.showOff(trick)}
+            onShop={() => openShop('tricks')}
+          />
+          <AdventuresPreview
+            name={name}
+            adventures={adventures}
+            away={away}
+            pages={passportPages(adventures)}
             onOpen={setPostcard}
             onShop={() => openShop('trips')}
-          />
-          <PetPostcardModal
-            open={postcard}
-            steps={steps}
-            picks={saved}
-            name={name}
-            recipient={you}
-            onClose={() => setPostcard(null)}
+            onPassport={() => router.push('/passport')}
           />
         </>
       ) : null}
+      <LooksPreview
+        def={def}
+        level={level}
+        saved={saved}
+        name={name}
+        onCustomize={() => router.push({ pathname: '/shop', params: { tab: 'looks' } })}
+      />
+      <MilestonesPreview
+        def={def}
+        level={level}
+        steps={steps}
+        since={since}
+        next={next}
+        days={days ? aboutDays(days) : null}
+        expanded={milestonesOpen}
+        onToggle={() => setMilestonesOpen(!milestonesOpen)}
+      />
 
-      <SectionHeader title="Milestones" note={`${level} of ${MAX_LEVEL}`} />
-      <MilestoneList def={def} level={level} />
+      <Button mode="contained" icon="storefront-outline" onPress={() => openShop()}>
+        Shop
+      </Button>
 
+      <PetPostcardModal
+        open={postcard}
+        steps={steps}
+        picks={saved}
+        name={name}
+        recipient={you}
+        onClose={() => setPostcard(null)}
+      />
       {celebrating ? (
         <LevelUp
           def={def}
@@ -561,10 +586,53 @@ function PetHome({
           }}
           onLater={() => editor.celebrate(level)}
         />
+      ) : revealing ? (
+        <SouvenirReveal
+          key={revealing.souvenir.choice.id}
+          souvenir={revealing.souvenir}
+          from={revealing.country}
+          name={name}
+          onWear={() => {
+            setRevealed({ from: keepsakes, seen: keepsakesSeen + 1 });
+            editor.pick('keepsake', revealing.souvenir.choice.id);
+          }}
+          onLater={() => setRevealed({ from: keepsakes, seen: keepsakesSeen + 1 })}
+        />
       ) : null}
       {flights}
       {toast}
     </>
+  );
+}
+
+/** Under the scene: where the pet is if it's away, who's visiting, or else how it feels. */
+function sceneLine(
+  name: string,
+  mood: ReturnType<typeof moodOf>,
+  today: number,
+  goal: number,
+  away: Place | null,
+  visiting: Visiting | null
+): string {
+  if (away) return `${name} is exploring ${away.stop.name} today, home tomorrow`;
+  if (visiting) {
+    return visiting.yours
+      ? `${name} is round at ${visiting.owner}'s with ${visiting.name} today`
+      : `${visiting.name} came over from ${visiting.owner}'s for the day`;
+  }
+  return moodLine(mood, name, today, goal);
+}
+
+/** Where the pet is today, in a pill at the top of the scene. */
+function PlaceBadge({ place }: { place: Place }) {
+  const theme = useAppTheme();
+  return (
+    <View style={[glass(theme, 'strong'), styles.place]}>
+      <FlagIcon flag={place.route.flag} size={20} />
+      <Text variant="labelLarge" style={styles.bold}>
+        {place.stop.name}
+      </Text>
+    </View>
   );
 }
 
@@ -582,17 +650,25 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   message: { textAlign: 'center' },
   content: { padding: 16, gap: 12 },
-  scene: { alignSelf: 'center' },
   // Over the scene's top-right corner, like a game's HUD.
   treats: { marginRight: 8 },
-  stepsSpot: { alignSelf: 'flex-start' },
-  actions: { alignSelf: 'center', flexDirection: 'row', gap: 8 },
+  sceneCard: { alignSelf: 'center' },
+  scene: { margin: INSET, marginBottom: 0 },
+  line: { textAlign: 'center', marginTop: 10, marginHorizontal: 16 },
+  buttons: { gap: 8, padding: INSET + 4, paddingTop: 10 },
+  actions: { flexDirection: 'row', gap: 8 },
   action: { flex: 1 },
-  // Wider than Pet and Play, for its count.
-  treat: { flex: 1.4 },
-  hint: { textAlign: 'center', marginTop: -4 },
   bold: { fontWeight: '700' },
-  stats: { gap: 16 },
-  next: { gap: 8 },
-  nextRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
+  place: {
+    position: 'absolute',
+    left: 10,
+    top: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingLeft: 8,
+    paddingRight: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
 });

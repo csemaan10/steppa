@@ -68,23 +68,28 @@ export function stageOf(level: number): number {
 export const WORLD_KINDS = ['pet'] as const;
 export type WorldKind = (typeof WORLD_KINDS)[number];
 
-/** One option for a slot. `level` unlocks it later than its slot (a golden tree at 5M). */
-export type Choice = { id: string; label: string; emoji?: string; color?: string; level?: number };
+/**
+ * One option for a slot. `level` unlocks it later than its slot (a golden tree at 5M). A `shop` one is
+ * bought with treats (src/lib/shop.ts) and can be chosen once it's yours, whatever the level.
+ */
+export type Choice = { id: string; label: string; emoji?: string; color?: string; level?: number; shop?: boolean };
 
 /**
  * Something to customise, unlocked at a level: a colour, a decoration, a new fish. Its first choice
  * is the default, so the world gains it the moment it unlocks. Decorations end with a 'none' choice.
+ * A `shop` slot only holds things from the shop (the seasonal ones), so it shows once you own one.
  */
-export type Slot = { id: string; title: string; level: number; choices: Choice[] };
+export type Slot = { id: string; title: string; level: number; choices: Choice[]; shop?: boolean };
 
 /** Chosen option id for each unlocked slot. Draw functions only ever see complete, valid picks. */
 export type Picks = Record<string, string>;
 
 /**
  * Something brought home from a trip rather than unlocked by walking: a choice for `slot`, earned
- * by first visiting `from` (a destination in src/lib/pet-adventures.ts). Wearable at any level.
+ * by first visiting `from` (a destination in src/lib/pet-adventures.ts), or, if `full`, by filling
+ * its passport page (the server hands those out: stamp_passport, migration 022). Usable at any level.
  */
-export type Souvenir = { from: string; slot: string; choice: Choice };
+export type Souvenir = { from: string; slot: string; choice: Choice; full?: boolean };
 
 export type WorldDef = {
   kind: WorldKind;
@@ -100,10 +105,14 @@ export type WorldDef = {
   souvenirs?: Souvenir[];
   /**
    * `steps` lets a world keep growing between milestones (the city adds buildings as you walk);
-   * `mood` is how the pet feels today (a calm, wide-awake pet without one).
+   * `mood` is how the pet feels today (a calm, wide-awake pet without one); `guest` is a friend's pet
+   * over for a playdate.
    */
-  draw(level: number, picks: Picks, time: TimeOfDay, steps: number, mood?: Mood): WorldArt;
+  draw(level: number, picks: Picks, time: TimeOfDay, steps: number, mood?: Mood, guest?: Guest): WorldArt;
 };
+
+/** A group mate's pet visiting for the day: how grown it is and what it wears. */
+export type Guest = { level: number; picks: Picks };
 
 // ---------- Art ----------
 
@@ -138,6 +147,8 @@ export type Layer = {
   pet?: boolean;
   /** Drawn over the layer while the pet is enjoying itself (happy closed eyes, a bigger blush). */
   happy?: Shape[];
+  /** A little buddy that joins in: it hops along, lower, whenever the pet hops. */
+  follow?: boolean;
 };
 
 /** Where the pet is, for playing with it. */
@@ -248,19 +259,33 @@ export class Art {
     this.current.push(opacity === undefined ? { d, fill: color } : { d, fill: color, opacity });
   }
 
+  /** Shapes already coloured for the hour (a journey place behind the pet), as they are. */
+  raw(shapes: readonly Shape[]) {
+    this.current.push(...shapes);
+  }
+
   /**
    * Draws whatever `draw` paints into a moving layer of its own, then carries on in a still one.
-   * `blink` and `happy` paint the layer's closed-eye and happy overlays; `pet` makes it hop on a tap.
+   * `blink` and `happy` paint the layer's closed-eye and happy overlays; `pet` makes it hop on a tap,
+   * and `follow` makes it hop along after the pet.
    */
   move(
     motion: Motion,
     draw: () => void,
-    options: { delay?: number; clip?: Layer['clip']; blink?: () => void; happy?: () => void; pet?: boolean } = {}
+    options: {
+      delay?: number;
+      clip?: Layer['clip'];
+      blink?: () => void;
+      happy?: () => void;
+      pet?: boolean;
+      follow?: boolean;
+    } = {}
   ) {
     const layer: Layer = { shapes: [], motion };
     if (options.delay) layer.delay = options.delay;
     if (options.clip) layer.clip = options.clip;
     if (options.pet) layer.pet = true;
+    if (options.follow) layer.follow = true;
     this.layers.push(layer);
     this.current = layer.shapes;
     draw();

@@ -49,17 +49,20 @@ export function ChoiceChips({
   slot,
   level,
   selected,
+  owned,
   onPick,
 }: {
   slot: Slot;
   level: number;
   selected: string | undefined;
+  /** Things bought in the shop: only these of the slot's shop choices show. */
+  owned?: ReadonlySet<string>;
   onPick: (choice: string) => void;
 }) {
   return (
     <View style={styles.chips}>
-      {slot.choices.map((choice) => {
-        const unlocksAt = choiceLevel(slot, choice);
+      {slot.choices.filter((c) => !c.shop || owned?.has(c.id)).map((choice) => {
+        const unlocksAt = choice.shop ? 0 : choiceLevel(slot, choice);
         return (
           <ChoiceChip
             key={choice.id}
@@ -143,9 +146,9 @@ const NODE = 34;
 
 /**
  * Every milestone as a road of levels: the ones reached filled in, the next one pulsing, and what
- * each brings beside it as little reward chips.
+ * each brings beside it as little reward chips. In a card of its own, or `bare` to sit inside another.
  */
-export function MilestoneList({ def, level }: { def: WorldDef; level: number }) {
+export function MilestoneList({ def, level, bare }: { def: WorldDef; level: number; bare?: boolean }) {
   const theme = useAppTheme();
   const [expanded, setExpanded] = useState(false);
   const all = Array.from({ length: MAX_LEVEL }, (_, i) => i + 1);
@@ -153,29 +156,33 @@ export function MilestoneList({ def, level }: { def: WorldDef; level: number }) 
   const folded = (l: number) => l >= from && l <= from + COLLAPSED_BEFORE + COLLAPSED_AFTER;
   const shown = expanded ? all : all.filter(folded);
 
+  const road = (
+    <>
+      {shown.map((l, i) => (
+        <MilestoneStop
+          key={l}
+          level={l}
+          state={l <= level ? 'reached' : l === level + 1 ? 'next' : 'locked'}
+          unlock={unlockAt(def, l)}
+          railAbove={i > 0}
+          railBelow={i < shown.length - 1}
+          nextReached={l + 1 <= level}
+          appear={!folded(l)}
+        />
+      ))}
+      <Button
+        icon={expanded ? 'chevron-up' : 'chevron-down'}
+        compact
+        onPress={() => setExpanded(!expanded)}
+        style={styles.showAll}>
+        {expanded ? 'Show less' : `Show all ${MAX_LEVEL}`}
+      </Button>
+    </>
+  );
+  if (bare) return <View style={styles.road}>{road}</View>;
   return (
     <Card mode="contained" style={glassCard(theme)}>
-      <Card.Content style={styles.road}>
-        {shown.map((l, i) => (
-          <MilestoneStop
-            key={l}
-            level={l}
-            state={l <= level ? 'reached' : l === level + 1 ? 'next' : 'locked'}
-            unlock={unlockAt(def, l)}
-            railAbove={i > 0}
-            railBelow={i < shown.length - 1}
-            nextReached={l + 1 <= level}
-            appear={!folded(l)}
-          />
-        ))}
-        <Button
-          icon={expanded ? 'chevron-up' : 'chevron-down'}
-          compact
-          onPress={() => setExpanded(!expanded)}
-          style={styles.showAll}>
-          {expanded ? 'Show less' : `Show all ${MAX_LEVEL}`}
-        </Button>
-      </Card.Content>
+      <Card.Content style={styles.road}>{road}</Card.Content>
     </Card>
   );
 }

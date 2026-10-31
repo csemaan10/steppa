@@ -12,6 +12,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 import Svg, { Rect } from 'react-native-svg';
 
+import { FlagIcon } from '@/components/flag-icon';
 import { MAGIC_COLOR, TRIP_COLOR } from '@/components/game/colors';
 import { InkStamp, SparkleBurst } from '@/components/game/game-fx';
 import { gameMotion, popIn, riseIn } from '@/components/game/game-motion';
@@ -172,9 +173,9 @@ export function TripTicket({ place, number, name, onDone }: Props) {
                 ))}
               </View>
               <View style={styles.flagRow}>
-                <Animated.Text entering={popIn(settledAt)} style={styles.flag}>
-                  {place.route.flag}
-                </Animated.Text>
+                <Animated.View entering={popIn(settledAt)}>
+                  <FlagIcon flag={place.route.flag} size={30} />
+                </Animated.View>
                 <Text numberOfLines={1} style={styles.routeName}>
                   {place.route.name}
                 </Text>
@@ -316,7 +317,6 @@ const styles = StyleSheet.create({
   cellText: { fontWeight: '900', fontVariant: ['tabular-nums'] },
   hinge: { position: 'absolute', left: 0, right: 0, top: '50%', height: 1, backgroundColor: 'rgba(0, 0, 0, 0.6)' },
   flagRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, minHeight: 30 },
-  flag: { fontSize: 24, lineHeight: 30 },
   routeName: { color: '#5E5A50', fontSize: 12, fontWeight: '700', flexShrink: 1 },
   perforation: { width: 14, alignItems: 'center' },
   dashes: { flex: 1, borderLeftWidth: 2, borderStyle: 'dashed', borderColor: '#D9D2C2', marginVertical: 2 },

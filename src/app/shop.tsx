@@ -16,6 +16,8 @@ import { TripTicket } from '@/components/game/trip-ticket';
 import { GlassBackAction } from '@/components/glass-action';
 import { PetPostcardModal, type OpenPostcard } from '@/components/pet-adventures';
 import { usePetPlay } from '@/components/pet-play';
+import { TreatsSheet } from '@/components/pet-treats';
+import { TreatIcon } from '@/components/treat-icon';
 import { PrimaryTabs } from '@/components/primary-tabs';
 import { LooksTab } from '@/components/shop/looks-tab';
 import { TricksTab } from '@/components/shop/tricks-tab';
@@ -25,14 +27,23 @@ import { WorldScene } from '@/components/world-scene';
 import { useLoader } from '@/hooks/use-loader';
 import { useWorldEditor } from '@/hooks/use-world-editor';
 import {
+  buyItem,
   feedPetMany,
   getAdventures,
+  getPetMates,
   getProfile,
+  getPurchases,
+  getShopPrices,
+  getTodaysVisit,
   getTreats,
   getWorld,
   goOnAdventure,
+  visitMate,
   type Adventure,
+  type PetMate,
+  type ShopPrice,
   type Treats,
+  type Visit,
   type World,
 } from '@/lib/api';
 import {
@@ -45,7 +56,7 @@ import {
   type Place,
 } from '@/lib/pet-adventures';
 import { timeOfDay } from '@/lib/scene-art';
-import { isShopTab, parseFresh, type Fresh, type ShopTab } from '@/lib/shop';
+import { isShopTab, parseFresh, priceList, type Fresh, type ShopTab, type ShopThing } from '@/lib/shop';
 import {
   drawWorld,
   learnedTricks,
@@ -89,13 +100,17 @@ export default function ShopScreen() {
   const userId = useUserId();
   const params = useLocalSearchParams<{ tab?: string; fresh?: string }>();
   const { data, error } = useLoader(async () => {
-    const [status, treats, adventures, profile] = await Promise.all([
+    const [status, treats, adventures, profile, owned, prices, visit, mates] = await Promise.all([
       getWorld(userId),
       getTreats(),
       getAdventures(userId),
       getProfile(userId),
+      getPurchases(userId),
+      getShopPrices(),
+      getTodaysVisit(userId),
+      getPetMates(userId).catch(() => []),
     ]);
-    return { status, treats, adventures, you: profile.display_name };
+    return { status, treats, adventures, you: profile.display_name, owned, prices, visit, mates };
   }, userId);
   const editor = useWorldEditor(userId, data?.status?.world ?? null);
   // Only a pet has a shop (a row left from testing the dropped worlds doesn't).
@@ -125,6 +140,10 @@ export default function ShopScreen() {
           steps={data.status?.steps ?? 0}
           loadedTreats={data.treats}
           loadedAdventures={data.adventures}
+          loadedOwned={data.owned}
+          prices={data.prices}
+          visit={data.visit}
+          mates={data.mates}
           you={data.you}
           initialTab={isShopTab(params.tab) ? params.tab : 'looks'}
           fresh={parseFresh(params.fresh)}
@@ -140,6 +159,10 @@ function Shop({
   steps,
   loadedTreats,
   loadedAdventures,
+  loadedOwned,
+  prices,
+  visit: loadedVisit,
+  mates,
   you,
   initialTab,
   fresh,
@@ -150,6 +173,14 @@ function Shop({
   /** Null before migration 018: then there are no treats, so no tricks or trips to buy. */
   loadedTreats: Treats | null;
   loadedAdventures: Adventure[];
+  /** Things bought with treats, and keepsakes. */
+  loadedOwned: string[];
+  /** The shop's prices (empty before migration 021). */
+  prices: ShopPrice[];
+  /** Today's visit, if your pet is on one or has a friend over. */
+  visit: Visit | null;
+  /** Group mates with pets, to visit. */
+  mates: PetMate[];
   you: string;
   initialTab: ShopTab;
   fresh: Fresh | null;
@@ -165,8 +196,11 @@ function Shop({
   const level = levelOf(steps);
   const saved = world.picks[world.kind];
   const name = worldTitle(def, saved?.name);
-  const picks = resolvePicks(def, level, saved);
-  const art = drawWorld(world.kind, steps, saved, timeOfDay());
+  // Something being tried on shows on the pet before it's bought.
+  const [trying, setTrying] = useState<ShopThing | null>(null);
+  const shown = trying ? { ...saved, [trying.slot]: trying.id } : saved;
+  const picks = resolvePicks(def, level, shown);
+  const art = drawWorld(world.kind, steps, shown, timeOfDay());
 
   // Spending shows at once; a reload brings back the server's counts.
   const [treats, setTreats] = useState(loadedTreats);
@@ -179,6 +213,13 @@ function Shop({
   }
   const fed = treats?.fed ?? world.treats_fed ?? 0;
   const available = treats ? treats.earned - treats.fed - treats.spent : 0;
+  // Bought here and not back from the server yet.
+  const [bought, setBought] = useState<string[]>([]);
+  const owned = new Set([...loadedOwned, ...bought]);
+  const price = priceList(prices);
+  const [visit, setVisit] = useState<{ base: Visit | null; visit: Visit | null }>({ base: loadedVisit, visit: loadedVisit });
+  const today = visit.base === loadedVisit ? visit.visit : loadedVisit;
+  const [sheetOpen, setSheetOpen] = useState(false);
   const play = usePetPlay(art.pet, { tricks: learnedTricks(fed).map((t) => t.id) });
 
   const [tab, setTab] = useState<ShopTab>(initialTab);
@@ -220,7 +261,7 @@ function Shop({
     try {
       const eaten = await feedPetMany(cost);
       if (eaten === null) {
-        show('Not enough treats yet', '🍪');
+        show('Not enough treats yet', <TreatIcon size={20} />);
         return;
       }
       setTreats({ ...treats, fed: eaten });
@@ -251,12 +292,12 @@ function Shop({
         destination.places
       );
       if (!(await goOnAdventure(place.key))) {
-        show(`A trip takes ${ADVENTURE_COST} treats`, '🍪');
+        show(`A trip takes ${ADVENTURE_COST} treats`, <TreatIcon size={20} />);
         return;
       }
       const number = adventures.length + 1;
       const firstVisit = visitedIn(destination, adventures.map((a) => a.place)) === 0;
-      setBringing((firstVisit && def.souvenirs?.find((s) => s.from === destination.key)) || null);
+      setBringing((firstVisit && def.souvenirs?.find((s) => s.from === destination.key && !s.full)) || null);
       setTreats({ ...treats, spent: treats.spent + ADVENTURE_COST });
       setAdventures([{ id: Date.now(), place: place.key, created_at: new Date().toISOString() }, ...adventures]);
       fly(counterRef, card, ADVENTURE_COST, { onDone: () => setTicket({ place, number }) });
@@ -274,6 +315,65 @@ function Shop({
     play.dressUp();
   }
 
+  /** Tries something for sale on, or puts it back: the pet shows it off, a toy gets played with. */
+  function tryOn(thing: ShopThing | null) {
+    setTrying(thing);
+    if (!thing) return;
+    setPoof((n) => n + 1);
+    if (thing.slot === 'toy') play.play(thing.id);
+    else play.dressUp();
+  }
+
+  /** Buys what's being tried on: the treats fly from the counter to the pet, and it's theirs. */
+  async function buy(thing: ShopThing, cost: number) {
+    if (!treats || buying) return;
+    setBuying(thing.id);
+    try {
+      if (!(await buyItem(thing.id))) {
+        show('Not enough treats yet', <TreatIcon size={20} />);
+        return;
+      }
+      setTreats({ ...treats, spent: treats.spent + cost });
+      setBought([...bought, thing.id]);
+      fly(counterRef, mouthRef, Math.min(cost, 12), {
+        onDone: () => {
+          setTrying(null);
+          pick(thing.slot, thing.id);
+          show(`${thing.name} is ${name}'s now!`, '🎉');
+        },
+      });
+    } catch (e) {
+      failed(e);
+    } finally {
+      setBuying(null);
+    }
+  }
+
+  /** Sends the pet to a friend's yard for the day. */
+  async function visitFriend(mate: PetMate, cost: number, card: RefObject<View | null>) {
+    if (!treats || buying) return;
+    setBuying(`visit:${mate.id}`);
+    try {
+      if (!(await visitMate(mate.id))) {
+        show(today ? `${name} has already been on a visit today` : 'Not enough treats yet', <TreatIcon size={20} />);
+        return;
+      }
+      setTreats({ ...treats, spent: treats.spent + cost });
+      const day = new Date();
+      setVisit({
+        base: loadedVisit,
+        visit: { id: Date.now(), guest: world.user_id, host: mate.id, day: `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`, created_at: day.toISOString() },
+      });
+      fly(counterRef, card, Math.min(cost, 12), {
+        onDone: () => show(`${name} is off to ${mate.world.picks.pet?.name || `${mate.name}'s pet`} for the day`, '🏡'),
+      });
+    } catch (e) {
+      failed(e);
+    } finally {
+      setBuying(null);
+    }
+  }
+
   const mouth = art.pet?.mouth;
   const box = art.pet?.box;
 
@@ -287,7 +387,7 @@ function Shop({
             count={available}
             toNext={treats.toNext}
             targetRef={counterRef}
-            onPress={() => setTab('tricks')}
+            onPress={() => setSheetOpen(true)}
           />
         ) : null}
       </Appbar.Header>
@@ -316,7 +416,14 @@ function Shop({
         </Animated.View>
       </Animated.View>
 
-      <PrimaryTabs value={tab} onChange={setTab} tabs={TABS} />
+      <PrimaryTabs
+        value={tab}
+        onChange={(next) => {
+          setTab(next);
+          setTrying(null);
+        }}
+        tabs={TABS}
+      />
 
       {/* Keyed by tab, so each one opens at the top. */}
       <ScrollView key={tab} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
@@ -333,6 +440,13 @@ function Shop({
               placeholder={`Your ${def.title.toLowerCase()}`}
               onRename={editor.rename}
               onPick={pick}
+              owned={owned}
+              prices={price}
+              available={available}
+              buying={buying}
+              trying={trying}
+              onTry={tryOn}
+              onBuy={buy}
             />
           ) : !treats ? (
             <Text style={styles.message}>Treats aren&apos;t switched on yet, so there&apos;s nothing to buy here.</Text>
@@ -353,6 +467,11 @@ function Shop({
               busy={buying}
               onBook={book}
               onOpen={setPostcard}
+              mates={mates}
+              visit={today}
+              visitPrice={price.get('visit')?.treats ?? null}
+              onVisit={visitFriend}
+              onPassport={() => router.push('/passport')}
             />
           )}
         </Animated.View>
@@ -398,6 +517,15 @@ function Shop({
             setUnpacking(null);
             setNewSouvenir(unpacking.choice.id);
           }}
+        />
+      ) : null}
+      {treats ? (
+        <TreatsSheet
+          open={sheetOpen}
+          name={name}
+          available={available}
+          toNext={treats.toNext}
+          onClose={() => setSheetOpen(false)}
         />
       ) : null}
       {flights}

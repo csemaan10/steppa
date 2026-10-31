@@ -2,14 +2,14 @@
 // earns the treats (migration 018 counts them), so the tricks come steadily between milestones.
 
 export const TRICKS = [
-  { id: 'sit', name: 'Sit', treats: 5, emoji: '🐾' },
-  { id: 'spin', name: 'Spin', treats: 10, emoji: '🌀' },
-  { id: 'rollover', name: 'Roll over', treats: 20, emoji: '🔄' },
-  { id: 'playdead', name: 'Play dead', treats: 30, emoji: '😵' },
-  { id: 'dance', name: 'Dance', treats: 45, emoji: '💃' },
-  { id: 'backflip', name: 'Backflip', treats: 60, emoji: '🤸' },
-  { id: 'zoomies', name: 'Zoomies', treats: 80, emoji: '💨' },
-  { id: 'handstand', name: 'Handstand', treats: 100, emoji: '🙌' },
+  { id: 'sit', name: 'Sit', treats: 5 },
+  { id: 'spin', name: 'Spin', treats: 10 },
+  { id: 'rollover', name: 'Roll over', treats: 20 },
+  { id: 'playdead', name: 'Play dead', treats: 30 },
+  { id: 'dance', name: 'Dance', treats: 45 },
+  { id: 'backflip', name: 'Backflip', treats: 60 },
+  { id: 'zoomies', name: 'Zoomies', treats: 80 },
+  { id: 'handstand', name: 'Handstand', treats: 100 },
 ] as const;
 
 export type Trick = (typeof TRICKS)[number];

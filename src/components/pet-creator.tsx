@@ -27,7 +27,7 @@ export function PetCreator({
 }) {
   const theme = useAppTheme();
   const def = WORLDS.pet;
-  const starters = def.slots.filter((s) => s.level === 0);
+  const starters = def.slots.filter((s) => s.level === 0 && !s.shop);
   const [chosen, setChosen] = useState<KindPicks>({});
   const [name, setName] = useState('');
   const picks = resolvePicks(def, 0, chosen);

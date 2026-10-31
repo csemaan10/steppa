@@ -718,8 +718,8 @@ export async function updateWorld(
 /** A pet's treats: earned by walking, eaten (training tricks) and spent on adventures. */
 export type Treats = { earned: number; fed: number; spent: number; toNext: number };
 
-/** Steps walked for each treat. Must match pet_treats in migration 018. */
-export const STEPS_PER_TREAT = 2000;
+/** Steps walked for each treat. Must match pet_treats in migration 023. */
+export const STEPS_PER_TREAT = 1500;
 
 /** Your pet's treats (migration 018), or null without a pet or before the migration has run. */
 export async function getTreats(): Promise<Treats | null> {
@@ -732,6 +732,120 @@ export async function getTreats(): Promise<Treats | null> {
 /** Gives your pet a treat. Returns how many it has eaten now, or null if there was none to give. */
 export async function feedPet(): Promise<number | null> {
   return unwrap<number | null>(await supabase.rpc('feed_pet'));
+}
+
+/** A reward paid in treats (migration 021); see src/lib/treats.ts for what each reason means. */
+export type TreatBonus = {
+  id: number;
+  reason: 'milestone' | 'goal' | 'streak' | 'medal' | 'journey' | 'visit';
+  ref: string;
+  detail: string | null;
+  treats: number;
+  created_at: string;
+};
+
+/** Collects any bonus treats you've earned and not been given yet: the new ones (none before migration 021). */
+export async function claimTreats(): Promise<TreatBonus[]> {
+  const { data, error } = await supabase.rpc('claim_treats');
+  return error ? [] : ((data as TreatBonus[] | null) ?? []);
+}
+
+/** Your latest bonus treats, newest first. */
+export async function getTreatBonuses(limit = 8): Promise<TreatBonus[]> {
+  const { data, error } = await supabase
+    .from('treat_bonuses')
+    .select('*')
+    .order('id', { ascending: false })
+    .limit(limit);
+  return error ? [] : (data as TreatBonus[]);
+}
+
+/**
+ * What the shop sells for how many treats, and the months (1–12) seasonal things are on sale.
+ * Souvenirs aren't for sale (a full passport page brings them), so they have no price.
+ */
+export type ShopPrice = {
+  item: string;
+  kind: 'keep' | 'visit' | 'souvenir';
+  treats: number | null;
+  months: number[] | null;
+};
+
+/** The shop's prices; empty before migration 021. */
+export async function getShopPrices(): Promise<ShopPrice[]> {
+  const { data, error } = await supabase.from('shop_items').select('item, kind, treats, months');
+  return error ? [] : (data as ShopPrice[]);
+}
+
+/** The things someone has bought for their pet to keep. */
+export async function getPurchases(userId: string): Promise<string[]> {
+  const { data, error } = await supabase.from('pet_purchases').select('item').eq('user_id', userId);
+  return error ? [] : (data as { item: string }[]).map((r) => r.item);
+}
+
+/** Buys something to keep. True once it's yours; false if you're short of treats. */
+export async function buyItem(item: string): Promise<boolean> {
+  return unwrap<boolean>(await supabase.rpc('buy_item', { item_id: item }));
+}
+
+/** A day your pet spends in a group mate's yard (migration 021): `guest` sent theirs over. */
+export type Visit = { id: number; guest: string; host: string; day: string; created_at: string };
+
+/** Today's visit, your pet's or one to you (the newest), or null. */
+export async function getTodaysVisit(userId: string): Promise<Visit | null> {
+  const today = toDayKey(new Date());
+  const { data, error } = await supabase
+    .from('pet_visits')
+    .select('*')
+    .or(`guest.eq.${userId},host.eq.${userId}`)
+    .gte('day', toDayKey(addDays(new Date(), -1)))
+    .order('id', { ascending: false });
+  if (error) return null;
+  return (data as Visit[]).find((v) => v.day === today) ?? null;
+}
+
+/** Sends your pet to spend today in a group mate's yard. False if you're short of treats or it's already been. */
+export async function visitMate(mate: string): Promise<boolean> {
+  return unwrap<boolean>(await supabase.rpc('visit_mate', { mate }));
+}
+
+/** A group mate with a pet: who they are, and the pet. */
+export type PetMate = { id: string; name: string; world: World };
+
+/** Everyone in your groups who has a pet, by name. */
+export async function getPetMates(userId: string): Promise<PetMate[]> {
+  const mine = unwrap<{ group_id: string }[]>(await supabase.from('group_members').select('group_id').eq('user_id', userId));
+  if (!mine.length) return [];
+  const members = unwrap<{ user_id: string }[]>(
+    await supabase
+      .from('group_members')
+      .select('user_id')
+      .in(
+        'group_id',
+        mine.map((g) => g.group_id)
+      )
+      .neq('user_id', userId)
+  );
+  const ids = [...new Set(members.map((m) => m.user_id))];
+  if (!ids.length) return [];
+  const [worlds, profiles] = await Promise.all([
+    supabase.from('worlds').select('*').in('user_id', ids),
+    supabase.from('profiles').select('id, display_name').in('id', ids),
+  ]);
+  const names = new Map(unwrap<{ id: string; display_name: string }[]>(profiles).map((p) => [p.id, p.display_name]));
+  return unwrap<World[]>(worlds)
+    .filter((w) => w.kind === 'pet')
+    .map((w) => ({ id: w.user_id, name: names.get(w.user_id) ?? 'A friend', world: w }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Brings home the keepsake for every page of your pet's passport that its trips have filled
+ * (migration 023). Returns the new keepsakes (none before 023).
+ */
+export async function claimKeepsakes(): Promise<string[]> {
+  const { data, error } = await supabase.rpc('claim_keepsakes');
+  return error ? [] : ((data as string[] | null) ?? []);
 }
 
 /**

@@ -9,6 +9,7 @@ import { gameMotion } from '@/components/game/game-motion';
 import { STEPS_PER_TREAT } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { glass, useAppTheme, withAlpha } from '@/theme';
+import { TreatIcon } from '@/components/treat-icon';
 
 /** Counts from where it was to `target`, easing out, so a change rolls rather than jumps. */
 export function useRollingNumber(target: number, duration = 450): number {
@@ -82,7 +83,7 @@ export function TreatCounter({ count, toNext, onPress, targetRef }: Props) {
       style={[glass(theme, 'small'), styles.pill, toNext !== undefined && styles.tight]}>
       {toNext === undefined ? (
         <Animated.View ref={targetRef} collapsable={false} style={[styles.cookie, cookie]}>
-          <Text style={styles.emoji}>🍪</Text>
+          <TreatIcon size={22} />
         </Animated.View>
       ) : (
         <View style={styles.ring}>
@@ -110,7 +111,7 @@ export function TreatCounter({ count, toNext, onPress, targetRef }: Props) {
             />
           </Svg>
           <Animated.View ref={targetRef} collapsable={false} style={[styles.cookie, styles.small, cookie]}>
-            <Text style={styles.smallEmoji}>🍪</Text>
+            <TreatIcon size={18} />
           </Animated.View>
         </View>
       )}
@@ -150,13 +151,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: TREAT.deep,
   },
-  emoji: { fontSize: 16, lineHeight: 20 },
   count: { fontSize: 16, fontWeight: '900', fontVariant: ['tabular-nums'], minWidth: 18 },
   // With the steps to the next treat: the ring takes the pill's full height, the text two lines.
   tight: { paddingLeft: 1, gap: 5 },
   ring: { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
   small: { width: 24, height: 24, borderRadius: 12, borderBottomWidth: 1.5 },
-  smallEmoji: { fontSize: 13, lineHeight: 16 },
   countTight: { fontSize: 15, lineHeight: 17 },
   countdown: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   next: { fontSize: 10, lineHeight: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },

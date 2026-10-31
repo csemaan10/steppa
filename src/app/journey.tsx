@@ -5,10 +5,13 @@ import { ActivityIndicator, Appbar, Card, Text } from 'react-native-paper';
 import Animated, { BounceIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TrophyIcon } from '@/components/award-icons';
 import { Button } from '@/components/button';
+import { FlagIcon } from '@/components/flag-icon';
 import { GlassBackAction } from '@/components/glass-action';
 import { Chip, PostcardCollection, ProgressBar } from '@/components/journey-parts';
 import { JourneyScene } from '@/components/journey-scene';
+import { PlaceIcon } from '@/components/place-icon';
 import { PostcardModal } from '@/components/postcard';
 import { mapHeightFor, RouteMap, type Traveller } from '@/components/route-map';
 import { SectionHeader } from '@/components/section-header';
@@ -237,7 +240,7 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
   return (
     <>
       <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.hero}>
-        <Text style={styles.heroFlag}>{route.flag}</Text>
+        <FlagIcon flag={route.flag} size={44} />
         <View style={styles.flex}>
           <Text variant="titleMedium" style={styles.bold}>
             {route.subtitle}
@@ -283,7 +286,7 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
             <Card mode="contained" style={[glassCard(theme), styles.tile]}>
               <Card.Content style={styles.tileContent}>
                 <View style={[styles.stopBadge, { experimental_backgroundImage: skyGradient(next) }]}>
-                  <Text style={styles.stopEmoji}>{next.emoji}</Text>
+                  <PlaceIcon emoji={next.emoji} size={26} color="#FFFFFF" />
                 </View>
                 <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
                   Next stop
@@ -302,7 +305,11 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
           <Card mode="contained" style={[glassCard(theme), styles.tile]}>
             <Card.Content style={styles.tileContent}>
               <View style={[styles.stopBadge, { backgroundColor: theme.colors.tertiaryContainer }]}>
-                <Text style={styles.stopEmoji}>{route.stops[route.stops.length - 1]!.emoji}</Text>
+                <PlaceIcon
+                  emoji={route.stops[route.stops.length - 1]!.emoji}
+                  size={26}
+                  color={theme.colors.onTertiaryContainer}
+                />
               </View>
               <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
                 Arriving
@@ -348,9 +355,9 @@ function FinishedJourney({
     <>
       <Card mode="contained" style={glassCard(theme)}>
         <Card.Content style={styles.finished}>
-          <Animated.Text entering={BounceIn.delay(150)} style={styles.trophy}>
-            🏆
-          </Animated.Text>
+          <Animated.View entering={BounceIn.delay(150)}>
+            <TrophyIcon size={68} />
+          </Animated.View>
           <Text variant="headlineSmall" style={[styles.bold, styles.centerText]}>
             You made it to {progress.last.name}!
           </Text>
@@ -408,7 +415,7 @@ function RoutePicker({ title, dailySteps, completed, busy, onStart }: PickerProp
             </View>
             <Card.Content style={styles.pickerContent}>
               <View style={styles.pickerTitle}>
-                <Text style={styles.pickerFlag}>{route.flag}</Text>
+                <FlagIcon flag={route.flag} size={36} />
                 <View style={styles.flex}>
                   <Text variant="titleMedium" style={styles.bold}>
                     {route.name}
@@ -460,7 +467,7 @@ function Passport({ journeys }: { journeys: Journey[] }) {
                     styles.passportStamp,
                     { borderColor: theme.colors.primary, transform: [{ rotate: `${i % 2 ? 6 : -6}deg` }] },
                   ]}>
-                  <Text style={styles.stopEmoji}>{route.flag}</Text>
+                  <FlagIcon flag={route.flag} size={30} />
                 </View>
                 <View style={styles.flex}>
                   <Text variant="titleSmall">{route.name}</Text>
@@ -493,7 +500,6 @@ const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
   centerText: { textAlign: 'center' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  heroFlag: { fontSize: 36, lineHeight: 44 },
   progressCard: { gap: 10, paddingVertical: 16 },
   kmRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   tiles: { flexDirection: 'row', gap: 12 },
@@ -507,15 +513,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 6,
   },
-  stopEmoji: { fontSize: 20, lineHeight: 26 },
   section: { gap: 12 },
   endButton: { alignSelf: 'center' },
   finished: { alignItems: 'center', gap: 6, paddingVertical: 20 },
-  trophy: { fontSize: 56, lineHeight: 68 },
   pickerMap: { padding: 12, paddingBottom: 0 },
   pickerContent: { gap: 10, paddingTop: 12, paddingBottom: 16 },
   pickerTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  pickerFlag: { fontSize: 28, lineHeight: 36 },
   doneMark: { fontSize: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   startButton: { alignSelf: 'flex-start' },

@@ -9,13 +9,18 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { Button } from '@/components/button';
 import { ButtonGroup } from '@/components/button-group';
+import { TREAT } from '@/components/game/colors';
 import { NewBadge, SparkleBurst } from '@/components/game/game-fx';
 import { gameMotion } from '@/components/game/game-motion';
+import { SpendButton } from '@/components/game/spend-button';
+import { TreatIcon } from '@/components/treat-icon';
 import { shortSteps } from '@/components/world-parts';
 import { usePressed } from '@/hooks/use-pressed';
+import type { ShopPrice } from '@/lib/api';
 import { destinationNamed } from '@/lib/pet-adventures';
-import { isFresh, type Fresh } from '@/lib/shop';
+import { isFresh, onSale, saleMonths, SECTION_TITLES, SHOP, type Fresh, type ShopSection, type ShopThing } from '@/lib/shop';
 import { choiceLevel, LEVELS, NAME_LENGTH, type Choice, type Picks, type Slot, type WorldDef } from '@/lib/world';
 import { glass, useAppTheme, withAlpha } from '@/theme';
 
@@ -24,11 +29,13 @@ const GAP = 10;
 /** Who your pet is rather than what it wears: kept in their own part of Looks, with its name. */
 export const IDENTITY_SLOTS = ['species'];
 
-type Part = 'wardrobe' | 'pet';
+type Part = 'wardrobe' | 'sale' | 'pet';
 const PARTS = [
   { value: 'wardrobe' as const, label: 'Wardrobe', icon: 'hanger' as const },
+  { value: 'sale' as const, label: 'For sale', icon: 'tag-outline' as const },
   { value: 'pet' as const, label: 'Name & species', icon: 'paw' as const },
 ];
+const SECTIONS: ShopSection[] = ['toys', 'yard', 'season', 'buddy'];
 
 /** Why a look can't be worn yet: shown small under it, and read out in full. */
 type Lock = { note: string; spoken: string; icon: string };
@@ -55,12 +62,25 @@ type Props = {
   placeholder: string;
   onRename: (name: string) => void;
   onPick: (slot: string, choice: string) => void;
+  /** Things bought with treats, and keepsakes from full passport pages. */
+  owned: ReadonlySet<string>;
+  /** What the shop sells, by item (empty before migration 021). */
+  prices: ReadonlyMap<string, ShopPrice>;
+  /** Treats to spend. */
+  available: number;
+  /** What's being bought right now. */
+  buying: string | null;
+  /** Shown on the pet above before you buy it. */
+  trying: ShopThing | null;
+  onTry: (thing: ShopThing | null) => void;
+  onBuy: (thing: ShopThing, price: number) => void;
 };
 
 /**
- * Looks, in two parts. The wardrobe: every look on shelves of tiles, tap one to put it on, locked
- * ones saying when they unlock, and souvenirs from its trips on a shelf of their own. Name &
- * species: who your pet is, kept apart from what it wears.
+ * Looks, in three parts. The wardrobe: every look on shelves of tiles, tap one to put it on, locked
+ * ones saying when they unlock, and souvenirs from its trips (and keepsakes from full passport pages)
+ * on a shelf of their own. For sale: toys and things for the yard to buy with treats, each tried on
+ * above before you buy it. Name & species: who your pet is, kept apart from what it wears.
  */
 export function LooksTab({
   def,
@@ -73,6 +93,13 @@ export function LooksTab({
   placeholder,
   onRename,
   onPick,
+  owned,
+  prices,
+  available,
+  buying,
+  trying,
+  onTry,
+  onBuy,
 }: Props) {
   const theme = useAppTheme();
   const { width } = useWindowDimensions();
@@ -81,8 +108,11 @@ export function LooksTab({
   // Rounded down: three tiles that add up to exactly the row would wrap the last one on rounding.
   const tile = Math.floor((Math.min(width, 520) - 32 - GAP * (COLUMNS - 1)) / COLUMNS) - 1;
   const looks = def.slots.filter((s) => !IDENTITY_SLOTS.includes(s.id));
-  const unlocked = looks.filter((s) => s.level <= level);
-  const locked = looks.filter((s) => s.level > level);
+  // Something bought for a slot shows it early; the seasonal and keepsake slots only hold such things.
+  const owns = (slot: Slot) => slot.choices.some((c) => c.shop && owned.has(c.id));
+  const unlocked = looks.filter((s) => (s.level <= level && !s.shop) || owns(s));
+  const locked = looks.filter((s) => s.level > level && !s.shop && !owns(s));
+  const wearable = (slot: Slot) => slot.choices.filter((c) => !c.shop || owned.has(c.id));
   const hasFresh = (slot: Slot) => slot.choices.some((c) => isFresh(slot, c, fresh));
   // A milestone's new looks are the first thing you see.
   const shelves = [...unlocked].sort((a, b) => Number(hasFresh(b)) - Number(hasFresh(a)));
@@ -90,6 +120,86 @@ export function LooksTab({
 
   function saveName() {
     if (draft.trim() !== name) onRename(draft);
+  }
+
+  if (part === 'sale') {
+    return (
+      <View style={styles.page}>
+        <ButtonGroup value={part} onChange={setPart} options={PARTS} />
+        {prices.size ? (
+          SECTIONS.map((section) => {
+            const things = SHOP.filter((t) => t.section === section && prices.get(t.id)?.treats);
+            if (!things.length) return null;
+            const tryingHere = trying && things.includes(trying) ? trying : null;
+            const price = tryingHere ? prices.get(tryingHere.id)! : null;
+            return (
+              <View key={section} style={styles.shelf}>
+                <Shelf title={SECTION_TITLES[section]} note={`${things.filter((t) => owned.has(t.id)).length} of ${things.length} yours`}>
+                  {things.map((thing) => {
+                    const choice = def.slots.find((sl) => sl.id === thing.slot)?.choices.find((c) => c.id === thing.id);
+                    if (!choice) return null;
+                    const cost = prices.get(thing.id)!;
+                    const mine = owned.has(thing.id);
+                    const forSale = onSale(cost);
+                    return (
+                      <ItemTile
+                        key={thing.id}
+                        choice={choice}
+                        size={tile}
+                        equipped={mine && picks[thing.slot] === thing.id}
+                        lock={
+                          mine || forSale
+                            ? null
+                            : { note: cost.months ? saleMonths(cost.months) : '', spoken: 'not on sale this month', icon: 'calendar' }
+                        }
+                        tag={
+                          mine
+                            ? undefined
+                            : { note: `${cost.treats}`, spoken: `${cost.treats} treats`, icon: 'treat' }
+                        }
+                        trying={trying?.id === thing.id}
+                        fresh={false}
+                        onPress={() => (mine ? onPick(thing.slot, thing.id) : onTry(trying?.id === thing.id ? null : thing))}
+                      />
+                    );
+                  })}
+                </Shelf>
+                {tryingHere && price?.treats ? (
+                  <View style={[glass(theme, 'card'), styles.buy]}>
+                    <View style={styles.flex}>
+                      <Text variant="titleSmall" style={styles.bold}>
+                        {tryingHere.name}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {tryingHere.blurb}
+                      </Text>
+                    </View>
+                    <View style={styles.buyActions}>
+                      <SpendButton
+                        label="Buy"
+                        price={price.treats}
+                        compact
+                        disabled={available < price.treats || !!buying}
+                        loading={buying === tryingHere.id}
+                        onPress={() => onBuy(tryingHere, price.treats!)}
+                        accessibilityLabel={`Buy ${tryingHere.name} for ${price.treats} treats`}
+                      />
+                      <Button compact onPress={() => onTry(null)}>
+                        Not now
+                      </Button>
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })
+        ) : (
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            Nothing for sale yet.
+          </Text>
+        )}
+      </View>
+    );
   }
 
   if (part === 'pet') {
@@ -128,11 +238,12 @@ export function LooksTab({
   }
 
   function renderShelf(slot: Slot) {
-    const owned = slot.choices.filter((c) => choiceLevel(slot, c) <= level).length;
+    const choices = wearable(slot);
+    const yours = choices.filter((c) => c.shop || choiceLevel(slot, c) <= level).length;
     return (
-      <Shelf key={slot.id} title={slot.title} note={`${owned} of ${slot.choices.length}`} fresh={hasFresh(slot)}>
-        {slot.choices.map((choice) => {
-          const at = choiceLevel(slot, choice);
+      <Shelf key={slot.id} title={slot.title} note={`${yours} of ${choices.length}`} fresh={hasFresh(slot)}>
+        {choices.map((choice) => {
+          const at = choice.shop ? 0 : choiceLevel(slot, choice);
           return (
             <ItemTile
               key={choice.id}
@@ -150,23 +261,33 @@ export function LooksTab({
   }
 
   const souvenirs = def.souvenirs ?? [];
+  // A trip's souvenir is yours once it has been there; a keepsake once the server says the page is full.
+  const has = (s: (typeof souvenirs)[number]) => (s.full ? owned.has(s.choice.id) : visited.has(s.from));
   const souvenirShelf = souvenirs.length ? (
     <Shelf
       key="souvenirs"
       title="Souvenirs"
-      note={`${souvenirs.filter((s) => visited.has(s.from)).length} of ${souvenirs.length}`}
+      note={`${souvenirs.filter(has).length} of ${souvenirs.length}`}
       fresh={!!newSouvenir}>
-      {souvenirs.map(({ from, slot, choice }) => {
+      {souvenirs.map((souvenir) => {
+        const { from, slot, choice, full } = souvenir;
         const where = destinationNamed(from);
-        const owned = visited.has(from);
+        const mine = has(souvenir);
         const worn = picks[slot] === choice.id;
+        const place = where?.name ?? from;
         return (
           <ItemTile
             key={choice.id}
             choice={choice}
             size={tile}
             equipped={worn}
-            lock={owned ? null : { note: where?.name ?? from, spoken: `a souvenir from ${where?.name ?? from}`, icon: 'airplane' }}
+            lock={
+              mine
+                ? null
+                : full
+                  ? { note: `Fill ${place}`, spoken: `for filling the ${place} page of the passport`, icon: 'passport' }
+                  : { note: place, spoken: `a souvenir from ${place}`, icon: 'airplane' }
+            }
             fresh={choice.id === newSouvenir}
             // Tap one you're wearing to take it off.
             onPress={() => onPick(slot, worn ? 'none' : choice.id)}
@@ -193,7 +314,7 @@ export function LooksTab({
           </Text>
           {locked.map((slot) => (
             <Shelf key={slot.id} title={slot.title} note={`${shortSteps(LEVELS[slot.level]!)} steps`} locked>
-              {slot.choices.map((choice) => (
+              {slot.choices.filter((c) => !c.shop).map((choice) => (
                 <ItemTile
                   key={choice.id}
                   choice={choice}
@@ -253,6 +374,8 @@ function ItemTile({
   size,
   equipped,
   lock,
+  tag,
+  trying,
   fresh,
   onPress,
   canTakeOff,
@@ -262,6 +385,10 @@ function ItemTile({
   equipped: boolean;
   /** Why it can't be worn yet, or null if it can. */
   lock: Lock | null;
+  /** Its price, for something not yet bought: shown like a lock, but it can still be tapped to try it on. */
+  tag?: Lock;
+  /** Being tried on above. */
+  trying?: boolean;
   fresh: boolean;
   onPress?: () => void;
   /** Tapping it while it's worn takes it off (souvenirs). */
@@ -293,7 +420,7 @@ function ItemTile({
       disabled={locked || (equipped && !canTakeOff) || !onPress}
       accessibilityRole="radio"
       accessibilityState={{ selected: equipped, disabled: locked }}
-      accessibilityLabel={lock ? `${choice.label}, ${lock.spoken}` : choice.label}>
+      accessibilityLabel={lock ? `${choice.label}, ${lock.spoken}` : tag ? `${choice.label}, ${tag.spoken}` : choice.label}>
       <Animated.View
         style={[
           glass(theme, 'small'),
@@ -305,6 +432,7 @@ function ItemTile({
             borderWidth: 2,
           },
           locked && { experimental_backgroundImage: 'none', backgroundColor: withAlpha(theme.colors.onSurface, 0.04) },
+          trying && { borderColor: TREAT.deep, borderWidth: 2 },
           style,
         ]}>
         <View style={[styles.tileArt, locked && styles.dim]}>
@@ -329,6 +457,13 @@ function ItemTile({
             <Icon source={lock.icon} size={11} color={theme.colors.onSurfaceVariant} />
             <Text variant="labelSmall" numberOfLines={1} style={[styles.lockNote, { color: theme.colors.onSurfaceVariant }]}>
               {lock.note}
+            </Text>
+          </View>
+        ) : tag ? (
+          <View style={styles.lockRow}>
+            <TreatIcon size={14} />
+            <Text variant="labelMedium" style={[styles.bold, { color: TREAT.deep }]}>
+              {tag.note}
             </Text>
           </View>
         ) : null}
@@ -388,4 +523,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   newSpot: { position: 'absolute', top: -7, left: -5 },
+  buy: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 20 },
+  buyActions: { alignItems: 'center', gap: 2 },
 });

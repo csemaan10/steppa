@@ -9,6 +9,7 @@ import * as Notifications from 'expo-notifications';
 import { getWorld } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { ensureChannels, PET_CHANNEL, pushPermission } from '@/lib/notifications';
+import { milestoneTreats } from '@/lib/treats';
 import { describeUnlock, levelOf, unlockAt, WORLDS } from '@/lib/world';
 
 /** The Settings switch. On unless the user turned it off. */
@@ -68,7 +69,8 @@ export async function notifyPetMilestone(userId: string): Promise<void> {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
         title: `${name} reached ${formatSteps(unlock.steps)} steps`,
-        body: describeUnlock(unlock) || 'A new milestone together',
+        // The bonus treats are collected when the Pet tab next opens (see claim_treats, migration 019).
+        body: `${describeUnlock(unlock) || 'A new milestone together'} · +${milestoneTreats(level)} treats`,
         data: { url: '/pet' },
       },
       trigger: at

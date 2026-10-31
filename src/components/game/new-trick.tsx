@@ -13,6 +13,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { TRICK_COLOR } from '@/components/game/colors';
 import { Ribbon, SparkleBurst } from '@/components/game/game-fx';
 import { popIn } from '@/components/game/game-motion';
+import { TrickIcon } from '@/components/trick-icon';
 import type { Trick } from '@/lib/world';
 
 const SHOWN_MS = 2300;
@@ -49,7 +50,7 @@ export function NewTrick({ trick, onDone }: { trick: Trick; onDone: () => void }
       <Animated.View entering={FadeIn.duration(200)} style={[StyleSheet.absoluteFill, styles.tint]} />
       <Ribbon text="NEW TRICK!" width={230} color={TRICK_COLOR} />
       <Animated.View entering={popIn(260)} style={styles.card}>
-        <Text style={styles.emoji}>{trick.emoji}</Text>
+        <TrickIcon trick={trick.id} size={34} color={TRICK_COLOR} />
         <Text style={styles.name}>{trick.name}</Text>
       </Animated.View>
       <SparkleBurst count={12} radius={96} delay={260} />
@@ -71,6 +72,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: 4,
     borderBottomColor: '#D7CCF7',
   },
-  emoji: { fontSize: 26, lineHeight: 32 },
   name: { color: '#2A1B55', fontSize: 18, fontWeight: '900' },
 });

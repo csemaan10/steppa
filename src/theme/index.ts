@@ -137,64 +137,53 @@ export function ringTrack(theme: MD3Theme): string {
 const CARD_RADIUS = 24;
 
 /**
- * Frosted glass tokens: a translucent fill, a bright rim and a sheen across the top-left. The shadows
- * are kept faint, just enough to hold a pane's edge where it sits over plain background rather than
- * a glow; small things like the top-bar buttons get only the tight one, so nothing smudges below them.
- * Small panes are also milkier, with a softer rim and no sheen: on something button-sized a clear fill
- * and a bright streak read as liquid glass rather than frost.
+ * Frosted glass tokens, the same frost as the floating tab bar's blur: `fill` is the tint expo-blur
+ * lays over its blur at the bar's intensity (60), a near-white veil in light mode and a smoky one in
+ * dark, even all over, with the bar's hairline outlineVariant rim. The shadows are kept faint and
+ * wide, just enough to hold a pane's edge where it sits over plain background rather than a glow;
+ * small things like the top-bar buttons get only a tight one, so nothing smudges below them.
  */
 const GLASS = {
   light: {
-    fill: 'rgba(255, 255, 255, 0.3)',
-    border: 'rgba(255, 255, 255, 0.85)',
-    sheen: 'rgba(255, 255, 255, 0.35)',
-    shadow: '0px 1px 2px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.04)',
-    smallFill: 'rgba(255, 255, 255, 0.34)',
-    smallBorder: 'rgba(255, 255, 255, 0.55)',
+    fill: 'rgba(249, 249, 249, 0.47)',
+    shadow: '0px 1px 3px rgba(0, 0, 0, 0.03), 0px 6px 18px rgba(0, 0, 0, 0.05)',
     smallShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
   },
   dark: {
-    fill: 'rgba(255, 255, 255, 0.055)',
-    border: 'rgba(255, 255, 255, 0.12)',
-    sheen: 'rgba(255, 255, 255, 0.07)',
-    shadow: '0px 1px 2px rgba(0, 0, 0, 0.2), 0px 4px 12px rgba(0, 0, 0, 0.16)',
-    smallFill: 'rgba(255, 255, 255, 0.13)',
-    smallBorder: 'rgba(255, 255, 255, 0.08)',
+    fill: 'rgba(25, 25, 25, 0.41)',
+    shadow: '0px 1px 3px rgba(0, 0, 0, 0.2), 0px 6px 18px rgba(0, 0, 0, 0.18)',
     smallShadow: '0px 1px 2px rgba(0, 0, 0, 0.2)',
   },
 };
 
 /** The glass colours themselves, for drawing glass in a shape of its own (see `GlassShape`). */
 export function glassTokens(theme: MD3Theme) {
-  return theme.dark ? GLASS.dark : GLASS.light;
+  return { ...(theme.dark ? GLASS.dark : GLASS.light), border: theme.colors.outlineVariant };
 }
 
 /**
  * Frosted glass without a shape. Behind a pane there's only the fixed glow background, which a blur
- * wouldn't change, so a translucent fill gives the same look.
+ * wouldn't change, so the tab bar's tint over it gives the same look without a blur pass per card.
  * - `card`: menu cards.
- * - `small`: buttons and other small panes: milky, matte and with only a tight shadow.
+ * - `small`: buttons and other small panes: the same frost with only a tight shadow.
  * - `strong`: frosted nearly opaque, for a card floating over a dimmed screen with content behind.
  */
 export function glass(theme: MD3Theme, kind: 'card' | 'small' | 'strong' = 'card'): ViewStyle {
-  const g = theme.dark ? GLASS.dark : GLASS.light;
+  const g = glassTokens(theme);
   const small = kind === 'small';
   const fill =
     kind === 'strong'
       ? theme.dark
         ? withAlpha(theme.colors.background, 0.8)
         : 'rgba(255, 255, 255, 0.8)'
-      : small
-        ? g.smallFill
-        : g.fill;
-  const sheen = `linear-gradient(150deg, ${g.sheen} 0%, ${withAlpha(g.sheen, 0)} 40%)`;
+      : g.fill;
   return {
     // Paper's iOS Surface paints its background colour on two stacked layers, which would double a
-    // translucent fill, so the fill is drawn as an image (under the sheen, if any) instead.
+    // translucent fill, so the fill is drawn as an image instead.
     backgroundColor: 'transparent',
-    experimental_backgroundImage: small ? `linear-gradient(${fill}, ${fill})` : `${sheen}, linear-gradient(${fill}, ${fill})`,
-    borderColor: small ? g.smallBorder : g.border,
-    borderWidth: StyleSheet.hairlineWidth * 2,
+    experimental_backgroundImage: `linear-gradient(${fill}, ${fill})`,
+    borderColor: g.border,
+    borderWidth: StyleSheet.hairlineWidth,
     // Unlike `shadow*` and Android elevation, a box shadow is only drawn outside the pane, so it
     // doesn't show through the fill as a dark smudge.
     boxShadow: small ? g.smallShadow : g.shadow,

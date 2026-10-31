@@ -45,7 +45,7 @@ function shapePath(shape: ExpressiveShape, size: number, inset = 0): string {
 
 /**
  * Frosted glass cut into an expressive shape, with something (a flag, an emoji) in the middle: the
- * app's glass (milky fill, sheen across the top-left, bright rim) for icons that aren't rectangles.
+ * app's glass (the tab bar's even frost and hairline rim) for icons that aren't rectangles.
  * Give it a `tint` and that colour shows through the frost, like coloured glass.
  */
 export function GlassShape({
@@ -74,17 +74,13 @@ export function GlassShape({
   const theme = useAppTheme();
   const g = glassTokens(theme);
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const rim = ring ? 2 : 1.2;
+  const rim = ring ? 2 : tint ? 1.2 : 1;
   const outline = shapePath(shape, size);
 
   return (
     <View style={[{ width: size, height: size }, styles.box, style]}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
         <Defs>
-          <LinearGradient id={`sheen${id}`} x1="0" y1="0" x2="0.75" y2="1">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={theme.dark ? 0.12 : 0.55} />
-            <Stop offset="0.45" stopColor="#FFFFFF" stopOpacity={0} />
-          </LinearGradient>
           {tint ? (
             <LinearGradient id={`tint${id}`} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor={tint[0]} />
@@ -96,13 +92,12 @@ export function GlassShape({
         <Path d={outline} fill="#000000" opacity={theme.dark ? 0.22 : 0.06} transform="translate(0 1.2)" />
         {tint ? <Path d={outline} fill={`url(#tint${id})`} opacity={dim ? 0.35 : 0.9} /> : null}
         {/* The frost: milky over clear glass, a lighter veil over tinted glass so its colour shows. */}
-        <Path d={outline} fill={tint ? 'rgba(255, 255, 255, 0.22)' : g.smallFill} />
+        <Path d={outline} fill={tint ? 'rgba(255, 255, 255, 0.22)' : g.fill} />
         {wash ? <Path d={outline} fill={wash} opacity={0.16} /> : null}
-        <Path d={outline} fill={`url(#sheen${id})`} />
         <Path
           d={shapePath(shape, size, rim / 2)}
           fill="none"
-          stroke={ring ?? (tint ? 'rgba(255, 255, 255, 0.6)' : g.border)}
+          stroke={ring ?? (tint ? 'rgba(255, 255, 255, 0.4)' : g.border)}
           strokeWidth={rim}
         />
       </Svg>

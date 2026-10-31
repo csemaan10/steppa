@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Modal, Portal, Text } from 'react-native-paper';
+import { Modal, Portal } from 'react-native-paper';
 import Animated, {
   Easing,
   FadeIn,
@@ -16,13 +16,10 @@ import Svg, { Path } from 'react-native-svg';
 
 import { Button } from '@/components/button';
 import { SparkleBurst } from '@/components/game/game-fx';
-import { PostcardFrame, PostcardThumb } from '@/components/postcard';
-import { SectionHeader } from '@/components/section-header';
-import type { Adventure } from '@/lib/api';
-import { ADVENTURE_COST, PLACES, placeFor, type Place } from '@/lib/pet-adventures';
+import { PostcardFrame } from '@/components/postcard';
+import type { Place } from '@/lib/pet-adventures';
 import { drawScene, SCENE_HEIGHT, SCENE_WIDTH, type TimeOfDay } from '@/lib/scene-art';
 import { drawPetPhoto, levelOf, stageOf, type KindPicks } from '@/lib/world';
-import { useAppTheme } from '@/theme';
 
 /** Where the pet stands in a journey scene: a third of the way in, where a character would. */
 const PHOTO_X = 108;
@@ -172,7 +169,7 @@ function PetPostcard({ place, steps, picks, name, recipient, number, width, arri
     <PostcardFrame
       stop={place.stop}
       flag={place.route.flag}
-      caption={`${place.route.flag} ${name}'s adventure ${number}`}
+      caption={`${name}'s adventure ${number}`}
       stamp={`NO. ${number}`}
       sign={`Love, ${name} 🐾`}
       address={[recipient, 'The yard', 'Home sweet home']}
@@ -237,56 +234,6 @@ export function PetPostcardModal({
         ) : null}
       </Modal>
     </Portal>
-  );
-}
-
-/**
- * Adventures on the Pet tab: every postcard your pet has sent home, newest first. Trips are booked
- * in the shop.
- */
-export function AdventuresSection({
-  name,
-  adventures,
-  onOpen,
-  onShop,
-}: {
-  name: string;
-  adventures: Adventure[];
-  onOpen: (postcard: OpenPostcard) => void;
-  onShop: () => void;
-}) {
-  const theme = useAppTheme();
-  const visited = new Set(adventures.map((a) => a.place)).size;
-  // Places since removed from the app are skipped.
-  const postcards = adventures.flatMap((a, i) => {
-    const place = placeFor(a.place);
-    return place ? [{ id: a.id, place, number: adventures.length - i }] : [];
-  });
-
-  return (
-    <>
-      <SectionHeader title="Adventures" note={`${visited} of ${PLACES.length} places`} onPress={onShop} />
-      {postcards.length ? (
-        <View style={styles.grid}>
-          {postcards.map(({ id, place, number }, i) => (
-            <PostcardThumb
-              key={id}
-              route={place.route}
-              stop={place.stop}
-              index={i}
-              onPress={() => onOpen({ place, number, isNew: false })}
-            />
-          ))}
-        </View>
-      ) : (
-        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-          {name} hasn&apos;t been anywhere yet. Book a trip and a postcard will come home.
-        </Text>
-      )}
-      <Button mode="contained-tonal" icon="airplane" onPress={onShop}>
-        {`Book a trip · 🍪 ${ADVENTURE_COST}`}
-      </Button>
-    </>
   );
 }
 

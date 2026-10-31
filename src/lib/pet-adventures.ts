@@ -117,3 +117,16 @@ export function visitedIn(destination: Destination, visited: readonly string[]):
   const seen = new Set(visited);
   return destination.places.filter((p) => seen.has(p.key)).length;
 }
+
+/**
+ * Where the pet is today: the place of its latest adventure, if it set off today (by this phone's
+ * clock). It stays there until tomorrow.
+ */
+export function awayToday(adventures: readonly { place: string; created_at: string }[], now = new Date()): Place | null {
+  const latest = adventures[0];
+  if (!latest) return null;
+  const left = new Date(latest.created_at);
+  const sameDay =
+    left.getFullYear() === now.getFullYear() && left.getMonth() === now.getMonth() && left.getDate() === now.getDate();
+  return sameDay ? (placeFor(latest.place) ?? null) : null;
+}

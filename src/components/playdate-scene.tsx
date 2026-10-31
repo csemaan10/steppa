@@ -16,6 +16,7 @@ import { SparkleBurst } from '@/components/game/game-fx';
 import { PHOTO_FEET, PHOTO_SIZE } from '@/components/pet-adventures';
 import { drawScene, SCENE_HEIGHT, SCENE_WIDTH, type Shape, type TimeOfDay } from '@/lib/scene-art';
 import { drawPetPhoto, levelOf, stageOf, type KindPicks } from '@/lib/world';
+import { TreatIcon } from '@/components/treat-icon';
 
 const UP = Easing.out(Easing.quad);
 const DOWN = Easing.in(Easing.quad);
@@ -353,7 +354,7 @@ function Floaty({ float, scale, onDone }: { float: Float; scale: number; onDone:
     <Animated.View
       pointerEvents="none"
       style={[styles.floaty, { left: float.x * scale - size, top: float.y * scale - size, width: size * 2, height: size * 2 }, style]}>
-      <NativeText style={{ fontSize: size, lineHeight: size * 1.25 }}>{treat ? '🍪' : '💗'}</NativeText>
+      {treat ? <TreatIcon size={size * 1.3} /> : <NativeText style={{ fontSize: size, lineHeight: size * 1.25 }}>💗</NativeText>}
     </Animated.View>
   );
 }

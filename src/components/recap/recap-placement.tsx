@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 
+import { TrophyIcon } from '@/components/award-icons';
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import { RainCloud } from '@/components/recap/celebration';
 import { MEDAL_COLORS } from '@/components/character/scene-common';
@@ -56,9 +57,12 @@ export function RecapPlacement({ me, podium, total, compact = false, play }: Pro
           compact && styles.bannerCompact,
           { backgroundColor: withAlpha(medal.disc, theme.dark ? 0.22 : 0.3), borderColor: withAlpha(medal.rim, 0.5) },
         ]}>
-        <Text variant={compact ? 'labelLarge' : 'titleMedium'} style={styles.bold}>
-          {placement.place === 0 ? '🏆 You won!' : `You took ${MEDAL_NAMES[placement.place]}!`}
-        </Text>
+        <View style={styles.headline}>
+          {placement.place === 0 ? <TrophyIcon size={compact ? 18 : 22} /> : null}
+          <Text variant={compact ? 'labelLarge' : 'titleMedium'} style={styles.bold}>
+            {placement.place === 0 ? 'You won!' : `You took ${MEDAL_NAMES[placement.place]}!`}
+          </Text>
+        </View>
         <Text variant={compact ? 'labelMedium' : 'bodyMedium'} style={{ color: theme.colors.onSurfaceVariant }}>
           {formatSteps(me.total_steps)} steps
         </Text>
@@ -107,6 +111,7 @@ export function RecapPlacement({ me, podium, total, compact = false, play }: Pro
 
 const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
+  headline: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   banner: { alignItems: 'center', gap: 2, paddingVertical: 14, borderRadius: 16, borderWidth: 1 },
   bannerCompact: { paddingVertical: 8, borderRadius: 12 },
   sad: { alignItems: 'center', gap: 4 },

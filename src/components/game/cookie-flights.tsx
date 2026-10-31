@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { StyleSheet, type View } from 'react-native';
-import { Portal, Text } from 'react-native-paper';
+import { Portal } from 'react-native-paper';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
+
+import { TreatIcon } from '@/components/treat-icon';
 
 type Point = { x: number; y: number };
 
@@ -11,13 +13,12 @@ type Flight = {
   from: Point;
   to: Point;
   count: number;
-  emoji: string;
   /** As each one lands (0-based). */
   onLand?: (index: number) => void;
   onDone?: () => void;
 };
 
-export type FlyOptions = { emoji?: string; onLand?: (index: number) => void; onDone?: () => void };
+export type FlyOptions = { onLand?: (index: number) => void; onDone?: () => void };
 
 /** Most cookies drawn in one flight; a big purchase still reads as "lots" without flooding the screen. */
 const MAX_DRAWN = 8;
@@ -64,7 +65,6 @@ export function useCookieFlights(): {
       from: a,
       to: b,
       count: Math.min(count, MAX_DRAWN),
-      emoji: '🍪',
       ...options,
     };
     setAll((list) => [...list, flight]);
@@ -140,7 +140,7 @@ function FlyingTreat({ flight, index, onLand }: { flight: Flight; index: number;
 
   return (
     <Animated.View pointerEvents="none" style={[styles.treat, style]}>
-      <Text style={styles.emoji}>{flight.emoji}</Text>
+      <TreatIcon size={26} />
     </Animated.View>
   );
 }
@@ -155,5 +155,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emoji: { fontSize: 22, lineHeight: 28 },
 });

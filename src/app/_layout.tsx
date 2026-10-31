@@ -83,6 +83,7 @@ function RootNavigator() {
         <Stack.Screen name="journey" />
         <Stack.Screen name="shop" />
         <Stack.Screen name="playdate/[id]" />
+        <Stack.Screen name="passport" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" options={{ animation: 'none' }} />

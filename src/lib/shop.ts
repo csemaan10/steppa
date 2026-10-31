@@ -1,5 +1,9 @@
-// What the shop shows as new after a milestone, and how a level-up names its rewards.
+// The shop: what it shows as new after a milestone, how a level-up names its rewards, and the things
+// for sale with treats. Their prices and the months seasonal things are on sale come from the database
+// (shop_items, migration 021) so they can change without an update; how each thing looks is in
+// src/lib/world/pet.ts, where it's a `shop` choice in one of the pet's slots.
 
+import type { ShopPrice } from '@/lib/api';
 import { choiceLevel, unlockAt, type Choice, type Slot, type WorldDef } from '@/lib/world';
 
 /** The shop's sections. */
@@ -58,4 +62,57 @@ export function rewardsBetween(def: WorldDef, from: number, to: number): Reward[
     }
   }
   return rewards;
+}
+
+// ---------- Things for sale ----------
+
+export type ShopSection = 'toys' | 'yard' | 'season' | 'buddy';
+
+/** Something to keep: its name, a line about it, and the pet's slot it goes in. */
+export type ShopThing = { id: string; name: string; blurb: string; section: ShopSection; slot: string };
+
+export const SHOP: ShopThing[] = [
+  { id: 'frisbee', name: 'Frisbee', blurb: 'Play throws a frisbee to catch', section: 'toys', slot: 'toy' },
+  { id: 'rope', name: 'Tug rope', blurb: 'Play turns into a game of tug', section: 'toys', slot: 'toy' },
+  { id: 'bubbles', name: 'Bubbles', blurb: 'Play blows bubbles to pop', section: 'toys', slot: 'toy' },
+  { id: 'cloudbed', name: 'Cloud bed', blurb: 'A fluffy cloud to nap on', section: 'yard', slot: 'bed' },
+  { id: 'flowerbed', name: 'Flower beds', blurb: 'Roses and daisies in a raised bed', section: 'yard', slot: 'fun' },
+  { id: 'pond', name: 'Pond', blurb: 'Lily pads, bulrushes and a frog', section: 'yard', slot: 'fun' },
+  { id: 'cottage', name: 'Cottage', blurb: 'A little house with a chimney', section: 'yard', slot: 'house' },
+  { id: 'treehouse', name: 'Treehouse', blurb: 'A hut up a tree, with a ladder', section: 'yard', slot: 'house' },
+  { id: 'pumpkins', name: 'Pumpkins', blurb: 'One carved, and lit up after dark', section: 'season', slot: 'season' },
+  { id: 'festive-tree', name: 'Festive tree', blurb: 'Baubles by day, fairy lights by night', section: 'season', slot: 'season' },
+  { id: 'tulips', name: 'Tulips', blurb: 'A clump of spring colours', section: 'season', slot: 'season' },
+  { id: 'sunflowers', name: 'Sunflowers', blurb: 'Taller than your pet, nearly', section: 'season', slot: 'season' },
+  {
+    id: 'hedgehog',
+    name: 'Hedgehog',
+    blurb: 'A little friend that hops along when your pet plays',
+    section: 'buddy',
+    slot: 'buddy',
+  },
+];
+
+export const SECTION_TITLES: Record<ShopSection, string> = {
+  toys: 'Toys',
+  yard: 'For the yard',
+  season: 'Seasonal',
+  buddy: 'Something to save for',
+};
+
+/** Whether it's on sale this month (things without months always are). */
+export function onSale(price: ShopPrice, now = new Date()): boolean {
+  return !price.months || price.months.includes(now.getMonth() + 1);
+}
+
+const monthName = (month: number) => new Date(2026, month - 1, 15).toLocaleDateString(undefined, { month: 'short' });
+
+/** When a seasonal thing is on sale: "Jun–Aug", "Dec–Jan". */
+export function saleMonths(months: readonly number[]): string {
+  return months.length === 1 ? monthName(months[0]!) : `${monthName(months[0]!)}–${monthName(months[months.length - 1]!)}`;
+}
+
+/** Prices by item. */
+export function priceList(prices: readonly ShopPrice[]): Map<string, ShopPrice> {
+  return new Map(prices.map((p) => [p.item, p]));
 }

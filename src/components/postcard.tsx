@@ -16,7 +16,9 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { Button } from '@/components/button';
 import type { Motion } from '@/components/character/rig';
 import { gameMotion, riseIn } from '@/components/game/game-motion';
+import { FlagIcon } from '@/components/flag-icon';
 import { JourneyScene, type Person } from '@/components/journey-scene';
+import { PlaceIcon } from '@/components/place-icon';
 import { hashString } from '@/lib/character';
 import { formatKm, SKIES, type Route, type Sky, type Stop } from '@/lib/journeys';
 import type { TimeOfDay } from '@/lib/scene-art';
@@ -69,8 +71,8 @@ function sky(stop: Stop): string {
   return `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)`;
 }
 
-/** The picture side: gradient sky, sun, rolling hills and the stop's emoji standing in the sun. */
-function PostcardArt({ stop, emojiSize }: { stop: Stop; emojiSize: number }) {
+/** The picture side: gradient sky, sun, rolling hills and the stop's picture standing in the sun. */
+function PostcardArt({ stop, iconSize }: { stop: Stop; iconSize: number }) {
   return (
     <View style={[StyleSheet.absoluteFill, { experimental_backgroundImage: sky(stop) }]}>
       <Svg width="100%" height="100%" viewBox="0 0 300 192" preserveAspectRatio="none" style={StyleSheet.absoluteFill}>
@@ -82,10 +84,10 @@ function PostcardArt({ stop, emojiSize }: { stop: Stop; emojiSize: number }) {
       {/* Centred on the sun. */}
       <View
         style={[
-          styles.emojiSpot,
-          { width: emojiSize * 1.4, height: emojiSize * 1.4, marginLeft: -emojiSize * 0.7, marginTop: -emojiSize * 0.7 },
+          styles.iconSpot,
+          { width: iconSize, height: iconSize, marginLeft: -iconSize / 2, marginTop: -iconSize / 2 },
         ]}>
-        <Text style={{ fontSize: emojiSize, lineHeight: emojiSize * 1.2 }}>{stop.emoji}</Text>
+        <PlaceIcon emoji={stop.emoji} size={iconSize} color="#FFFFFF" />
       </View>
     </View>
   );
@@ -96,7 +98,7 @@ function Stamp({ flag, label, stop }: { flag: string; label: string; stop: Stop 
   return (
     <View style={styles.stamp}>
       <View style={[styles.stampInner, { experimental_backgroundImage: sky(stop) }]}>
-        <Text style={styles.stampFlag}>{flag}</Text>
+        <FlagIcon flag={flag} size={30} />
         <Text style={styles.stampKm}>{label}</Text>
       </View>
     </View>
@@ -140,7 +142,7 @@ export function Postcard({ route, stop, people, you, recipient, width }: Postcar
     <PostcardFrame
       stop={stop}
       flag={route.flag}
-      caption={`${route.flag} ${route.name} · Stop ${index + 1} of ${route.stops.length}`}
+      caption={`${route.name} · Stop ${index + 1} of ${route.stops.length}`}
       stamp={`${formatKm(stop.km)} KM`}
       sign="Keep walking 👟"
       address={[recipient, route.subtitle, stop.km > 0 ? `${formatKm(stop.km)} km from ${start.name}` : 'Day 1. Here we go!']}
@@ -167,7 +169,7 @@ type FrameProps = {
   /** The picture: the stop's place with someone in it, `height` tall at the hour given. */
   scene: (height: number, time: TimeOfDay) => ReactNode;
   flag: string;
-  /** Bottom right of the picture, e.g. "🇨🇦 Toronto to Ottawa · Stop 3 of 8". */
+  /** Bottom right of the picture after the flag, e.g. "Toronto to Ottawa · Stop 3 of 8". */
   caption: string;
   /** On the stamp under the flag, e.g. "260 KM". */
   stamp: string;
@@ -248,6 +250,7 @@ export function PostcardFrame({ stop, scene, flag, caption, stamp: stampLabel, s
               </Text>
             </View>
             <View style={styles.caption}>
+              <FlagIcon flag={flag} size={16} />
               <Text style={styles.captionText}>{caption}</Text>
             </View>
           </View>
@@ -324,7 +327,7 @@ export function PostcardThumb({ stop, kmAway, index, onPress }: ThumbProps) {
           </View>
         ) : (
           <View style={styles.thumbArt}>
-            <PostcardArt stop={stop} emojiSize={30} />
+            <PostcardArt stop={stop} iconSize={40} />
             <Text numberOfLines={1} style={styles.thumbName}>
               {stop.name}
             </Text>
@@ -447,7 +450,7 @@ const styles = StyleSheet.create({
   art: { flex: 1, borderRadius: 7, overflow: 'hidden' },
   // The art clips the corners, so the scene needs none of its own.
   scene: { borderRadius: 0 },
-  emojiSpot: { position: 'absolute', left: '72.7%', top: '48%', alignItems: 'center', justifyContent: 'center' },
+  iconSpot: { position: 'absolute', left: '72.7%', top: '48%', alignItems: 'center', justifyContent: 'center' },
   // Clear of the stamp and postmark; long names wrap or shrink.
   greeting: { position: 'absolute', top: 14, left: 16, right: '40%' },
   greetingSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '700', letterSpacing: 2.5 },
@@ -463,7 +466,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 12,
     bottom: 10,
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingLeft: 5,
+    paddingRight: 8,
     paddingVertical: 3,
     borderRadius: 10,
     backgroundColor: 'rgba(0,0,0,0.22)',
@@ -484,7 +491,6 @@ const styles = StyleSheet.create({
     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
   },
   stampInner: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 1 },
-  stampFlag: { fontSize: 20, lineHeight: 24 },
   stampKm: { color: '#FFFFFF', fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
   back: { backgroundColor: BACK_PAPER, flexDirection: 'row', padding: 14 },
   backLeft: { flex: 1.25, gap: 6, paddingRight: 12 },

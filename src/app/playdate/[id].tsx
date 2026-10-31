@@ -18,6 +18,7 @@ import { timeOfDay } from '@/lib/scene-art';
 import { levelOf, stageOf, WORLDS, type KindPicks } from '@/lib/world';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader, useAppTheme } from '@/theme';
+import { TreatIcon, treatButtonIcon } from '@/components/treat-icon';
 
 function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -148,11 +149,11 @@ function Playdate({
         });
       } else if (result === 'already') {
         setGiven(true);
-        show(`You've given ${theirName} a treat today`, '🍪');
+        show(`You've given ${theirName} a treat today`, <TreatIcon size={20} />);
       } else if (result === 'no-treats') {
         show('No treats to spare. Walk a little to earn one!', '👟');
       } else {
-        show("Can't give a treat right now", '🍪');
+        show("Can't give a treat right now", <TreatIcon size={20} />);
       }
     } catch (e) {
       show(e instanceof Error ? e.message : 'Something went wrong', '⚠️');
@@ -185,14 +186,14 @@ function Playdate({
           {treats ? (
             <Button
               mode="contained-tonal"
-              icon={given ? 'check' : 'cookie'}
+              icon={given ? 'check' : treatButtonIcon}
               compact
               disabled={given || available < 1}
               loading={giving}
               onPress={give}
               accessibilityLabel={given ? `You gave ${theirName} a treat today` : `Give ${theirName} a treat`}
               style={styles.treat}>
-              {given ? 'Treat given today' : 'Give a treat · 🍪 1'}
+              {given ? 'Treat given today' : 'Give a treat'}
             </Button>
           ) : null}
         </View>

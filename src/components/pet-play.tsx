@@ -37,7 +37,11 @@ type Effect =
   | { id: number; kind: 'bubble'; text: string }
   | { id: number; kind: 'treat'; emoji: string }
   | { id: number; kind: 'ball' }
-  | { id: number; kind: 'sparkles' }
+  | { id: number; kind: 'frisbee' }
+  | { id: number; kind: 'rope'; dir: number }
+  | { id: number; kind: 'soap'; dx: number; delay: number }
+  /** Where they burst, if not where the ball is caught. */
+  | { id: number; kind: 'sparkles'; at?: readonly [number, number] }
   /** A puff kicked up at its feet, `x` across the scene. */
   | { id: number; kind: 'dust'; x: number }
   /** Earth flying out behind it as it digs, toward `dir`. */
@@ -385,26 +389,100 @@ export function usePetPlay(spot: PetSpot | undefined, { tricks = [], says = [] }
   }
 
   /**
-   * Fetch: a ball is thrown in from the side and bounces twice on the way. The pet leans toward it,
-   * crouches, and leaps to catch it at the top of its jump; the ball pops into sparkles.
+   * Plays with its toy: a frisbee to catch, a rope to tug or bubbles to pop, or fetch with a ball for
+   * any other toy.
    */
-  function play() {
+  function play(toy?: string) {
+    if (toy === 'frisbee') frisbee();
+    else if (toy === 'rope') tug();
+    else if (toy === 'bubbles') bubbles();
+    else fetchBall();
+  }
+
+  /** Leans toward a throw and crouches, then leaps up to catch it, `leap` (a share of its height) high. */
+  function leapFor(dir: number, flight: number, leap: number) {
     if (!spot) return;
-    busy(FETCH + 800);
-    const { dir } = fetchPath(spot);
-    add({ kind: 'ball' });
     tilt.set(
       withSequence(
         withTiming(dir * 6, { duration: 350, easing: SWING }),
-        withDelay(FETCH - 900, withTiming(0, { duration: 250, easing: SWING }))
+        withDelay(flight - 900, withTiming(0, { duration: 250, easing: SWING }))
       )
     );
-    later(FETCH - LEAP_UP - 150, () =>
+    later(flight - LEAP_UP - 150, () =>
       squish.set(
         withSequence(withTiming(0.8, { duration: 150, easing: STANDARD }), withTiming(0, { duration: 110, easing: UP }))
       )
     );
-    later(FETCH - LEAP_UP, () => jump(spot.box[3] * CATCH_LEAP));
+    later(flight - LEAP_UP, () => jump(spot.box[3] * leap));
+  }
+
+  /** A frisbee glides in high from the side, slowing as it floats down, and the pet leaps right up for it. */
+  function frisbee() {
+    if (!spot) return;
+    busy(FRISBEE + 800);
+    const { dir } = fetchPath(spot);
+    add({ kind: 'frisbee' });
+    leapFor(dir, FRISBEE, FRISBEE_LEAP);
+    later(FRISBEE, () => {
+      add({ kind: 'sparkles', at: frisbeeCatch(spot) });
+      cheer(900);
+      say('Caught it!');
+      hearts(2);
+    });
+  }
+
+  /** A rope comes in from the side; the pet grabs it and tugs, three good pulls, and wins. */
+  function tug() {
+    if (!spot) return;
+    busy(ROPE_IN + TUG + 800);
+    const { dir } = fetchPath(spot);
+    add({ kind: 'rope', dir });
+    const pulls = [12, 16, 20].flatMap((far) => [
+      withTiming(-dir * far, { duration: 260, easing: SWING }),
+      withTiming(-dir * far * 0.3, { duration: 220, easing: SWING }),
+    ]);
+    slide.set(withDelay(ROPE_IN, withSequence(...pulls, withTiming(0, { duration: 320, easing: STANDARD }))));
+    const leans = [0, 1, 2].flatMap(() => [
+      withTiming(-dir * 8, { duration: 260, easing: SWING }),
+      withTiming(-dir * 2, { duration: 220, easing: SWING }),
+    ]);
+    tilt.set(withDelay(ROPE_IN, withSequence(...leans, withTiming(0, { duration: 320, easing: SWING }))));
+    later(ROPE_IN, () => {
+      cheer(TUG);
+      say('Grrr!');
+    });
+    later(ROPE_IN + TUG, () => {
+      say('Mine!');
+      hearts(3);
+    });
+  }
+
+  /** Bubbles float up past it, and it hops to pop each one. */
+  function bubbles() {
+    if (!spot) return;
+    const last = SOAP[SOAP.length - 1]![1] + SOAP_RISE * SOAP_POP;
+    busy(last + 800);
+    for (const [dx, delay] of SOAP) {
+      add({ kind: 'soap', dx, delay });
+      later(delay + SOAP_RISE * SOAP_POP - LEAP_UP, () => jump(spot.box[3] * 0.12));
+      later(delay + SOAP_RISE * SOAP_POP, () => {
+        cheer(400);
+        hearts(1);
+      });
+    }
+    later(last, () => say('Pop!'));
+  }
+
+  /**
+   * Fetch: a ball is thrown in from the side and bounces twice on the way. The pet leans toward it,
+   * crouches, and leaps to catch it at the top of its jump; the ball pops into sparkles.
+   */
+  function fetchBall() {
+    if (!spot) return;
+    busy(FETCH + 800);
+    const { dir } = fetchPath(spot);
+    add({ kind: 'ball' });
+    leapFor(dir, FETCH, CATCH_LEAP);
     later(FETCH, () => {
       add({ kind: 'sparkles' });
       cheer(900);
@@ -638,6 +716,16 @@ export function PetBody({
   );
 }
 
+/** A little buddy's layer: it hops along with the pet, not quite as high. */
+export function FollowBody({ play, scale, children }: { play: PetPlay; scale: number; children: ReactNode }) {
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: -play.hop.get() * 0.5 * scale }] }));
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
+      {children}
+    </Animated.View>
+  );
+}
+
 /** The pet itself, to tap or hold; a little bigger than it looks, so it's easy to hit. */
 export function PetTarget({ play, spot, scale }: { play: PetPlay; spot: PetSpot; scale: number }) {
   const [x, y, w, h] = spot.box;
@@ -677,8 +765,16 @@ export function PetEffects({ play, spot, scale }: { play: PetPlay; spot: PetSpot
             return <FallingTreat key={effect.id} spot={spot} emoji={effect.emoji} scale={scale} onDone={done} />;
           case 'ball':
             return <FetchBall key={effect.id} spot={spot} scale={scale} onDone={done} />;
+          case 'frisbee':
+            return <Frisbee key={effect.id} spot={spot} scale={scale} onDone={done} />;
+          case 'rope':
+            return <TugRope key={effect.id} spot={spot} dir={effect.dir} slide={play.slide} scale={scale} onDone={done} />;
+          case 'soap':
+            return (
+              <SoapBubble key={effect.id} spot={spot} dx={effect.dx} delay={effect.delay} scale={scale} onDone={done} />
+            );
           case 'sparkles':
-            return <CatchSparkles key={effect.id} spot={spot} scale={scale} onDone={done} />;
+            return <CatchSparkles key={effect.id} spot={spot} at={effect.at} scale={scale} onDone={done} />;
           case 'dust':
             return <Dust key={effect.id} spot={spot} x={effect.x} scale={scale} onDone={done} />;
           case 'dirt':
@@ -693,14 +789,17 @@ export function PetEffects({ play, spot, scale }: { play: PetPlay; spot: PetSpot
   );
 }
 
-/** 0 → 1 over `duration` from when it appears, then `onDone`. */
-function useProgress(duration: number, onDone: () => void, easing = Easing.linear): SharedValue<number> {
+/** 0 → 1 over `duration` from when it appears (after `delay`), then `onDone`. */
+function useProgress(duration: number, onDone: () => void, easing = Easing.linear, delay = 0): SharedValue<number> {
   const p = useSharedValue(0);
   useEffect(() => {
     p.set(
-      withTiming(1, { duration, easing }, (finished) => {
-        if (finished) scheduleOnRN(onDone);
-      })
+      withDelay(
+        delay,
+        withTiming(1, { duration, easing }, (finished) => {
+          if (finished) scheduleOnRN(onDone);
+        })
+      )
     );
     // Runs once: each effect plays a single time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -915,10 +1014,20 @@ function FetchBall({ spot, scale, onDone }: { spot: PetSpot; scale: number; onDo
   );
 }
 
-/** A little burst of sparkles where the ball is caught. */
-function CatchSparkles({ spot, scale, onDone }: { spot: PetSpot; scale: number; onDone: () => void }) {
+/** A little burst of sparkles where the ball is caught (or `at` another spot). */
+function CatchSparkles({
+  spot,
+  at,
+  scale,
+  onDone,
+}: {
+  spot: PetSpot;
+  at?: readonly [number, number];
+  scale: number;
+  onDone: () => void;
+}) {
   const p = useProgress(520, onDone, UP);
-  const [cx, cy] = fetchPath(spot).catch;
+  const [cx, cy] = at ?? fetchPath(spot).catch;
   const size = 48 * scale;
   const style = useAnimatedStyle(() => {
     const v = p.get();
@@ -1095,6 +1204,195 @@ function Bubble({ p, index, spot, scale }: { p: SharedValue<number>; index: numb
   });
   return (
     <Animated.View style={[styles.effect, styles.origin, styles.bubbleRing, { width: size, height: size, borderRadius: size / 2 }, style]} />
+  );
+}
+
+// ---------- Frisbee ----------
+
+/** How long the frisbee flies, and how high the pet leaps for it (a share of its height). */
+const FRISBEE = 1700;
+const FRISBEE_LEAP = 0.34;
+/** The disc's height in scene units (it's twice as wide). */
+const DISC = 13;
+
+/** Where the frisbee is caught: in the pet's mouth at the top of its leap. */
+function frisbeeCatch(spot: PetSpot): readonly [number, number] {
+  const [x, , w, h] = spot.box;
+  return [x + w / 2, spot.mouth[1] - h * FRISBEE_LEAP];
+}
+
+/** A flying disc, seen nearly edge-on. */
+function Disc({ height }: { height: number }) {
+  return (
+    <Svg width={height * 2} height={height} viewBox="0 0 26 13">
+      <Path d="M1 7.5a12 4.4 0 1 0 24 0a12 4.4 0 1 0-24 0Z" fill="#3E95C9" />
+      <Path d="M1 6a12 4.4 0 1 0 24 0a12 4.4 0 1 0-24 0Z" fill="#5AB8F0" />
+      <Path d="M5 6a8 2.6 0 1 0 16 0a8 2.6 0 1 0-16 0Z" fill="#9AD5F7" />
+      <Path d="M6.6 6a6.4 2 0 1 0 12.8 0a6.4 2 0 1 0-12.8 0Z" fill="#5AB8F0" />
+    </Svg>
+  );
+}
+
+/** In from the side, high up, then floating down and slowing into the catch, on one smooth curve. */
+function Frisbee({ spot, scale, onDone }: { spot: PetSpot; scale: number; onDone: () => void }) {
+  const total = FRISBEE + 100;
+  const p = useProgress(total, onDone);
+  const caught = FRISBEE / total;
+  const { dir } = fetchPath(spot);
+  const [cx, cy] = frisbeeCatch(spot);
+  const sx = dir > 0 ? WORLD_WIDTH + 30 : -30;
+  const sy = Math.max(20, cy - 46);
+  // The curve's control points: it sails in level, then sinks gently into the catch.
+  const [ax, ay] = [sx - dir * 120, sy - 14];
+  const [bx, by] = [cx + dir * 70, cy - 26];
+  const w = DISC * 2 * scale;
+  const h = DISC * scale;
+
+  const style = useAnimatedStyle(() => {
+    const v = p.get();
+    const t = 1 - (1 - Math.min(1, v / caught)) ** 2;
+    const u = 1 - t;
+    const x = u * u * u * sx + 3 * u * u * t * ax + 3 * u * t * t * bx + t * t * t * cx;
+    const y = u * u * u * sy + 3 * u * u * t * ay + 3 * u * t * t * by + t * t * t * cy;
+    const gone = v > caught ? (v - caught) / (1 - caught) : 0;
+    return {
+      opacity: 1 - gone,
+      transform: [
+        { translateX: x * scale - w / 2 },
+        { translateY: y * scale - h / 2 },
+        { rotate: `${-dir * 8 + Math.sin(v * 30) * 3}deg` },
+        { scaleY: 0.9 + Math.sin(v * 40) * 0.1 },
+      ],
+    };
+  });
+  return (
+    <Animated.View style={[styles.effect, styles.origin, { width: w, height: h }, style]}>
+      <Disc height={h} />
+    </Animated.View>
+  );
+}
+
+// ---------- Tug of war ----------
+
+/** How long the rope takes to come in, how long the tugging lasts, and how long the rope is. */
+const ROPE_IN = 450;
+const TUG = 3 * 480 + 320;
+const ROPE = 240;
+
+/** A striped rope with a knot at the pet's end. */
+function Rope({ width, height, knotRight }: { width: number; height: number; knotRight: boolean }) {
+  const stripes = Array.from(
+    { length: Math.ceil(ROPE / 9) },
+    (_, i) => `M${i * 9 + 2} 4.6L${i * 9 + 5.4} 4.6L${i * 9 + 3.4} 9.4L${i * 9} 9.4Z`
+  ).join('');
+  const knot = knotRight ? ROPE - 6 : 6;
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${ROPE} 14`}>
+      <Path d={`M0 4.6H${ROPE}V9.4H0Z`} fill="#F1E3C6" />
+      <Path d={stripes} fill="#E5534B" />
+      <Path d={`M${knot - 6} 7a6 6 0 1 0 12 0a6 6 0 1 0-12 0Z`} fill="#E5534B" />
+    </Svg>
+  );
+}
+
+/** The rope, held in the pet's mouth: it comes in from the side, moves as the pet tugs, then goes. */
+function TugRope({
+  spot,
+  dir,
+  slide,
+  scale,
+  onDone,
+}: {
+  spot: PetSpot;
+  dir: number;
+  slide: SharedValue<number>;
+  scale: number;
+  onDone: () => void;
+}) {
+  const total = ROPE_IN + TUG + 500;
+  const p = useProgress(total, onDone);
+  const inAt = ROPE_IN / total;
+  const outAt = (ROPE_IN + TUG + 100) / total;
+  const [mx, my] = spot.mouth;
+  const w = ROPE * scale;
+  const h = 14 * scale;
+  const style = useAnimatedStyle(() => {
+    const v = p.get();
+    const enter = Math.min(1, v / inAt);
+    const leave = v > outAt ? (v - outAt) / (1 - outAt) : 0;
+    // Off toward the side it comes from, until it's in; pulled back out once the pet has won.
+    const away = (1 - enter) * (1 - enter) * 200 + leave * leave * 260;
+    const end = mx + slide.get() + dir * away;
+    return { transform: [{ translateX: (dir > 0 ? end : end - ROPE) * scale }, { translateY: (my - 7) * scale }] };
+  });
+  return (
+    <Animated.View style={[styles.effect, styles.origin, { width: w, height: h }, style]}>
+      <Rope width={w} height={h} knotRight={dir < 0} />
+    </Animated.View>
+  );
+}
+
+// ---------- Bubbles ----------
+
+/** How long a bubble takes to rise, and when (as a share of that) the pet pops it. */
+const SOAP_RISE = 1500;
+const SOAP_POP = 0.82;
+/** Each bubble: how far to the side of the pet it rises, and when it starts (ms). */
+const SOAP: readonly (readonly [number, number])[] = [
+  [-30, 0],
+  [26, 420],
+  [-12, 840],
+  [36, 1260],
+];
+
+/** A soap bubble drifting up past the pet's head, wobbling a little, until it's popped. */
+function SoapBubble({
+  spot,
+  dx,
+  delay,
+  scale,
+  onDone,
+}: {
+  spot: PetSpot;
+  dx: number;
+  delay: number;
+  scale: number;
+  onDone: () => void;
+}) {
+  const p = useProgress(SOAP_RISE + 180, onDone, Easing.linear, delay);
+  const pop = (SOAP_RISE * SOAP_POP) / (SOAP_RISE + 180);
+  const [, y, , h] = spot.box;
+  const [hx, hy] = spot.head;
+  const sx = hx + dx;
+  const sy = y + h - 10;
+  const ex = hx + dx * 0.35;
+  const ey = hy - 6;
+  const size = 16 * scale;
+  const style = useAnimatedStyle(() => {
+    const v = p.get();
+    const t = Math.min(1, v / pop);
+    const popped = v > pop ? (v - pop) / (1 - pop) : 0;
+    return {
+      opacity: Math.min(1, v * 8) * (1 - popped),
+      transform: [
+        { translateX: (sx + (ex - sx) * t + Math.sin(t * Math.PI * 3) * 4) * scale - size / 2 },
+        { translateY: (sy + (ey - sy) * (1 - (1 - t) * (1 - t))) * scale - size / 2 },
+        { scale: 1 + popped * 0.8 },
+      ],
+    };
+  });
+  return (
+    <Animated.View style={[styles.effect, styles.origin, { width: size, height: size }, style]}>
+      <Svg width={size} height={size} viewBox="0 0 20 20">
+        <Path d="M10 1a9 9 0 1 1 0 18a9 9 0 1 1 0-18Z" fill="#FFFFFF" opacity={0.22} />
+        <Path
+          d="M10 1a9 9 0 1 1 0 18a9 9 0 1 1 0-18ZM10 2.4a7.6 7.6 0 1 0 0 15.2a7.6 7.6 0 1 0 0-15.2Z"
+          fill="#FFFFFF"
+          opacity={0.85}
+        />
+        <Path d="M6 5.6a2.4 1.6-35 1 1 3-2a2.4 1.6-35 1 1-3 2Z" fill="#FFFFFF" />
+      </Svg>
+    </Animated.View>
   );
 }
 

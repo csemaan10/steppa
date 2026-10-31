@@ -5,9 +5,12 @@ import { ActivityIndicator, Card, Text } from 'react-native-paper';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TrophyIcon } from '@/components/award-icons';
 import { Button } from '@/components/button';
+import { FlagIcon } from '@/components/flag-icon';
 import { Chip, PostcardCollection, ProgressBar } from '@/components/journey-parts';
 import { JourneyScene, type Person } from '@/components/journey-scene';
+import { PlaceIcon } from '@/components/place-icon';
 import { PostcardModal } from '@/components/postcard';
 import { mapHeightFor, RouteMap } from '@/components/route-map';
 import { SectionHeader } from '@/components/section-header';
@@ -188,7 +191,7 @@ export function GroupJourney({ group, userId, members, active }: Props) {
           <>
             <Card mode="contained" style={glassCard(theme)}>
               <Card.Content style={styles.finished}>
-                <Text style={styles.trophy}>🏆</Text>
+                <TrophyIcon size={68} />
                 <Text variant="headlineSmall" style={[styles.bold, styles.centerText]}>
                   {group.name} made it to {status.route.stops[status.route.stops.length - 1]!.name}!
                 </Text>
@@ -281,7 +284,7 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
   return (
     <>
       <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.hero}>
-        <Text style={styles.heroFlag}>{route.flag}</Text>
+        <FlagIcon flag={route.flag} size={44} />
         <View style={styles.flex}>
           <Text variant="titleMedium" style={styles.bold}>
             {route.name}
@@ -334,9 +337,12 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
               <Text variant="labelLarge" style={muted}>
                 Next stop
               </Text>
-              <Text variant="titleMedium" numberOfLines={1} style={styles.bold}>
-                {next.emoji} {next.name}
-              </Text>
+              <View style={styles.place}>
+                <PlaceIcon emoji={next.emoji} size={20} color={theme.colors.primary} />
+                <Text variant="titleMedium" numberOfLines={1} style={[styles.bold, styles.flex]}>
+                  {next.name}
+                </Text>
+              </View>
               <Text variant="bodySmall" style={muted}>
                 {formatKm(kmToNext)} km to go
               </Text>
@@ -496,7 +502,7 @@ function RouteChoice({ title, groupDaily, canStart, ownerName, busy, onStart }: 
             </View>
             <Card.Content style={styles.pickerContent}>
               <View style={styles.pickerTitle}>
-                <Text style={styles.pickerFlag}>{route.flag}</Text>
+                <FlagIcon flag={route.flag} size={36} />
                 <View style={styles.flex}>
                   <Text variant="titleMedium" style={styles.bold}>
                     {route.name}
@@ -533,7 +539,6 @@ const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
   centerText: { textAlign: 'center' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  heroFlag: { fontSize: 36, lineHeight: 44 },
   progressCard: { gap: 10, paddingVertical: 16 },
   kmRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   tiles: { flexDirection: 'row', gap: 12 },
@@ -551,11 +556,10 @@ const styles = StyleSheet.create({
   end: { alignItems: 'flex-end' },
   endButton: { alignSelf: 'center' },
   finished: { alignItems: 'center', gap: 6, paddingVertical: 20 },
-  trophy: { fontSize: 56, lineHeight: 68 },
+  place: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pickerMap: { padding: 12, paddingBottom: 0 },
   pickerContent: { gap: 10, paddingTop: 12, paddingBottom: 16 },
   pickerTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  pickerFlag: { fontSize: 28, lineHeight: 36 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   startButton: { alignSelf: 'flex-start' },
 });

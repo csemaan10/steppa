@@ -15,7 +15,7 @@ import Animated, {
 import Svg, { Path } from 'react-native-svg';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { PetBody, PetEffects, PetTarget, type PetPlay } from '@/components/pet-play';
+import { FollowBody, PetBody, PetEffects, PetTarget, type PetPlay } from '@/components/pet-play';
 import { WORLD_HEIGHT, WORLD_WIDTH, type Layer, type Motion, type WorldArt } from '@/lib/world';
 import type { Shape } from '@/lib/scene-art';
 
@@ -85,10 +85,17 @@ export function WorldScene({ art, width, animate = true, version, play, cropTo, 
                 ) : (
                   <Paths key={i} shapes={layer.shapes} />
                 );
-                return current && play && art.pet && layer.pet ? (
-                  <PetBody key={i} play={play} spot={art.pet} scale={scale}>
+                if (current && play && art.pet && layer.pet) {
+                  return (
+                    <PetBody key={i} play={play} spot={art.pet} scale={scale}>
+                      {drawn}
+                    </PetBody>
+                  );
+                }
+                return current && play && layer.follow ? (
+                  <FollowBody key={i} play={play} scale={scale}>
                     {drawn}
-                  </PetBody>
+                  </FollowBody>
                 ) : (
                   drawn
                 );

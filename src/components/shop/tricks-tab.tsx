@@ -7,6 +7,8 @@ import { Button } from '@/components/button';
 import { TREAT, TRICK_COLOR } from '@/components/game/colors';
 import { InkStamp } from '@/components/game/game-fx';
 import { SpendButton } from '@/components/game/spend-button';
+import { TrickIcon } from '@/components/trick-icon';
+import { TreatIcon } from '@/components/treat-icon';
 import { learnedTricks, training, TRICKS, type Trick, type TrickId } from '@/lib/world';
 import { glassCard, useAppTheme, withAlpha } from '@/theme';
 
@@ -35,7 +37,7 @@ export function TricksTab({ fed, available, buying, justLearned, onLearn, onShow
   return (
     <View style={styles.page}>
       <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-        Teach the next trick in one go, or give treats one at a time on the Pet tab. Every treat is practice.
+        Teach the next trick in one go with the treats it still needs, then ask for it from the Tricks button on the Pet tab.
       </Text>
       {TRICKS.map((trick, i) => {
         const state = knows.has(trick.id) ? 'learned' : learning?.trick.id === trick.id ? 'learning' : 'locked';
@@ -93,7 +95,9 @@ function TrickCard({
   return (
     <View style={[glassCard(theme), styles.card, state === 'learning' && { borderColor: TREAT.face, borderWidth: 2 }]}>
       <View style={[styles.disc, { backgroundColor: disc }]}>
-        <Text style={[styles.emoji, state === 'locked' && styles.dim]}>{trick.emoji}</Text>
+        <View style={state === 'locked' && styles.dim}>
+          <TrickIcon trick={trick.id} size={32} color={state === 'locked' ? muted : state === 'learning' ? TREAT.deep : TRICK_COLOR} />
+        </View>
         {state === 'locked' ? (
           <View style={[styles.lock, { backgroundColor: theme.colors.surface }]}>
             <Icon source="lock" size={11} color={muted} />
@@ -120,9 +124,15 @@ function TrickCard({
             </Text>
           </>
         ) : (
-          <Text variant="bodySmall" style={{ color: muted }}>
-            {after ? `After ${after}` : 'First up'} · 🍪 {trick.treats}
-          </Text>
+          <View style={styles.row}>
+            <Text variant="bodySmall" style={{ color: muted }}>
+              {after ? `After ${after}` : 'First up'} ·
+            </Text>
+            <TreatIcon size={14} />
+            <Text variant="bodySmall" style={{ color: muted }}>
+              {trick.treats}
+            </Text>
+          </View>
         )}
       </View>
 
@@ -169,7 +179,6 @@ const styles = StyleSheet.create({
   page: { gap: 12 },
   card: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
   disc: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  emoji: { fontSize: 26, lineHeight: 32 },
   dim: { opacity: 0.35 },
   lock: {
     position: 'absolute',

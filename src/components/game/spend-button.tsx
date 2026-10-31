@@ -3,6 +3,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import { Button } from '@/components/button';
+import { treatButtonIcon } from '@/components/treat-icon';
 
 /** How long "Sure?" waits for the second press. */
 const CONFIRM_MS = 3000;
@@ -22,7 +23,7 @@ type Props = {
 };
 
 /**
- * The app's button for spending treats: "Learn · 🍪 12". The first press asks "Sure?" with a little
+ * The app's button for spending treats: "Learn · 12", after the treat icon. The first press asks "Sure?" with a little
  * shake instead of a dialog; a second press within a few seconds spends them.
  */
 export function SpendButton({
@@ -68,13 +69,13 @@ export function SpendButton({
     <Animated.View style={[wobble, style]}>
       <Button
         mode={mode}
-        icon={icon}
+        icon={icon ?? treatButtonIcon}
         compact={compact}
         disabled={disabled}
         loading={loading}
         onPress={press}
         accessibilityLabel={accessibilityLabel ? (arming ? `Sure? ${accessibilityLabel}` : accessibilityLabel) : undefined}>
-        {`${arming ? 'Sure?' : label} · 🍪 ${price}`}
+        {`${arming ? 'Sure?' : label} · ${price}`}
       </Button>
     </Animated.View>
   );

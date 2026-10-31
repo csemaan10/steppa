@@ -25,10 +25,12 @@ import {
   SKY_CHOICES,
   stageOf,
   star,
+  type Guest,
   type PetSpot,
   type Picks,
   type Shape,
   type TimeOfDay,
+  type WorldArt,
   type WorldDef,
 } from '@/lib/world/common';
 import type { Mood } from '@/lib/world/mood';
@@ -1228,7 +1230,10 @@ const YARDS: Record<string, (art: Art) => void> = { backyard, beach, snowy, mead
 
 /** Where something goes and how big: [x, y, scale]. */
 type Spot = readonly [number, number, number];
-type Layout = Record<'kennel' | 'bed' | 'bowl' | 'toy' | 'buddy' | 'butterfly' | 'fun' | 'balloon', Spot> & {
+type Layout = Record<
+  'kennel' | 'bed' | 'bowl' | 'toy' | 'buddy' | 'butterfly' | 'fun' | 'balloon' | 'season' | 'keepsake' | 'guest',
+  Spot
+> & {
   kites: readonly (readonly [number, number])[];
 };
 
@@ -1241,6 +1246,9 @@ const SMALL: Layout = {
   butterfly: [242, 128, 1],
   fun: [250, 195, 1],
   balloon: [196, 66, 1],
+  season: [334, 204, 0.9],
+  keepsake: [100, 192, 0.85],
+  guest: [252, 244, 0.9],
   kites: [[222, 214], [112, 178]],
 };
 const GROWN: Layout = {
@@ -1252,6 +1260,9 @@ const GROWN: Layout = {
   butterfly: [262, 112, 1],
   fun: [272, 192, 0.86],
   balloon: [306, 100, 1],
+  season: [338, 206, 0.84],
+  keepsake: [88, 188, 0.76],
+  guest: [262, 248, 0.84],
   kites: [[226, 214], [104, 178]],
 };
 const BIG: Layout = {
@@ -1263,6 +1274,10 @@ const BIG: Layout = {
   butterfly: [278, 100, 1],
   fun: [290, 186, 0.74],
   balloon: [306, 100, 1],
+  season: [342, 208, 0.78],
+  // At the pool's edge: anywhere nearer the middle, a legend's mane or wings would hide it.
+  keepsake: [252, 194, 0.6],
+  guest: [282, 252, 0.78],
   kites: [[230, 214], [100, 178]],
 };
 /** The yard's things move out to the edges and shrink a little as the pet shoots up. */
@@ -1285,10 +1300,76 @@ function kennel(art: Art, color: string, spot: Spot) {
   pen.fill(heart(0, -41.2, 2.6), '#FF6F8E');
 }
 
+/** A window: sky-blue glass by day, warm light after dark. */
+function pane(pen: Pen, d: string) {
+  if (pen.art.dark) {
+    pen.light(d, '#FFE29A');
+  } else pen.fill(d, '#A9DDF7');
+}
+
+/** A little cottage with a chimney, a round door and a window box. */
+function cottage(art: Art, spot: Spot) {
+  const pen = new Pen(art, ...spot);
+  const wall = '#FFF1DA';
+  const roof = '#E0795B';
+  pen.fill(ellipse(0, 0, 38, 4), '#000000', 0.12);
+  pen.fill(rect(13, -64, 8, 18) + rect(12, -67, 10, 3.4), '#C0705A');
+  pen.fill(rect(-26, -36, 52, 36), wall);
+  pen.fill(rect(12, -36, 14, 36), darker(wall, 0.05));
+  pen.fill('M-33 -33L0 -62L33 -33L28 -30L0 -55L-28 -30Z', roof);
+  pen.fill('M-28 -30L0 -55L28 -30Z', darker(wall, 0.06));
+  pen.fill('M-33 -33L0 -62L2 -60L-30 -31Z', lighter(roof, 0.25), 0.7);
+  pen.fill(rect(-26, -36, 52, 2.4), darker(wall, 0.12));
+  pen.fill('M-8 0V-15A8 8 0 0 1 8 -15V0Z', '#8A5A3B');
+  pen.fill(circle(4.6, -8, 1.1), '#F2C14E');
+  pen.fill(roundRect(-23, -29, 12, 11, 2) + roundRect(12, -29, 12, 11, 2), '#FFFFFF');
+  pane(pen, rect(-21.4, -27.4, 8.8, 7.8) + rect(13.6, -27.4, 8.8, 7.8));
+  pen.fill(rect(-17.5, -27.4, 1, 7.8) + rect(17.5, -27.4, 1, 7.8), '#FFFFFF');
+  pen.fill(rect(-24, -18.6, 14, 3.4), '#9A6B45');
+  pen.fill(circle(-21, -19.6, 2) + circle(-17, -20.4, 2.2) + circle(-13, -19.6, 2), '#FF8FA3');
+  pen.fill(ellipse(-0.5, -46, 4.8, 4.8), '#FFFFFF', 0.85);
+  pen.fill(heart(-0.5, -45.6, 2.4), '#FF6F8E');
+}
+
+/** A treehouse: a little hut on a platform up a tree, with a ladder down the trunk. */
+function treehouse(art: Art, spot: Spot) {
+  const pen = new Pen(art, ...spot);
+  const leaves = '#6DB565';
+  const wood = '#B07A4F';
+  pen.fill(ellipse(0, 0, 44, 4.6), '#000000', 0.12);
+  pen.fill(puff(-2, -104, 96, 52) + circle(-36, -88, 16) + circle(34, -84, 15), leaves);
+  pen.fill(circle(-18, -120, 14) + circle(12, -124, 13), lighter(leaves, 0.12));
+  pen.fill('M-9 0C-6 -24 -6 -52 -8 -74H8C6 -52 6 -24 9 0Z' + 'M-9 0C-14 0 -18 2 -20 4L-6 3Z' + 'M9 0C14 0 18 2 20 4L6 3Z', '#9A6B45');
+  pen.fill(rect(-32, -76, 64, 5), wood);
+  pen.fill(rect(-32, -72, 64, 1.4), darker(wood, 0.2));
+  pen.fill(rect(-31, -86, 1.6, 10) + rect(29.4, -86, 1.6, 10) + rect(-31, -86, 62, 1.6), darker(wood, 0.1));
+  pen.fill(rect(-20, -104, 40, 28), '#E9C89B');
+  pen.fill(rect(-20, -96, 40, 1) + rect(-20, -88, 40, 1) + rect(-20, -80, 40, 1), darker('#E9C89B', 0.12));
+  pen.fill('M-26 -101L0 -122L26 -101L22 -98L0 -116L-22 -98Z', '#E5734F');
+  pen.fill('M-22 -98L0 -116L22 -98V-104H-22Z', '#E9C89B');
+  pane(pen, circle(0, -102, 5.6));
+  pen.fill(ring(0, -102, 5.6, 1.4), '#FFFFFF');
+  pane(pen, rect(-14, -91, 9, 9));
+  pen.fill('M4 -76V-89A5 5 0 0 1 14 -89V-76Z', '#8A5A3B');
+  // The ladder.
+  const rungs: string[] = [rect(-6.4, -76, 1.6, 76), rect(4.8, -76, 1.6, 76)];
+  for (let y = -68; y < 0; y += 9) rungs.push(rect(-6.4, y, 12.8, 1.6));
+  pen.fill(rungs.join(''), '#7A5236');
+}
+
+const HOUSES: Record<string, (art: Art, spot: Spot) => void> = { cottage, treehouse };
+
+/** A cloud to sleep on: lilac and white puffs. */
+const CLOUD = { back: '#E9E6FF', puff: '#FFFFFF', shade: '#D8D3FA' } as const;
+
 function bed(art: Art, id: string, spot: Spot) {
   const pen = new Pen(art, ...spot);
   pen.fill(ellipse(0, 2, 40, 6), '#000000', 0.1);
-  if (id === 'basket') {
+  if (id === 'cloudbed') {
+    pen.fill(circle(-25, -14, 10) + circle(-8, -19, 12) + circle(11, -18, 11.5) + circle(28, -12, 9), CLOUD.back);
+    pen.fill(ellipse(0, -8, 38, 13), CLOUD.back);
+    pen.fill(ellipse(0, -8, 31, 8.6), CLOUD.shade);
+  } else if (id === 'basket') {
     pen.fill(ellipse(0, -8, 38, 13), '#B9824F');
     pen.fill(ellipse(0, -8, 31, 8.6), '#F3E1C4');
     pen.fill(ellipse(-8, -8, 14, 5.6) + ellipse(14, -9, 10, 4.4), '#FF9EB5', 0.55);
@@ -1302,6 +1383,12 @@ function bed(art: Art, id: string, spot: Spot) {
 /** The front of the bed, drawn over whoever is curled up in it. */
 function bedFront(art: Art, id: string, spot: Spot) {
   const pen = new Pen(art, ...spot);
+  if (id === 'cloudbed') {
+    pen.fill(ellipse(0, -1, 36, 6), CLOUD.shade);
+    pen.fill(circle(-29, -5, 7.5) + circle(-15, -3, 9) + circle(1, -2.4, 9.5) + circle(17, -3, 9) + circle(31, -6, 7), CLOUD.puff);
+    pen.fill(circle(-17, -6, 3.4) + circle(-1, -6, 3.6) + circle(15, -6, 3.4), '#FFFFFF', 0.9);
+    return;
+  }
   const color = id === 'basket' ? '#B9824F' : id === 'blue' ? '#8EC5F0' : '#FFAFC8';
   pen.fill('M-38 -8A38 13 0 0 0 38 -8L31 -8A31 8.6 0 0 1 -31 -8Z', color);
   pen.fill('M-34 -2A38 13 0 0 0 34 -2L33 -4A36 11 0 0 1 -33 -4Z', lighter(color, 0.3), 0.7);
@@ -1343,6 +1430,55 @@ function toy(art: Art, id: string, spot: Spot) {
     pen.fill('M-13 -3Q-1 -13 10 -10Q11 -3 5 -1Q-6 1 -13 -3Z', '#FF9A3D');
     pen.fill(poly(-6, -7.4, -4.8, -7.8, -3, -4.6, -4.2, -4.2) + poly(1, -9.4, 2.2, -9.8, 4, -5.6, 2.8, -5.2), '#E07A20');
     pen.fill('M9 -10C10 -18 14 -20 16 -19C14 -16 12 -13 10.6 -9.4Z' + 'M10 -9.6C14 -15 19 -15 21 -13C17 -12 14 -10 11 -8.4Z', '#6FBF73');
+  } else if (id === 'frisbee') {
+    const disc = '#5AB8F0';
+    pen.fill(ellipse(0, -2.2, 12.5, 4.2), darker(disc, 0.22));
+    pen.fill(ellipse(0, -3.6, 12.5, 4.2), disc);
+    pen.fill(ellipse(0, -3.8, 8.6, 2.7), lighter(disc, 0.4));
+    pen.fill(ellipse(0, -3.9, 7, 2.1), disc);
+    pen.fill(ellipse(-5, -5.4, 3, 0.9), '#FFFFFF', 0.6);
+  } else if (id === 'rope') {
+    // A knotted tug rope lying in an S, striped where it twists.
+    const along = (t: number): [number, number] => {
+      const u = 1 - t;
+      return [u ** 3 * -12 + 3 * u * u * t * -5 + 3 * u * t * t * 5 + t ** 3 * 12, u ** 3 * -4 + 3 * u * u * t * -10 + 3 * u * t * t * 2 + t ** 3 * -4];
+    };
+    pen.fill('M-12 -6.3C-5 -12.3 5 -0.3 12 -6.3L12 -1.7C5 4.3 -5 -7.7 -12 -1.7Z', '#F1E3C6');
+    const twists: string[] = [];
+    for (let i = 1; i < 8; i++) {
+      const [x, y] = along(i / 8);
+      twists.push(poly(x - 1.6, y - 2.4, x - 0.2, y - 2.4, x + 1.6, y + 2.4, x + 0.2, y + 2.4));
+    }
+    pen.fill(twists.join(''), '#E5534B');
+    pen.fill(circle(-13, -4, 4.4) + circle(13, -4, 4.4), '#E5534B');
+    pen.fill(circle(-14, -5.4, 1.5) + circle(12, -5.4, 1.5), '#FFFFFF', 0.4);
+    pen.fill(
+      poly(-17, -6, -22, -8, -21.6, -6.6, -17, -4.6) + poly(-17, -3, -22, -2, -21.4, -0.8, -17, -1.8) +
+        poly(17, -6, 22, -8, 21.6, -6.6, 17, -4.6) + poly(17, -3, 22, -2, 21.4, -0.8, 17, -1.8),
+      '#F1E3C6'
+    );
+  } else if (id === 'bubbles') {
+    // A bottle of bubble mix with its wand, and bubbles drifting up from it.
+    pen.fill(roundRect(-5, -15, 10, 15, 3), '#CDEBFF', 0.9);
+    pen.fill(roundRect(-5, -9, 10, 9, 3), '#8FD3F4');
+    pen.fill(roundRect(-3.6, -18.6, 7.2, 4, 1.4), '#FF8FB8');
+    pen.fill(rect(-0.6, -30, 1.2, 13), '#FF8FB8');
+    pen.fill(ring(0, -33, 3.8, 1.2), '#FF8FB8');
+    pen.fill(ellipse(-2.6, -10, 0.9, 3), '#FFFFFF', 0.6);
+    const [ox, oy, k] = spot;
+    [
+      [5, 4200, 0, 3.2],
+      [-4, 5200, 0.45, 2.4],
+      [9, 4700, 0.75, 2],
+    ].forEach(([dx, period, phase, r]) => {
+      art.move({ type: 'rise', dy: 70, period: period!, phase: phase! }, () => {
+        const x = ox + dx! * k;
+        const y = oy - 38 * k;
+        art.fill(circle(x, y, r! * k), '#FFFFFF', 0.25);
+        art.fill(ring(x, y, r! * k, 0.5 * k), '#FFFFFF', 0.85);
+        art.fill(circle(x - r! * 0.35 * k, y - r! * 0.35 * k, r! * 0.25 * k), '#FFFFFF', 0.9);
+      });
+    });
   }
 }
 
@@ -1356,6 +1492,13 @@ function buddy(art: Art, id: string, layout: Layout) {
       pen.fill(ellipse(0, 1, 1.4, 6.4), '#4A3B4F');
       pen.fill(both('M-0.6 -5Q-3 -10 -4.6 -10.6L-4.4 -11.2Q-2.4 -10.6 0 -5.4Z'), '#4A3B4F');
     });
+    return;
+  }
+  if (id === 'hedgehog') {
+    // It breathes, and hops along whenever the pet does.
+    const [x, y, k] = layout.buddy;
+    art.fill(ellipse(x, y + 0.5 * k, 13 * k, 2.6 * k), '#000000', 0.12);
+    art.move({ type: 'breathe', amount: 0.04, x, y, period: 2800 }, () => hedgehog(new Pen(art, x, y, k * 1.1)), { follow: true });
     return;
   }
   const pen = new Pen(art, ...layout.buddy);
@@ -1380,6 +1523,27 @@ function buddy(art: Art, id: string, layout: Layout) {
   }
 }
 
+/** A hedgehog facing right: spines over its back, a pointed cream face, a button nose. */
+function hedgehog(pen: Pen) {
+  const spines: number[] = [];
+  for (let i = 0; i <= 16; i++) {
+    const a = Math.PI * (0.98 + (i / 16) * 0.86);
+    const r = i % 2 ? 1 : 1.32;
+    spines.push(-2 + Math.cos(a) * 12 * r, -8 + Math.sin(a) * 9.5 * r);
+  }
+  spines.push(9, -4, -12, -1);
+  pen.fill(poly(...spines), '#7E5E4A');
+  pen.fill(ellipse(-2, -7.4, 12, 7.4), '#9C7A63');
+  pen.fill(ellipse(-4, -10.6, 6, 2.2), '#B89A84', 0.6);
+  pen.fill(ellipse(-6, -0.8, 3, 1.6) + ellipse(4, -0.8, 3, 1.6), '#6E5442');
+  pen.fill('M5 -12C9 -13 13 -10 18 -6.6C18.6 -5.6 18 -4.6 16.8 -4.4C12 -3 7 -2 4 -4Z', '#F3DCC0');
+  pen.fill(circle(17.6, -6, 1.5), INK);
+  pen.fill(circle(10.4, -8.6, 1.2), INK);
+  pen.fill(circle(10, -9, 0.4), '#FFFFFF');
+  pen.fill(circle(7.4, -12, 1.7), '#B89A84');
+  pen.fill(ellipse(11, -5.6, 1.8, 1), BLUSH, 0.6);
+}
+
 function fun(art: Art, id: string, spot: Spot) {
   const pen = new Pen(art, ...spot);
   if (id === 'pool') {
@@ -1400,7 +1564,260 @@ function fun(art: Art, id: string, spot: Spot) {
     pen.fill('M14 -12L26 -12L24 0L16 0Z', '#5B9BE6');
     pen.fill(ellipse(20, -12, 6, 1.6), darker('#5B9BE6', 0.2));
     pen.fill(rect(-26, -20, 1.6, 14) + roundRect(-28.5, -8, 6.6, 7, 2), '#FF6B6B');
+  } else if (id === 'pond') {
+    // A pond ringed with stones, lily pads, a frog and some bulrushes.
+    pen.fill(rect(-38, -26, 1.4, 24) + rect(-33, -30, 1.4, 28) + rect(-29, -22, 1.4, 20), '#6E9A55');
+    pen.fill(roundRect(-38.8, -30, 3, 9, 1.5) + roundRect(-33.8, -34, 3, 9, 1.5) + roundRect(-29.8, -26, 3, 8, 1.5), '#8A5A3B');
+    pen.fill(ellipse(0, 0, 47, 13.5), '#A7AE9C');
+    const stones: string[] = [];
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      stones.push(ellipse(Math.cos(a) * 43, Math.sin(a) * 11.5, 5.4, 3));
+    }
+    pen.fill(stones.join(''), '#BFC5B4');
+    pen.fill(ellipse(0, -0.5, 40, 9.5), '#4FA8D0');
+    pen.fill(ellipse(0, -2.6, 36, 6.4), '#6CC0E2');
+    pen.fill(ellipse(-20, -1, 8, 1) + ellipse(6, 3, 7, 0.9), '#FFFFFF', 0.6);
+    const pad = (x: number, y: number, r: number) => `M${n(x)} ${n(y)}L${n(x + r)} ${n(y - r * 0.12)}A${n(r)} ${n(r * 0.38)} 0 1 1 ${n(x + r * 0.9)} ${n(y + r * 0.2)}Z`;
+    pen.fill(pad(-14, -2, 7) + pad(18, 0.5, 6) + pad(2, -5, 4.6), '#5FAF5B');
+    pen.fill(circle(-15, -3.4, 1.6) + circle(-12.6, -3.2, 1.4), '#FF9EC4');
+    // The frog, on the right-hand pad.
+    pen.fill(ellipse(18, -2.4, 5.4, 3.4), '#7CCB5B');
+    pen.fill(circle(15.6, -5.4, 1.9) + circle(20.4, -5.4, 1.9), '#7CCB5B');
+    pen.fill(circle(15.6, -5.6, 0.8) + circle(20.4, -5.6, 0.8), INK);
+    pen.fill(ellipse(18, -1.6, 3, 1.2), '#C6EDA6');
+  } else if (id === 'flowerbed') {
+    // A raised wooden bed of roses and daisies.
+    const wood = '#B9824F';
+    pen.fill(poly(-40, -10, 40, -10, 42, 4, -42, 4), wood);
+    pen.fill(rect(-42, -1, 84, 1.2) + rect(-14, -10, 1.2, 14) + rect(13, -10, 1.2, 14), darker(wood, 0.18));
+    pen.fill(ellipse(0, -10, 40, 3.4), '#7A5236');
+    const colors = ['#FF8FA3', '#FFFFFF', '#FFD166', '#E5534B', '#C9A8FF'];
+    const blooms: Record<string, string[]> = {};
+    const leaves: string[] = [];
+    for (let i = 0; i < 9; i++) {
+      const x = -34 + i * 8.5;
+      const y = -16 - (i % 2) * 5;
+      leaves.push(rect(x - 0.5, y, 1, -10 - y) + ellipse(x - 2.4, y + 5, 2.4, 1.2) + ellipse(x + 2.4, y + 7, 2.4, 1.2));
+      (blooms[colors[i % colors.length]!] ??= []).push(circle(x - 2, y, 2.2) + circle(x + 2, y, 2.2) + circle(x, y - 2, 2.2) + circle(x, y + 2, 2.2));
+    }
+    pen.fill(leaves.join(''), '#5FAF5B');
+    for (const [color, d] of Object.entries(blooms)) pen.fill(d.join(''), color);
+    pen.fill(Array.from({ length: 9 }, (_, i) => circle(-34 + i * 8.5, -16 - (i % 2) * 5, 1.3)).join(''), '#FFB84D');
   }
+}
+
+// ---------- Seasonal things (from the shop, on sale a few months a year) ----------
+
+function pumpkins(art: Art, pen: Pen) {
+  const pumpkin = (cx: number, r: number, face: boolean) => {
+    pen.fill(ellipse(cx, -r * 0.82, r * 1.25, r * 0.82), '#F28C28');
+    pen.fill(ellipse(cx - r * 0.55, -r * 0.82, r * 0.5, r * 0.78) + ellipse(cx + r * 0.55, -r * 0.82, r * 0.5, r * 0.78), '#E07A1F');
+    pen.fill(ellipse(cx, -r * 0.84, r * 0.42, r * 0.8), '#F79A3A');
+    pen.fill(roundRect(cx - 1.2, -r * 1.8, 2.4, r * 0.4 + 2, 1), '#6D8B3C');
+    if (!face) return;
+    const d =
+      poly(cx - r * 0.6, -r * 0.92, cx - r * 0.3, -r * 0.92, cx - r * 0.45, -r * 1.2) +
+      poly(cx + r * 0.3, -r * 0.92, cx + r * 0.6, -r * 0.92, cx + r * 0.45, -r * 1.2) +
+      poly(cx - r * 0.65, -r * 0.6, cx - r * 0.4, -r * 0.42, cx - r * 0.2, -r * 0.56, cx, -r * 0.4, cx + r * 0.2, -r * 0.56, cx + r * 0.4, -r * 0.42, cx + r * 0.65, -r * 0.6, cx, -r * 0.24);
+    // Lit from inside after dark.
+    if (art.dark) {
+      pen.light(circle(cx, -r * 0.8, r * 2), '#FFB347', 0.18);
+      pen.light(d, '#FFD36E');
+    } else pen.fill(d, '#8A4A12');
+  };
+  pen.fill(ellipse(0, 0.5, 26, 3.4), '#000000', 0.12);
+  pumpkin(-15, 7, false);
+  pumpkin(15, 6.4, false);
+  pumpkin(0, 11, true);
+}
+
+function festiveTree(art: Art, pen: Pen) {
+  const green = '#3F8F5A';
+  pen.fill(ellipse(0, 0.5, 26, 3.4), '#000000', 0.12);
+  pen.fill(rect(-3, -9, 6, 9), '#8A5A3B');
+  pen.fill(poly(-24, -8, 0, -36, 24, -8) + poly(-19, -26, 0, -52, 19, -26) + poly(-14, -42, 0, -66, 14, -42), green);
+  pen.fill(poly(0, -36, 24, -8, 6, -8) + poly(0, -52, 19, -26, 5, -26) + poly(0, -66, 14, -42, 4, -42), darker(green, 0.12));
+  // Baubles by day, fairy lights after dark.
+  const spots = [[-12, -14], [8, -17], [-4, -24], [12, -31], [-9, -35], [3, -42], [-6, -50], [6, -55]] as const;
+  const colors = ['#FF6B6B', '#FFD166', '#7FC8F8', '#FF9EC4'];
+  spots.forEach(([x, y], i) => {
+    const color = colors[i % colors.length]!;
+    if (art.dark) {
+      pen.light(circle(x, y, 4.2), color, 0.3);
+      pen.light(circle(x, y, 1.9), color);
+    } else pen.fill(circle(x, y, 2.4), color);
+  });
+  if (art.dark) pen.light(star(0, -68, 9, 5), '#FFE08A', 0.3);
+  pen.light(star(0, -68, 5.4, 5), art.dark ? '#FFE9A8' : '#FFD54F');
+  // Presents underneath.
+  pen.fill(roundRect(-26, -9, 11, 9, 1.4), '#E5534B');
+  pen.fill(roundRect(14, -7, 9, 7, 1.4), '#5B9BE6');
+  pen.fill(rect(-21.2, -9, 1.6, 9) + rect(18, -7, 1.4, 7), '#FFFFFF');
+  pen.fill(rect(-26, -5.2, 11, 1.4) + rect(14, -4, 9, 1.2), '#FFFFFF');
+}
+
+function tulips(pen: Pen) {
+  const colors = ['#E5534B', '#FF9EC4', '#FFD166', '#C9A8FF', '#FF9A3D'];
+  const leaves: string[] = [];
+  const stems: string[] = [];
+  const cups: Record<string, string[]> = {};
+  [-16, -8, 0, 8, 16].forEach((x, i) => {
+    const top = -22 - (i % 2 ? 6 : 0) - (i === 2 ? 4 : 0);
+    stems.push(rect(x - 0.6, top + 2, 1.2, -top - 2));
+    leaves.push(`M${x} 0C${x - 7} -5 ${x - 7} -12 ${x - 4} -16C${x - 3} -10 ${x - 1} -5 ${x} 0Z`);
+    (cups[colors[i]!] ??= []).push(`M${x - 3.6} ${top - 7}L${x - 1.8} ${top - 4}L${x} ${top - 8}L${x + 1.8} ${top - 4}L${x + 3.6} ${top - 7}C${x + 4} ${top - 2} ${x + 2.4} ${top + 1} ${x} ${top + 1}C${x - 2.4} ${top + 1} ${x - 4} ${top - 2} ${x - 3.6} ${top - 7}Z`);
+  });
+  pen.fill(ellipse(0, 0.5, 24, 3), '#000000', 0.12);
+  pen.fill(stems.join(''), '#4E9A4B');
+  pen.fill(leaves.join(''), '#5FAF5B');
+  for (const [color, d] of Object.entries(cups)) pen.fill(d.join(''), color);
+}
+
+function sunflowers(pen: Pen) {
+  pen.fill(ellipse(0, 0.5, 22, 3), '#000000', 0.12);
+  [
+    [-11, 46, 7.5],
+    [3, 62, 9],
+    [14, 38, 6.5],
+  ].forEach(([x, h, r]) => {
+    pen.fill(rect(x! - 0.9, -h!, 1.8, h!), '#4E9A4B');
+    pen.fill(`M${x} ${-h! * 0.45}C${x! - 8} ${-h! * 0.5} ${x! - 10} ${-h! * 0.35} ${x! - 11} ${-h! * 0.3}C${x! - 6} ${-h! * 0.28} ${x! - 2} ${-h! * 0.36} ${x} ${-h! * 0.4}Z`, '#5FAF5B');
+    pen.fill(star(x!, -h!, r! * 1.6, 14, 0.62), '#FFC93C');
+    pen.fill(circle(x!, -h!, r! * 0.8), '#7A4A26');
+    pen.fill(circle(x! - r! * 0.25, -h! - r! * 0.25, r! * 0.3), '#9A6236', 0.8);
+  });
+}
+
+function seasonal(art: Art, id: string, spot: Spot) {
+  const pen = new Pen(art, ...spot);
+  if (id === 'pumpkins') pumpkins(art, pen);
+  else if (id === 'festive-tree') festiveTree(art, pen);
+  else if (id === 'tulips') tulips(pen);
+  else if (id === 'sunflowers') sunflowers(pen);
+}
+
+// ---------- Keepsakes (one for each passport page you fill) ----------
+
+/** A red telephone box, its windows lit after dark. */
+function phoneBox(pen: Pen) {
+  const red = '#D7262E';
+  pen.fill(ellipse(0, 0.5, 16, 2.6), '#000000', 0.12);
+  pen.fill(rect(-13, -3, 26, 3), darker(red, 0.2));
+  pen.fill(rect(-11, -50, 22, 47), red);
+  pen.fill('M-12.5 -49Q0 -57 12.5 -49Z', red);
+  pen.fill(rect(-12.5, -50, 25, 2.2), darker(red, 0.15));
+  pen.fill(rect(-8.6, -46.4, 17.2, 3.6), '#F4F1E8');
+  pen.fill(rect(-7, -45.2, 14, 1.2), '#3A3A44', 0.6);
+  pen.fill(circle(0, -54, 1.6), '#F2C14E');
+  const panes: string[] = [];
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 3; col++) panes.push(rect(-7.6 + col * 5.4, -40 + row * 5.6, 4.4, 4.6));
+  }
+  pane(pen, panes.join(''));
+  pen.fill(rect(-9.4, -41, 1, 31) + rect(8.4, -41, 1, 31), darker(red, 0.12));
+  pen.fill(rect(7, -24, 1.4, 4), '#F2C14E');
+}
+
+/** An inukshuk: a stone figure with its arms out, standing guard. */
+function inukshuk(pen: Pen) {
+  const stone = '#A3ACB1';
+  const shade = darker(stone, 0.14);
+  pen.fill(ellipse(0, 0.5, 18, 2.6), '#000000', 0.12);
+  pen.fill(roundRect(-11, -16, 7, 16, 2) + roundRect(4, -16, 7, 16, 2), stone);
+  pen.fill(roundRect(-12, -24, 24, 8.4, 3), shade);
+  pen.fill(roundRect(-8, -32, 16, 8.4, 3), stone);
+  pen.fill(roundRect(-21, -39, 42, 7.4, 3), shade);
+  pen.fill(roundRect(-6, -48, 12, 9.4, 3.6), stone);
+  pen.fill(rect(-11, -16, 22, 1.4) + rect(-21, -33, 42, 1.2), darker(stone, 0.3), 0.4);
+  pen.fill(ellipse(-15, -37.4, 4, 1) + ellipse(-2, -46, 2.6, 0.9), '#FFFFFF', 0.35);
+}
+
+/** A Camino waymarker: a stone post with the yellow scallop shell on a blue tile. */
+function shellMarker(pen: Pen) {
+  const post = '#D9D2C2';
+  pen.fill(ellipse(0, 0.5, 13, 2.4), '#000000', 0.12);
+  pen.fill('M-9 0L-8 -40Q0 -45 8 -40L9 0Z', post);
+  pen.fill('M3 0L3.4 -41.4Q6 -41 8 -40L9 0Z', darker(post, 0.1));
+  pen.fill(roundRect(-6.6, -37, 13.2, 13.2, 1.4), '#2F5DA8');
+  // The shell's ribs fan out, up and to the right, from its hinge at the tile's bottom left.
+  const rays: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const a = -1.45 + (i * 1.35) / 6;
+    const [x, y] = [-4.6 + Math.cos(a) * 10, -25.4 + Math.sin(a) * 10];
+    rays.push(poly(-4.6, -25.4, x - Math.sin(a) * 0.9, y + Math.cos(a) * 0.9, x + Math.sin(a) * 0.9, y - Math.cos(a) * 0.9));
+  }
+  pen.fill(rays.join(''), '#F5C518');
+  pen.fill(rect(-6.6, -18, 13.2, 1.2) + rect(-6.6, -13, 13.2, 1.2), darker(post, 0.18), 0.6);
+}
+
+/** A gelato cart with a striped awning and three cones on the counter. */
+function gelatoCart(pen: Pen) {
+  const cart = '#FFF1D6';
+  const pink = '#FF8FB1';
+  pen.fill(ellipse(0, 0.5, 22, 2.8), '#000000', 0.12);
+  pen.fill(rect(-17, -42, 1.4, 20) + rect(15.6, -42, 1.4, 20), '#B9824F');
+  pen.fill('M-21 -42H21L18 -36H-18Z', pink);
+  const stripes: string[] = [];
+  for (let i = 0; i < 7; i++) stripes.push(poly(-21 + i * 6, -42, -18 + i * 6, -42, -15.4 + i * 5.2, -36, -18 + i * 5.2, -36));
+  pen.fill(stripes.join(''), '#FFFFFF');
+  pen.fill('M-18 -36Q-15 -32 -12 -36Q-9 -32 -6 -36Q-3 -32 0 -36Q3 -32 6 -36Q9 -32 12 -36Q15 -32 18 -36Z', pink);
+  pen.fill(roundRect(-18, -22, 36, 15, 2.4), cart);
+  pen.fill(rect(-18, -15, 36, 2.4), pink);
+  pen.fill(rect(-19, -23, 38, 2), darker(cart, 0.12));
+  pen.fill(circle(-11, -4, 4.4) + circle(11, -4, 4.4), '#5B4B44');
+  pen.fill(circle(-11, -4, 1.6) + circle(11, -4, 1.6), '#C9BDB4');
+  [
+    [-8, '#FF9EC4'],
+    [0, '#9EE3C5'],
+    [8, '#8A5A3B'],
+  ].forEach(([x, scoop]) => {
+    const cx = x as number;
+    pen.fill(poly(cx - 2.6, -26, cx + 2.6, -26, cx, -21), '#E3B26B');
+    pen.fill(circle(cx, -27.6, 3), scoop as string);
+  });
+}
+
+/** A Route 66 shield on a post: "66" in black on white, a black band across the top. */
+function routeSign(pen: Pen) {
+  pen.fill(ellipse(0, 0.5, 10, 2.2), '#000000', 0.12);
+  pen.fill(rect(-1.4, -30, 2.8, 30), '#8A8F94');
+  const shield = 'M-13 -54H13C13.6 -50 15 -48 15 -45C15 -36 8 -31 0 -27C-8 -31 -15 -36 -15 -45C-15 -48 -13.6 -50 -13 -54Z';
+  pen.fill(shield, '#2B2B2B');
+  pen.fill(place(shield, 0, -2.7, 0.86), '#FFFFFF');
+  pen.fill(rect(-11.4, -50.6, 22.8, 4), '#2B2B2B');
+  // "66": two sixes, each a ring with a hook up to the top.
+  const six = (x: number) => ring(x, -36.8, 3.2, 1.6) + `M${n(x - 3.2)} -36.8C${n(x - 3.2)} -42 ${n(x - 1)} -44.4 ${n(x + 2.6)} -44.6L${n(x + 2.6)} -43C${n(x)} -42.8 ${n(x - 1.6)} -41 ${n(x - 1.6)} -36.8Z`;
+  pen.fill(six(-4.2) + six(4.4), '#2B2B2B');
+}
+
+/** Red paper lanterns hanging from a little wooden arch; they glow after dark. */
+function lanterns(art: Art, pen: Pen) {
+  const wood = '#8A5A3B';
+  pen.fill(ellipse(0, 0.5, 24, 2.8), '#000000', 0.12);
+  pen.fill(rect(-20, -48, 3, 48) + rect(17, -48, 3, 48), wood);
+  pen.fill('M-25 -50Q0 -56 25 -50L25 -46Q0 -51 -25 -46Z', '#C0392B');
+  [-9, 0, 9].forEach((x, i) => {
+    const y = -36 + (i === 1 ? 3 : 0);
+    pen.fill(rect(x - 0.3, -48, 0.6, y - 5.6 + 48), '#3A3A44');
+    if (art.dark) pen.light(circle(x, y, 9), '#FF8A65', 0.22);
+    const body = ellipse(x, y, 4.6, 5.8);
+    if (art.dark) pen.light(body, '#FF5A3C');
+    else pen.fill(body, '#E5383B');
+    pen.fill(rect(x - 2.6, y - 6.6, 5.2, 1.6) + rect(x - 2.6, y + 5, 5.2, 1.6), '#F2C14E');
+    pen.fill(rect(x - 0.4, y + 6.6, 0.8, 4), '#F2C14E');
+    pen.fill(ellipse(x, y, 1.6, 5.8), '#FFFFFF', 0.15);
+  });
+}
+
+function keepsake(art: Art, id: string, spot: Spot) {
+  const pen = new Pen(art, ...spot);
+  if (id === 'phone-box') phoneBox(pen);
+  else if (id === 'inukshuk') inukshuk(pen);
+  else if (id === 'shell-marker') shellMarker(pen);
+  else if (id === 'gelato-cart') gelatoCart(pen);
+  else if (id === 'route-sign') routeSign(pen);
+  else if (id === 'lanterns') lanterns(art, pen);
 }
 
 /** A legend's glow, around it but not as fast as it grows (so it stays inside the scene). */
@@ -1469,7 +1886,8 @@ function sparkles(art: Art, id: string, cx: number, cy: number, s: number, look:
 // ---------- The world ----------
 
 /** Where to tap the pet, the top of its head, what it says and what it likes to eat. */
-function petSpot(art: Art, look: Look, feet: number, s: number, hb: number): PetSpot {
+function petSpot(art: Art, look: Look, x: number, feet: number, s: number, hb: number): PetSpot {
+  const PET_X = x;
   const { body, head } =
     look.species === 'fish' ? { body: new Pen(art, PET_X, feet, s), head: fishPen(art, PET_X, feet, s, hb) } : pens(art, PET_X, feet, s, hb);
   const hatTop = look.hat && look.hat !== 'none' ? (HAT_TOP[look.hat] ?? -84) : 0;
@@ -1550,6 +1968,88 @@ export function petPhoto(level: number, picks: Picks, time: TimeOfDay, x: number
     happyFace(head, look);
   }
   return art.done().layers.flatMap((layer) => layer.shapes);
+}
+
+/**
+ * The pet itself, alive: a tail that wags, a body that breathes and blinks, at (x, feet). Your own
+ * pet (`own`) moves when you play with it and smiles; a visiting one just stands there being cute.
+ * A fish bobs about in its bowl instead.
+ */
+function livePet(art: Art, x: number, feet: number, s: number, hb: number, look: Look, mood: Mood, own: boolean) {
+  const pace = PACE[mood];
+  const fish = look.species === 'fish';
+  const canBlink = !look.sleepy && (!look.glasses || look.glasses === 'none' || look.glasses === 'round');
+  const { body, head } = fish ? { body: new Pen(art, x, feet, s), head: fishPen(art, x, feet, s, hb) } : pens(art, x, feet, s, hb);
+  const options = {
+    ...(own ? { pet: true, happy: () => happyFace(head, look) } : {}),
+    ...(canBlink ? { blink: () => blinkEyes(head, look) } : {}),
+    // Out of step with your pet's.
+    ...(own ? {} : { delay: 900 }),
+  };
+  if (fish) {
+    // The stool and bowl stay put; the fish bobs about inside.
+    bowlBack(body);
+    art.move({ type: 'bob', dy: 2.5 * pace.wag, period: 3000 * pace.period }, () => drawFish(head, look), options);
+    bowlFront(body);
+  } else {
+    if (TAILS[look.species]) {
+      const [tx, ty] = body.at(12, -10);
+      const deg = (look.species === 'dragon' ? 4 : 8) * pace.wag;
+      art.move({ type: 'sway', deg, x: tx, y: ty, period: 2600 * pace.period }, () => tail(body, look), own ? { pet: true } : { delay: 900 });
+    }
+    art.move({ type: 'breathe', amount: pace.breath, x, y: feet, period: 3600 * pace.period }, () => drawPet(art, x, feet, s, hb, look), options);
+  }
+  return { body, head };
+}
+
+/** A group mate's pet over for the day, a little smaller than it is at home so both fit. */
+function drawGuest(art: Art, guest: Guest, [x, feet, most]: Spot) {
+  const stage = stageOf(guest.level);
+  const s = Math.min(SIZE[stage]!, most);
+  const look = lookFor(guest.picks, stage);
+  art.fill(ellipse(x, feet + 1, 30 * s, 5 * s), '#2E4A2A', 0.18);
+  livePet(art, x, feet, s, HEAD[stage]!, look, 'happy', false);
+}
+
+/** How a journey place (360 × 200) fills the yard's 360 × 270: scaled up to its height, cropped at the sides. */
+const AWAY_K = 270 / 200;
+const AWAY_X = (360 - 360 * AWAY_K) / 2;
+/** Where the pet stands there: where a character stands in a journey scene, at about postcard size. */
+const AWAY_PET: Spot = [108 * AWAY_K + AWAY_X, 182 * AWAY_K, AWAY_K];
+const AWAY_SIZE = [0.64, 0.68, 0.71, 0.74, 0.78, 0.82];
+const AWAY_GUEST: Spot = [250, 182 * AWAY_K, 0.8];
+
+/** A journey place's shapes moved into the yard's box, ready to draw behind the pet. */
+export function awayBackdrop(shapes: readonly Shape[]): Shape[] {
+  return shapes.map((shape) => ({ ...shape, d: place(shape.d, AWAY_X, 0, AWAY_K) }));
+}
+
+/**
+ * Your pet off on an adventure: standing in one of the journey routes' places (its sky and shapes,
+ * already moved into place with awayBackdrop), playable just as at home, with any friend visiting.
+ */
+export function petAway(
+  level: number,
+  picks: Picks,
+  time: TimeOfDay,
+  mood: Mood,
+  backdrop: { sky: readonly [string, string]; shapes: readonly Shape[] },
+  guest?: Guest
+): WorldArt {
+  const art = new Art(time, 'pet');
+  art.raw(backdrop.shapes);
+  art.startTint();
+  const stage = stageOf(level);
+  const [x, feet, k] = AWAY_PET;
+  const s = AWAY_SIZE[stage]! * k;
+  const hb = HEAD[stage]!;
+  const look = lookFor(picks, stage);
+  if (mood === 'sleepy') look.sleepy = true;
+  if (guest) drawGuest(art, guest, AWAY_GUEST);
+  art.fill(ellipse(x, feet + 1, 30 * s, 5 * s), '#2E2A24', 0.2);
+  livePet(art, x, feet, s, hb, look, mood, true);
+  art.pet = petSpot(art, look, x, feet, s, hb);
+  return art.done(backdrop.sky);
 }
 
 export const PET: WorldDef = {
@@ -1639,6 +2139,9 @@ export const PET: WorldDef = {
         { id: 'yarn', label: 'Yarn', emoji: '🧶' },
         { id: 'bone', label: 'Bone', emoji: '🦴' },
         { id: 'carrot', label: 'Carrot', emoji: '🥕' },
+        { id: 'frisbee', label: 'Frisbee', emoji: '🥏', shop: true },
+        { id: 'rope', label: 'Tug rope', emoji: '🪢', shop: true },
+        { id: 'bubbles', label: 'Bubbles', emoji: '🫧', shop: true },
       ],
     },
     {
@@ -1649,6 +2152,7 @@ export const PET: WorldDef = {
         { id: 'pink', label: 'Pink cushion', color: '#FFAFC8' },
         { id: 'blue', label: 'Blue cushion', color: '#8EC5F0' },
         { id: 'basket', label: 'Wicker basket', emoji: '🧺' },
+        { id: 'cloudbed', label: 'Cloud bed', emoji: '☁️', shop: true },
       ],
     },
     {
@@ -1685,6 +2189,7 @@ export const PET: WorldDef = {
         { id: 'butterfly', label: 'Butterfly', emoji: '🦋' },
         { id: 'bird', label: 'Bird', emoji: '🐦' },
         { id: 'duckling', label: 'Duckling', emoji: '🐥' },
+        { id: 'hedgehog', label: 'Hedgehog', emoji: '🦔', shop: true },
         { id: 'none', label: 'None' },
       ],
     },
@@ -1696,6 +2201,8 @@ export const PET: WorldDef = {
         { id: 'red', label: 'Red kennel', color: KENNELS.red },
         { id: 'blue', label: 'Blue kennel', color: KENNELS.blue },
         { id: 'pink', label: 'Pink kennel', color: KENNELS.pink },
+        { id: 'cottage', label: 'Cottage', emoji: '🏠', shop: true },
+        { id: 'treehouse', label: 'Treehouse', emoji: '🌳', shop: true },
       ],
     },
     {
@@ -1741,6 +2248,8 @@ export const PET: WorldDef = {
       choices: [
         { id: 'pool', label: 'Paddling pool', emoji: '💦' },
         { id: 'sandpit', label: 'Sandpit', emoji: '🪣' },
+        { id: 'pond', label: 'Pond', emoji: '🐸', shop: true },
+        { id: 'flowerbed', label: 'Flower beds', emoji: '🌹', shop: true },
         { id: 'none', label: 'None' },
       ],
     },
@@ -1768,6 +2277,21 @@ export const PET: WorldDef = {
       ],
     },
     { id: 'sky', title: 'In the sky', level: 16, choices: SKY_CHOICES },
+    // A full passport page's keepsake for the yard: its choices are souvenirs (below), not unlocks.
+    { id: 'keepsake', title: 'Keepsake', level: 0, shop: true, choices: [{ id: 'none', label: 'None' }] },
+    {
+      id: 'season',
+      title: 'Seasonal',
+      level: 0,
+      shop: true,
+      choices: [
+        { id: 'pumpkins', label: 'Pumpkins', emoji: '🎃', shop: true },
+        { id: 'festive-tree', label: 'Festive tree', emoji: '🎄', shop: true },
+        { id: 'tulips', label: 'Tulips', emoji: '🌷', shop: true },
+        { id: 'sunflowers', label: 'Sunflowers', emoji: '🌻', shop: true },
+        { id: 'none', label: 'None' },
+      ],
+    },
     {
       id: 'aura',
       title: 'Legendary glow',
@@ -1781,7 +2305,8 @@ export const PET: WorldDef = {
   ],
 
   // Brought home from trips (src/lib/pet-adventures.ts): the first visit to each country or fantasy
-  // land earns its hat.
+  // land earns its hat. Filling a country's passport page (src/lib/passport.ts) earns its keepsake
+  // for the yard.
   souvenirs: [
     { from: 'united-kingdom', slot: 'hat', choice: { id: 'guard', label: "Guard's bearskin", emoji: '💂' } },
     { from: 'canada', slot: 'hat', choice: { id: 'toque', label: 'Maple toque', emoji: '🍁' } },
@@ -1795,9 +2320,15 @@ export const PET: WorldDef = {
     { from: 'mermaid-lagoon', slot: 'hat', choice: { id: 'shells', label: 'Seashell tiara', emoji: '🐚' } },
     { from: 'moon-base', slot: 'hat', choice: { id: 'helmet', label: 'Space helmet', emoji: '🧑‍🚀' } },
     { from: 'enchanted-forest', slot: 'hat', choice: { id: 'mushroom', label: 'Toadstool cap', emoji: '🍄' } },
+    { from: 'united-kingdom', slot: 'keepsake', full: true, choice: { id: 'phone-box', label: 'Phone box', emoji: '☎️' } },
+    { from: 'canada', slot: 'keepsake', full: true, choice: { id: 'inukshuk', label: 'Inukshuk', emoji: '🪨' } },
+    { from: 'spain', slot: 'keepsake', full: true, choice: { id: 'shell-marker', label: 'Camino marker', emoji: '🐚' } },
+    { from: 'italy', slot: 'keepsake', full: true, choice: { id: 'gelato-cart', label: 'Gelato cart', emoji: '🍨' } },
+    { from: 'united-states', slot: 'keepsake', full: true, choice: { id: 'route-sign', label: 'Route 66 sign', emoji: '🛣️' } },
+    { from: 'china', slot: 'keepsake', full: true, choice: { id: 'lanterns', label: 'Lanterns', emoji: '🏮' } },
   ],
 
-  draw(level, picks, time, _steps, mood = 'awake') {
+  draw(level, picks, time, _steps, mood = 'awake', guest) {
     const art = new Art(time, 'pet');
     const stage = stageOf(level);
     const s = SIZE[stage]!;
@@ -1805,13 +2336,10 @@ export const PET: WorldDef = {
     const feet = FEET[stage]!;
     const layout = LAYOUT[stage]!;
     const look = lookFor(picks, stage);
-    const { species } = look;
-    const fish = species === 'fish';
     // Dozing until you've walked a bit, eyes closed.
     if (mood === 'sleepy') look.sleepy = true;
-    const pace = PACE[mood];
     // The middle of the pet, for its legendary glow.
-    const centre = feet - (fish ? 62 : 50) * s;
+    const centre = feet - (look.species === 'fish' ? 62 : 50) * s;
 
     drawSky(art);
     if (picks.sky === 'rainbow') drawRainbow(art);
@@ -1820,49 +2348,31 @@ export const PET: WorldDef = {
     if (picks.sky === 'kites') drawKites(art, layout.kites);
     if (stage === 5) glow(art, picks.aura ?? 'golden', PET_X, centre, s);
 
-    if (picks.house) kennel(art, KENNELS[picks.house] ?? KENNELS.red!, layout.kennel);
+    if (picks.house) {
+      const house = HOUSES[picks.house];
+      if (house) house(art, layout.kennel);
+      else kennel(art, KENNELS[picks.house] ?? KENNELS.red!, layout.kennel);
+    }
+    if (picks.season && picks.season !== 'none') seasonal(art, picks.season, layout.season);
     if (picks.fun && picks.fun !== 'none') fun(art, picks.fun, layout.fun);
+    if (picks.keepsake && picks.keepsake !== 'none') keepsake(art, picks.keepsake, layout.keepsake);
     if (picks.bed) {
       bed(art, picks.bed, layout.bed);
       if (picks.friend && picks.friend !== 'none') drawFriend(art, picks.friend, layout.bed);
       bedFront(art, picks.bed, layout.bed);
     }
+    if (guest) drawGuest(art, guest, layout.guest);
 
     // A warm pool of light after dark and a soft shadow, which stay put while the pet moves.
     if (art.dark) art.light(ellipse(PET_X, feet - 4, 70 * s, 22 * s), '#FFE9B0', 0.08);
     art.fill(ellipse(PET_X, feet + 1, 30 * s, 5 * s), '#2E4A2A', 0.18);
-    const canBlink = !look.sleepy && (!look.glasses || look.glasses === 'none' || look.glasses === 'round');
-
-    const { body, head } = fish
-      ? { body: new Pen(art, PET_X, feet, s), head: fishPen(art, PET_X, feet, s, hb) }
-      : pens(art, PET_X, feet, s, hb);
-    if (fish) {
-      // The stool and bowl stay put; the fish bobs about inside.
-      bowlBack(body);
-      art.move({ type: 'bob', dy: 2.5 * pace.wag, period: 3000 * pace.period }, () => drawFish(head, look), {
-        pet: true,
-        ...(canBlink ? { blink: () => blinkEyes(head, look) } : {}),
-        happy: () => happyFace(head, look),
-      });
-      bowlFront(body);
-    } else {
-      if (TAILS[species]) {
-        const [x, y] = body.at(12, -10);
-        const deg = (species === 'dragon' ? 4 : 8) * pace.wag;
-        art.move({ type: 'sway', deg, x, y, period: 2600 * pace.period }, () => tail(body, look), { pet: true });
-      }
-      art.move({ type: 'breathe', amount: pace.breath, x: PET_X, y: feet, period: 3600 * pace.period }, () => drawPet(art, PET_X, feet, s, hb, look), {
-        pet: true,
-        ...(canBlink ? { blink: () => blinkEyes(head, look) } : {}),
-        happy: () => happyFace(head, look),
-      });
-    }
+    const { body, head } = livePet(art, PET_X, feet, s, hb, look, mood, true);
 
     if (picks.bowl) foodBowl(art, BOWLS[picks.bowl] ?? BOWLS.red!, layout.bowl);
     if (picks.toy) toy(art, picks.toy, layout.toy);
     if (picks.buddy && picks.buddy !== 'none') buddy(art, picks.buddy, layout);
     if (stage === 5) sparkles(art, picks.aura ?? 'golden', PET_X, centre, s, look, body, head);
-    art.pet = petSpot(art, look, feet, s, hb);
+    art.pet = petSpot(art, look, PET_X, feet, s, hb);
     return art.done();
   },
 };

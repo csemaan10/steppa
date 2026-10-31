@@ -19,7 +19,8 @@ const WORDS_AT = 820;
 /**
  * The first trip to somewhere brings back its souvenir: rays turn behind it, it pops up on a card
  * with sparkles, "SOUVENIR!" unfurls and the card is stamped with where it's from. Then wear it, or
- * keep it for later (it waits in the wardrobe).
+ * keep it for later (it waits in the wardrobe). A keepsake for a full passport page says so, and goes
+ * in the yard rather than on.
  */
 export function SouvenirReveal({
   souvenir,
@@ -35,6 +36,7 @@ export function SouvenirReveal({
   onWear: () => void;
   onLater: () => void;
 }) {
+  const keepsake = !!souvenir.full;
   const { width } = useWindowDimensions();
   const color = from.fantasy ? MAGIC_COLOR : TRIP_COLOR;
   return (
@@ -53,13 +55,15 @@ export function SouvenirReveal({
           </Animated.View>
           <SparkleBurst count={14} radius={110} delay={CARD_AT + 120} />
         </View>
-        <Ribbon text="SOUVENIR!" width={Math.min(width - 60, 280)} color={color} delay={RIBBON_AT} />
+        <Ribbon text={keepsake ? 'PAGE FILLED!' : 'SOUVENIR!'} width={Math.min(width - 60, 280)} color={color} delay={RIBBON_AT} />
         <Animated.Text entering={riseIn(WORDS_AT)} style={styles.headline}>
-          {name} brought back a {souvenir.choice.label.toLowerCase()} {from.flag}
+          {keepsake
+            ? `${name} filled the ${from.name} page and brought home a ${souvenir.choice.label.toLowerCase()}`
+            : `${name} brought back a ${souvenir.choice.label.toLowerCase()} from ${from.name}`}
         </Animated.Text>
         <Animated.View entering={riseIn(WORDS_AT + 160)} style={styles.buttons}>
-          <Button mode="contained" icon="hanger" onPress={onWear}>
-            Wear it
+          <Button mode="contained" icon={keepsake ? 'home-heart' : 'hanger'} onPress={onWear}>
+            {keepsake ? 'Put it in the yard' : 'Wear it'}
           </Button>
           <Button textColor="#FFFFFF" onPress={onLater}>
             Later

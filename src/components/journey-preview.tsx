@@ -1,18 +1,11 @@
 import { router } from 'expo-router';
-import { useEffect } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Card, Icon, Text } from 'react-native-paper';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withTiming,
-  ZoomIn,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 
 import { Button } from '@/components/button';
+import { FlagIcon } from '@/components/flag-icon';
+import { PlaceIcon } from '@/components/place-icon';
 import { mapHeightFor, RouteMap } from '@/components/route-map';
 import type { CurrentJourney, Profile } from '@/lib/api';
 import { formatKm, getRoute, journeyDay, progressOn, ROUTES } from '@/lib/journeys';
@@ -41,7 +34,7 @@ export function JourneyPreview({ current, profile }: Props) {
     <Card mode="contained" style={glassCard(theme)} onPress={() => router.push('/journey')}>
       <View style={styles.header}>
         <View style={[styles.flag, { backgroundColor: theme.colors.primaryContainer }]}>
-          <Text style={styles.flagText}>{route.flag}</Text>
+          <FlagIcon flag={route.flag} size={30} />
         </View>
         <View style={styles.headerText}>
           <Text variant="titleMedium" numberOfLines={1}>
@@ -87,9 +80,15 @@ export function JourneyPreview({ current, profile }: Props) {
             <Text variant="titleMedium" style={styles.bold}>
               {formatKm(progress.next.km - progress.km)} km
             </Text>
-            <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
-              to {progress.next.emoji} {progress.next.name}
-            </Text>
+            <View style={styles.nextStop}>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                to
+              </Text>
+              <PlaceIcon emoji={progress.next.emoji} size={15} color={theme.colors.onSurfaceVariant} />
+              <Text variant="bodySmall" numberOfLines={1} style={[styles.shrink, { color: theme.colors.onSurfaceVariant }]}>
+                {progress.next.name}
+              </Text>
+            </View>
           </View>
         ) : null}
       </View>
@@ -97,38 +96,17 @@ export function JourneyPreview({ current, profile }: Props) {
   );
 }
 
-/** Wiggles every couple of seconds until you open the journey. */
+/** How many new postcards are waiting, until you open the journey. Fades in and stays still. */
 function NewPostcards({ count }: { count: number }) {
   const theme = useAppTheme();
-  const tilt = useSharedValue(0);
-
-  useEffect(() => {
-    tilt.set(
-      withRepeat(
-        withSequence(
-          withTiming(-10, { duration: 70 }),
-          withTiming(10, { duration: 90 }),
-          withTiming(-6, { duration: 80 }),
-          withTiming(0, { duration: 70 }),
-          withDelay(1800, withTiming(0, { duration: 0 }))
-        ),
-        -1
-      )
-    );
-  }, [tilt]);
-
-  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${tilt.value}deg` }] }));
-
-  // Wiggle on an inner view so its transform doesn't fight the entering zoom.
   return (
     <Animated.View
-      entering={ZoomIn.springify().damping(10)}
-      accessibilityLabel={`${count} new ${count === 1 ? 'postcard' : 'postcards'}`}>
-      <Animated.View style={[styles.newPill, { backgroundColor: theme.colors.primary }, style]}>
-        <Text variant="labelLarge" style={{ color: theme.colors.onPrimary }}>
-          📮 {count} new
-        </Text>
-      </Animated.View>
+      entering={FadeIn.duration(200)}
+      accessibilityLabel={`${count} new ${count === 1 ? 'postcard' : 'postcards'}`}
+      style={[styles.newPill, { backgroundColor: theme.colors.primary }]}>
+      <Text variant="labelLarge" style={{ color: theme.colors.onPrimary }}>
+        📮 {count} new
+      </Text>
     </Animated.View>
   );
 }
@@ -151,9 +129,9 @@ function StartCard() {
       <Card.Content style={styles.start}>
         <View style={styles.flags}>
           {ROUTES.map((r, i) => (
-            <Animated.Text key={r.key} entering={ZoomIn.delay(200 + i * 90).springify().damping(10)} style={styles.flagText}>
-              {r.flag}
-            </Animated.Text>
+            <Animated.View key={r.key} entering={ZoomIn.delay(200 + i * 90).springify().damping(10)}>
+              <FlagIcon flag={r.flag} size={30} />
+            </Animated.View>
           ))}
         </View>
         <Text variant="titleMedium">Go on a journey</Text>
@@ -172,7 +150,6 @@ function StartCard() {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, paddingBottom: 12 },
   flag: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  flagText: { fontSize: 22, lineHeight: 28 },
   headerText: { flex: 1 },
   map: { paddingHorizontal: 12 },
   // With nothing above it, the map needs its own gap from the card's top edge.
@@ -186,9 +163,11 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   right: { alignItems: 'flex-end', flexShrink: 1 },
+  nextStop: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  shrink: { flexShrink: 1 },
   bold: { fontWeight: '700' },
   newPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14 },
   start: { gap: 8, paddingTop: 14, paddingBottom: 16 },
-  flags: { flexDirection: 'row', gap: 6 },
+  flags: { flexDirection: 'row', gap: 2 },
   startButton: { alignSelf: 'flex-start', marginTop: 4 },
 });

@@ -8,17 +8,18 @@ import { usePetPlay } from '@/components/pet-play';
 import { StageBadge } from '@/components/world-parts';
 import { WorldScene } from '@/components/world-scene';
 import { useScreenFocused } from '@/hooks/use-screen-focused';
-import { getAdventures, type WorldStatus } from '@/lib/api';
+import { getAdventures, type Adventure, type WorldStatus } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
+import { awayToday } from '@/lib/pet-adventures';
 import { timeOfDay } from '@/lib/scene-art';
-import { drawWorld, learnedTricks, levelOf, WORLDS } from '@/lib/world';
+import { drawAway, drawWorld, learnedTricks, levelOf, WORLDS } from '@/lib/world';
 import { glassCard, useAppTheme } from '@/theme';
 
 /**
- * Someone's pet on their profile: its name, how grown it is and the steps behind it, in its yard,
- * with the tricks it knows and how many adventures it's been on. You can tap it and hold it to play,
- * the same as your own, and it shows off its tricks. `owner` is null for your own pet; a friend's has
- * a button for a playdate with yours.
+ * Someone's pet on their profile: its name, how grown it is and the steps behind it, in its yard (or
+ * wherever it's gone on an adventure today), with the tricks it knows and how many adventures it's
+ * been on. You can tap it and hold it to play, the same as your own, and it shows off its tricks.
+ * `owner` is null for your own pet; a friend's has a button for a playdate with yours.
  */
 export function PetProfileCard({ status, owner }: { status: WorldStatus; owner: string | null }) {
   const theme = useAppTheme();
@@ -27,21 +28,24 @@ export function PetProfileCard({ status, owner }: { status: WorldStatus; owner: 
   const { world, steps } = status;
   const def = WORLDS[world.kind];
   const saved = world.picks[world.kind];
-  const art = drawWorld(world.kind, steps, saved, timeOfDay());
-  const tricks = learnedTricks(world.treats_fed ?? 0);
-  const play = usePetPlay(art.pet, { tricks: tricks.map((t) => t.id) });
-  const name = saved?.name;
-  const muted = { color: theme.colors.onSurfaceVariant };
-
-  const [trips, setTrips] = useState(0);
+  const [adventures, setAdventures] = useState<Adventure[]>([]);
   useEffect(() => {
     let live = true;
-    getAdventures(world.user_id).then((all) => live && setTrips(all.length));
+    getAdventures(world.user_id).then((all) => live && setAdventures(all));
     return () => {
       live = false;
     };
   }, [world.user_id]);
+  const away = awayToday(adventures);
+  const time = timeOfDay();
+  const art = away ? drawAway(away.stop, steps, saved, time) : drawWorld(world.kind, steps, saved, time);
+  const tricks = learnedTricks(world.treats_fed ?? 0);
+  const play = usePetPlay(art.pet, { tricks: tricks.map((t) => t.id) });
+  const name = saved?.name;
+  const muted = { color: theme.colors.onSurfaceVariant };
+  const trips = adventures.length;
   const extras = [
+    away ? `In ${away.stop.name} today` : null,
     tricks.length ? `Knows ${tricks.length} ${tricks.length === 1 ? 'trick' : 'tricks'}` : null,
     trips ? `${trips} ${trips === 1 ? 'adventure' : 'adventures'}` : null,
   ].filter(Boolean);
@@ -65,7 +69,7 @@ export function PetProfileCard({ status, owner }: { status: WorldStatus; owner: 
         ) : null}
       </Card.Content>
       <View style={styles.scene}>
-        <WorldScene art={art} width={sceneWidth} animate={focused} play={play} radius={18} />
+        <WorldScene art={art} width={sceneWidth} animate={focused} version={away?.key ?? 'home'} play={play} radius={18} />
         <StageBadge def={def} level={levelOf(steps)} />
       </View>
       {owner ? (
