@@ -1974,20 +1974,21 @@ export function petPhoto(level: number, picks: Picks, time: TimeOfDay, x: number
 }
 
 /**
- * The pet itself, alive: a tail that wags, a body that breathes and blinks, at (x, feet). Your own
- * pet (`own`) moves when you play with it and smiles; a visiting one just stands there being cute.
- * A fish bobs about in its bowl instead.
+ * The pet itself, alive: a tail that wags, a body that breathes and blinks, at (x, feet). Both your
+ * own pet and a friend's visiting one (`own` false) move when you play with them and smile; the
+ * friend's breathes out of step with yours. A fish bobs about in its bowl instead.
  */
 function livePet(art: Art, x: number, feet: number, s: number, hb: number, look: Look, mood: Mood, own: boolean) {
   const pace = PACE[mood];
   const fish = look.species === 'fish';
   const canBlink = !look.sleepy && (!look.glasses || look.glasses === 'none' || look.glasses === 'round');
   const { body, head } = fish ? { body: new Pen(art, x, feet, s), head: fishPen(art, x, feet, s, hb) } : pens(art, x, feet, s, hb);
+  // Out of step with your pet's.
+  const whose = own ? { pet: true } : { guest: true, delay: 900 };
   const options = {
-    ...(own ? { pet: true, happy: () => happyFace(head, look) } : {}),
+    ...whose,
+    happy: () => happyFace(head, look),
     ...(canBlink ? { blink: () => blinkEyes(head, look) } : {}),
-    // Out of step with your pet's.
-    ...(own ? {} : { delay: 900 }),
   };
   if (fish) {
     // The stool and bowl stay put; the fish bobs about inside.
@@ -1998,20 +1999,22 @@ function livePet(art: Art, x: number, feet: number, s: number, hb: number, look:
     if (TAILS[look.species]) {
       const [tx, ty] = body.at(12, -10);
       const deg = (look.species === 'dragon' ? 4 : 8) * pace.wag;
-      art.move({ type: 'sway', deg, x: tx, y: ty, period: 2600 * pace.period }, () => tail(body, look), own ? { pet: true } : { delay: 900 });
+      art.move({ type: 'sway', deg, x: tx, y: ty, period: 2600 * pace.period }, () => tail(body, look), whose);
     }
     art.move({ type: 'breathe', amount: pace.breath, x, y: feet, period: 3600 * pace.period }, () => drawPet(art, x, feet, s, hb, look), options);
   }
   return { body, head };
 }
 
-/** A group mate's pet over for the day, a little smaller than it is at home so both fit. */
+/** A group mate's pet over for the day, a little smaller than it is at home so both fit, and playable too. */
 function drawGuest(art: Art, guest: Guest, [x, feet, most]: Spot) {
   const stage = stageOf(guest.level);
   const s = Math.min(SIZE[stage]!, most);
+  const hb = HEAD[stage]!;
   const look = lookFor(guest.picks, stage);
   art.fill(ellipse(x, feet + 1, 30 * s, 5 * s), '#2E4A2A', 0.18);
-  livePet(art, x, feet, s, HEAD[stage]!, look, 'happy', false);
+  livePet(art, x, feet, s, hb, look, 'happy', false);
+  art.guest = petSpot(art, look, x, feet, s, hb);
 }
 
 /** How a journey place (360 × 200) fills the yard's 360 × 270: scaled up to its height, cropped at the sides. */

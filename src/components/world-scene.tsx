@@ -33,6 +33,10 @@ type Props = {
   version?: string;
   /** Makes the pet playable: tap or hold it, and the play's buttons move it (see usePetPlay). */
   play?: PetPlay;
+  /** Makes a friend's pet in the picture playable too (tap or hold it), with its own usePetPlay. */
+  guestPlay?: PetPlay;
+  /** What a screen reader calls the friend's pet. */
+  guestName?: string;
   /** Shows only the bottom this many pixels (the ground and the pet), for a shorter panel. */
   cropTo?: number;
   radius?: number;
@@ -46,7 +50,18 @@ type Frame = { art: WorldArt; version: string | undefined; id: number };
  * moving layer is an SVG in a view moved by Reanimated on the UI thread, so nothing re-renders while
  * fish swim and clouds drift. When `version` changes, the new world fades in over the old one.
  */
-export function WorldScene({ art, width, animate = true, version, play, cropTo, radius = 20, style }: Props) {
+export function WorldScene({
+  art,
+  width,
+  animate = true,
+  version,
+  play,
+  guestPlay,
+  guestName,
+  cropTo,
+  radius = 20,
+  style,
+}: Props) {
   const reduceMotion = useReducedMotion();
   const height = Math.round((width * WORLD_HEIGHT) / WORLD_WIDTH);
   const shown = cropTo ? Math.min(cropTo, height) : height;
@@ -80,7 +95,7 @@ export function WorldScene({ art, width, animate = true, version, play, cropTo, 
                     width={width}
                     height={height}
                     moving={moving}
-                    joy={current ? play?.joy : undefined}
+                    joy={current ? (layer.guest ? guestPlay?.joy : play?.joy) : undefined}
                   />
                 ) : (
                   <Paths key={i} shapes={layer.shapes} />
@@ -88,6 +103,13 @@ export function WorldScene({ art, width, animate = true, version, play, cropTo, 
                 if (current && play && art.pet && layer.pet) {
                   return (
                     <PetBody key={i} play={play} spot={art.pet} scale={scale}>
+                      {drawn}
+                    </PetBody>
+                  );
+                }
+                if (current && guestPlay && art.guest && layer.guest) {
+                  return (
+                    <PetBody key={i} play={guestPlay} spot={art.guest} scale={scale}>
                       {drawn}
                     </PetBody>
                   );
@@ -103,6 +125,19 @@ export function WorldScene({ art, width, animate = true, version, play, cropTo, 
             </FadeFrame>
           );
         })}
+        {/* The friend's pet first, so where the two overlap a tap goes to yours. */}
+        {guestPlay && art.guest ? (
+          <>
+            <PetEffects play={guestPlay} spot={art.guest} scale={scale} />
+            <PetTarget
+              play={guestPlay}
+              spot={art.guest}
+              scale={scale}
+              label={guestName ?? "A friend's pet"}
+              hint="Tap to play, or hold to pet them"
+            />
+          </>
+        ) : null}
         {play && art.pet ? (
           <>
             <PetEffects play={play} spot={art.pet} scale={scale} />

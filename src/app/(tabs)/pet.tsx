@@ -411,6 +411,9 @@ function PetHome({
   const where = away ?? company.out?.away ?? null;
   const toy = resolvePicks(def, level, saved).toy;
   const play = usePetPlay(art.pet, { tricks: learnedTricks(fed).map((t) => t.id), says: MOOD_SAYS[mood] });
+  // The friend's pet in the picture (the one yours went round to, or the one over at yours) plays too.
+  const friend = away ? company.over : (company.out ?? company.over);
+  const guestPlay = usePetPlay(art.guest, { says: ['Hi!'] });
   const muted = { color: theme.colors.onSurfaceVariant };
 
   const lineRef = useRef<View>(null);
@@ -430,6 +433,14 @@ function PetHome({
     const timer = setInterval(idle, mood === 'sleepy' ? 7000 : mood === 'overjoyed' ? 6000 : 11000);
     return () => clearInterval(timer);
   }, [animate, mood]);
+  // The friend's pet gets up to things too, on a beat of its own so the two rarely go at once.
+  const guestIdle = useEffectEvent(() => guestPlay.idle());
+  const hasGuest = !!art.guest;
+  useEffect(() => {
+    if (!animate || !hasGuest) return;
+    const timer = setInterval(guestIdle, 13000);
+    return () => clearInterval(timer);
+  }, [animate, hasGuest]);
 
   // Treats earned while you were away fly up from under the scene into the counter, one landing at a
   // time, once the tab is on screen; the toast says where they came from (walking, bonuses, friends).
@@ -516,6 +527,8 @@ function PetHome({
             animate={animate}
             version={`${level}:${time}:${mood}:${where?.key ?? company.out?.owner ?? 'home'}:${company.over?.name ?? ''}:${JSON.stringify(saved ?? {})}`}
             play={play}
+            guestPlay={guestPlay}
+            guestName={friend?.name}
             radius={18}
           />
           {where ? (

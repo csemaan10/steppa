@@ -1,9 +1,7 @@
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 
-import { Button } from '@/components/button';
 import { usePetPlay } from '@/components/pet-play';
 import { StageBadge } from '@/components/world-parts';
 import { WorldScene } from '@/components/world-scene';
@@ -19,7 +17,7 @@ import { glassCard, useAppTheme } from '@/theme';
  * Someone's pet on their profile: its name, how grown it is and the steps behind it, in its yard (or
  * wherever it's gone on an adventure today), with the tricks it knows and how many adventures it's
  * been on. You can tap it and hold it to play, the same as your own, and it shows off its tricks.
- * `owner` is null for your own pet; a friend's has a button for a playdate with yours.
+ * `owner` is null for your own pet.
  */
 export function PetProfileCard({ status, owner }: { status: WorldStatus; owner: string | null }) {
   const theme = useAppTheme();
@@ -72,16 +70,6 @@ export function PetProfileCard({ status, owner }: { status: WorldStatus; owner: 
         <WorldScene art={art} width={sceneWidth} animate={focused} version={away?.key ?? 'home'} play={play} radius={18} />
         <StageBadge def={def} level={levelOf(steps)} />
       </View>
-      {owner ? (
-        <View style={styles.actions}>
-          <Button
-            mode="contained-tonal"
-            icon="paw"
-            onPress={() => router.push({ pathname: '/playdate/[id]', params: { id: world.user_id } })}>
-            Playdate
-          </Button>
-        </View>
-      ) : null}
     </Card>
   );
 }
@@ -90,5 +78,4 @@ const styles = StyleSheet.create({
   text: { gap: 2, paddingTop: 14, paddingBottom: 10 },
   bold: { fontWeight: '700' },
   scene: { margin: 8, marginTop: 0 },
-  actions: { paddingHorizontal: 8, paddingBottom: 10 },
 });

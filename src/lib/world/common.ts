@@ -149,6 +149,8 @@ export type Layer = {
   happy?: Shape[];
   /** A little buddy that joins in: it hops along, lower, whenever the pet hops. */
   follow?: boolean;
+  /** Part of a friend's pet over for the day: it moves when you play with that pet instead. */
+  guest?: boolean;
 };
 
 /** Where the pet is, for playing with it. */
@@ -167,7 +169,8 @@ export type PetSpot = {
   bowl?: boolean;
 };
 
-export type WorldArt = { sky: readonly [string, string]; layers: Layer[]; pet?: PetSpot };
+/** `guest` is where a friend's pet stands, when one's in the picture, so it can be played with too. */
+export type WorldArt = { sky: readonly [string, string]; layers: Layer[]; pet?: PetSpot; guest?: PetSpot };
 
 /** Darker by `amount` (0–1). */
 export const darker = (color: string, amount: number) => mix(color, '#000000', amount);
@@ -267,7 +270,7 @@ export class Art {
   /**
    * Draws whatever `draw` paints into a moving layer of its own, then carries on in a still one.
    * `blink` and `happy` paint the layer's closed-eye and happy overlays; `pet` makes it hop on a tap,
-   * and `follow` makes it hop along after the pet.
+   * `follow` makes it hop along after the pet, and `guest` makes it part of a visiting friend's pet.
    */
   move(
     motion: Motion,
@@ -279,6 +282,7 @@ export class Art {
       happy?: () => void;
       pet?: boolean;
       follow?: boolean;
+      guest?: boolean;
     } = {}
   ) {
     const layer: Layer = { shapes: [], motion };
@@ -286,6 +290,7 @@ export class Art {
     if (options.clip) layer.clip = options.clip;
     if (options.pet) layer.pet = true;
     if (options.follow) layer.follow = true;
+    if (options.guest) layer.guest = true;
     this.layers.push(layer);
     this.current = layer.shapes;
     draw();
@@ -314,10 +319,13 @@ export class Art {
 
   /** Where the pet stands, so it can be tapped. */
   pet?: PetSpot;
+  /** Where a friend's pet over for the day stands, so it can be tapped too. */
+  guest?: PetSpot;
 
   done(sky: readonly [string, string] = SKY[this.time]): WorldArt {
     const art: WorldArt = { sky, layers: this.layers.filter((l) => l.shapes.length) };
     if (this.pet) art.pet = this.pet;
+    if (this.guest) art.guest = this.guest;
     return art;
   }
 }

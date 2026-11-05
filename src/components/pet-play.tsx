@@ -727,7 +727,19 @@ export function FollowBody({ play, scale, children }: { play: PetPlay; scale: nu
 }
 
 /** The pet itself, to tap or hold; a little bigger than it looks, so it's easy to hit. */
-export function PetTarget({ play, spot, scale }: { play: PetPlay; spot: PetSpot; scale: number }) {
+export function PetTarget({
+  play,
+  spot,
+  scale,
+  label = 'Your pet',
+  hint = 'Tap to play, or hold to pet it',
+}: {
+  play: PetPlay;
+  spot: PetSpot;
+  scale: number;
+  label?: string;
+  hint?: string;
+}) {
   const [x, y, w, h] = spot.box;
   const pad = 8;
   return (
@@ -737,8 +749,8 @@ export function PetTarget({ play, spot, scale }: { play: PetPlay; spot: PetSpot;
       onPressOut={play.holdEnd}
       delayLongPress={280}
       accessibilityRole="button"
-      accessibilityLabel="Your pet"
-      accessibilityHint="Tap to play, or hold to pet it"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
       style={{
         position: 'absolute',
         left: (x - pad) * scale,
