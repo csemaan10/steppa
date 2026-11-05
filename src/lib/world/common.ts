@@ -27,6 +27,7 @@ import {
   type Shape,
   type TimeOfDay,
 } from '@/lib/scene-art';
+import { baseOf, itemColour, recolour, type ColourBase } from '@/lib/world/colours';
 import type { Mood } from '@/lib/world/mood';
 
 export { arch, circle, ellipse, hash, mix, n, poly, rect, ring, seeded, type Shape, type TimeOfDay };
@@ -250,15 +251,54 @@ export class Art {
     return this.tint ? mix(color, this.tint.color, this.tint.amount) : color;
   }
 
+  /** While drawing something in a chosen colour, turns its paints to that colour (see `colouring`). */
+  private recolouring: ((color: string) => string) | null = null;
+  /** The main colour of each thing drawn in a chosen colour, by key, so its parts all match. */
+  private readonly bases = new Map<string, ColourBase>();
+
+  /**
+   * Draws whatever `draw` paints with its main colour family in `colour` (an ITEM_COLOURS id; as it
+   * is without one). `key` names the thing, so parts drawn at different times match; `base` is its
+   * main colour if known, else the first colourful paint decides.
+   */
+  colouring(colour: string | undefined, key: string, draw: () => void, base?: string) {
+    const target = itemColour(colour);
+    if (!target) {
+      draw();
+      return;
+    }
+    if (base && !this.bases.has(key)) {
+      const known = baseOf(base);
+      if (known) this.bases.set(key, known);
+    }
+    const before = this.recolouring;
+    this.recolouring = (color) => {
+      let found = this.bases.get(key);
+      if (!found) {
+        const first = baseOf(color);
+        if (!first) return color;
+        this.bases.set(key, first);
+        found = first;
+      }
+      return recolour(color, target, found);
+    };
+    try {
+      draw();
+    } finally {
+      this.recolouring = before;
+    }
+  }
+
   fill(d: string, color: string, opacity?: number) {
     if (!d) return;
-    const fill = this.tinted(color);
+    const fill = this.tinted(this.recolouring ? this.recolouring(color) : color);
     this.current.push(opacity === undefined ? { d, fill } : { d, fill, opacity });
   }
 
   /** Something that glows after dark, so it skips the tint. */
   light(d: string, color: string, opacity?: number) {
     if (!d) return;
+    if (this.recolouring) color = this.recolouring(color);
     this.current.push(opacity === undefined ? { d, fill: color } : { d, fill: color, opacity });
   }
 

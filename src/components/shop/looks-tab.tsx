@@ -21,7 +21,19 @@ import { usePressed } from '@/hooks/use-pressed';
 import type { ShopPrice } from '@/lib/api';
 import { destinationNamed } from '@/lib/pet-adventures';
 import { isFresh, onSale, saleMonths, SECTION_TITLES, SHOP, type Fresh, type ShopSection, type ShopThing } from '@/lib/shop';
-import { choiceLevel, LEVELS, NAME_LENGTH, type Choice, type Picks, type Slot, type WorldDef } from '@/lib/world';
+import {
+  choiceLevel,
+  COLOURABLE_SLOTS,
+  colourKey,
+  ITEM_COLOURS,
+  LEVELS,
+  NAME_LENGTH,
+  slotColourKey,
+  type Choice,
+  type Picks,
+  type Slot,
+  type WorldDef,
+} from '@/lib/world';
 import { glass, useAppTheme, withAlpha } from '@/theme';
 
 const COLUMNS = 3;
@@ -35,7 +47,7 @@ const PARTS = [
   { value: 'sale' as const, label: 'For sale', icon: 'tag-outline' as const },
   { value: 'pet' as const, label: 'Name & species', icon: 'paw' as const },
 ];
-const SECTIONS: ShopSection[] = ['toys', 'yard', 'season', 'buddy'];
+const SECTIONS: ShopSection[] = ['toys', 'wear', 'yard', 'party', 'flags', 'season', 'buddy'];
 
 /** Why a look can't be worn yet: shown small under it, and read out in full. */
 type Lock = { note: string; spoken: string; icon: string };
@@ -77,8 +89,8 @@ type Props = {
 };
 
 /**
- * Looks, in three parts. The wardrobe: every look on shelves of tiles, tap one to put it on, locked
- * ones saying when they unlock, and souvenirs from its trips (and keepsakes from full passport pages)
+ * Looks, in three parts. The wardrobe: every look on shelves of tiles, tap one to put it on (and
+ * choose its colour, for things that come in colours), locked ones saying when they unlock, and souvenirs from its trips (and keepsakes from full passport pages)
  * on a shelf of their own. For sale: toys and things for the yard to buy with treats, each tried on
  * above before you buy it. Name & species: who your pet is, kept apart from what it wears.
  */
@@ -108,6 +120,8 @@ export function LooksTab({
   // hundred-odd tiles, and tearing them down and building them again made every switch slow.
   const [opened, setOpened] = useState<ReadonlySet<Part>>(() => new Set<Part>(['wardrobe']));
   const [draft, setDraft] = useState(name);
+  // The shelf whose worn thing is having its colour chosen.
+  const [colouring, setColouring] = useState<string | null>(null);
   // Rounded down: three tiles that add up to exactly the row would wrap the last one on rounding.
   const tile = Math.floor((Math.min(width, 520) - 32 - GAP * (COLUMNS - 1)) / COLUMNS) - 1;
   const looks = def.slots.filter((s) => !IDENTITY_SLOTS.includes(s.id));
@@ -239,23 +253,44 @@ export function LooksTab({
   function renderShelf(slot: Slot) {
     const choices = wearable(slot);
     const yours = choices.filter((c) => c.shop || choiceLevel(slot, c) <= level).length;
+    const colourable = COLOURABLE_SLOTS.includes(slot.id);
+    const worn = picks[slot.id];
+    const wornChoice = worn && worn !== 'none' ? slot.choices.find((c) => c.id === worn) : undefined;
+    const choosing = colourable && colouring === slot.id && wornChoice;
     return (
-      <Shelf key={slot.id} title={slot.title} note={`${yours} of ${choices.length}`} fresh={hasFresh(slot)}>
-        {choices.map((choice) => {
-          const at = choice.shop ? 0 : choiceLevel(slot, choice);
-          return (
-            <ItemTile
-              key={choice.id}
-              choice={choice}
-              size={tile}
-              equipped={picks[slot.id] === choice.id}
-              lock={at > level ? stepsLock(at) : null}
-              fresh={isFresh(slot, choice, fresh)}
-              onPress={() => onPick(slot.id, choice.id)}
-            />
-          );
-        })}
-      </Shelf>
+      <View key={slot.id} style={styles.shelf}>
+        <Shelf title={slot.title} note={`${yours} of ${choices.length}`} fresh={hasFresh(slot)}>
+          {choices.map((choice) => {
+            const at = choice.shop ? 0 : choiceLevel(slot, choice);
+            const equipped = worn === choice.id;
+            const hasColours = colourable && choice.id !== 'none';
+            return (
+              <ItemTile
+                key={choice.id}
+                choice={choice}
+                size={tile}
+                equipped={equipped}
+                lock={at > level ? stepsLock(at) : null}
+                fresh={isFresh(slot, choice, fresh)}
+                // Putting something on opens its colours; tapping it again closes them.
+                onPress={() => {
+                  if (!equipped) onPick(slot.id, choice.id);
+                  setColouring(hasColours && !(equipped && colouring === slot.id) ? slot.id : null);
+                }}
+                pressableWorn={hasColours}
+              />
+            );
+          })}
+        </Shelf>
+        {choosing ? (
+          <ColourPicker
+            label={wornChoice.label}
+            current={picks[slotColourKey(slot.id)]}
+            onChoose={(colour) => onPick(colourKey(slot.id, wornChoice.id), colour)}
+            onDone={() => setColouring(null)}
+          />
+        ) : null}
+      </View>
     );
   }
 
@@ -291,7 +326,7 @@ export function LooksTab({
               fresh={choice.id === newSouvenir}
               // Tap one you're wearing to take it off.
               onPress={() => onPick(slot, worn ? 'none' : choice.id)}
-              canTakeOff
+              pressableWorn
             />
           );
         })}
@@ -355,6 +390,90 @@ export function LooksTab({
   );
 }
 
+/**
+ * The colours the worn thing on a shelf comes in: its own, and a row of swatches. Choosing one puts
+ * it on at once (the pet above twirls into it).
+ */
+function ColourPicker({
+  label,
+  current,
+  onChoose,
+  onDone,
+}: {
+  label: string;
+  /** The ITEM_COLOURS id it's worn in, if not its own colours. */
+  current: string | undefined;
+  /** An ITEM_COLOURS id, or 'original' for its own colours. */
+  onChoose: (colour: string) => void;
+  onDone: () => void;
+}) {
+  const theme = useAppTheme();
+  return (
+    <View style={[glass(theme, 'card'), styles.colours]}>
+      <View style={styles.shelfHead}>
+        <Text variant="titleSmall" numberOfLines={1} style={[styles.bold, styles.flex]}>
+          {`${label} colour`}
+        </Text>
+        <Button compact onPress={onDone}>
+          Done
+        </Button>
+      </View>
+      <View style={styles.swatches}>
+        <Swatch label="Its own colours" selected={!current} onPress={() => onChoose('original')}>
+          <Icon source="restore" size={18} color={theme.colors.onSurfaceVariant} />
+        </Swatch>
+        {ITEM_COLOURS.map((colour) => (
+          <Swatch
+            key={colour.id}
+            label={colour.label}
+            color={colour.swatch}
+            selected={current === colour.id}
+            onPress={() => onChoose(colour.id)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** One colour to choose: a round swatch, ringed in the theme's colour when it's the one worn. */
+function Swatch({
+  label,
+  color,
+  selected,
+  onPress,
+  children,
+}: {
+  label: string;
+  color?: string;
+  selected: boolean;
+  onPress: () => void;
+  children?: ReactNode;
+}) {
+  const theme = useAppTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.swatchRing,
+        { borderColor: selected ? theme.colors.primary : 'transparent' },
+        pressed && styles.swatchPressed,
+      ]}>
+      <View
+        style={[
+          styles.colourSwatch,
+          color ? { backgroundColor: color } : { backgroundColor: withAlpha(theme.colors.onSurface, 0.06) },
+        ]}>
+        {children}
+      </View>
+    </Pressable>
+  );
+}
+
 function Shelf({
   title,
   note,
@@ -401,7 +520,7 @@ function ItemTile({
   trying,
   fresh,
   onPress,
-  canTakeOff,
+  pressableWorn,
 }: {
   choice: Choice;
   size: number;
@@ -414,8 +533,8 @@ function ItemTile({
   trying?: boolean;
   fresh: boolean;
   onPress?: () => void;
-  /** Tapping it while it's worn takes it off (souvenirs). */
-  canTakeOff?: boolean;
+  /** It can still be tapped while it's worn (to take a souvenir off, or to choose a colour). */
+  pressableWorn?: boolean;
 }) {
   const theme = useAppTheme();
   const { pressed, onPressIn, onPressOut } = usePressed();
@@ -440,7 +559,7 @@ function ItemTile({
       onPress={press}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
-      disabled={locked || (equipped && !canTakeOff) || !onPress}
+      disabled={locked || (equipped && !pressableWorn) || !onPress}
       accessibilityRole="radio"
       accessibilityState={{ selected: equipped, disabled: locked }}
       accessibilityLabel={lock ? `${choice.label}, ${lock.spoken}` : tag ? `${choice.label}, ${tag.spoken}` : choice.label}>
@@ -550,4 +669,16 @@ const styles = StyleSheet.create({
   newSpot: { position: 'absolute', top: -7, left: -5 },
   buy: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 20 },
   buyActions: { alignItems: 'center', gap: 2 },
+  colours: { gap: 8, paddingHorizontal: 14, paddingTop: 6, paddingBottom: 14, borderRadius: 20 },
+  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  swatchRing: { width: 42, height: 42, borderRadius: 21, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center' },
+  swatchPressed: { transform: [{ scale: 0.9 }] },
+  colourSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.22)',
+  },
 });

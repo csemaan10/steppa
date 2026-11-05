@@ -20,6 +20,7 @@ import {
   type WorldDef,
   type WorldKind,
 } from '@/lib/world/common';
+import { COLOURABLE_SLOTS, colourKey, itemColour, slotColourKey } from '@/lib/world/colours';
 import type { Mood } from '@/lib/world/mood';
 import { awayBackdrop, LOOK_SLOTS, PET, petAway, petPhoto } from '@/lib/world/pet';
 
@@ -38,6 +39,7 @@ export {
   type WorldKind,
 };
 export { WORLD_HEIGHT, WORLD_WIDTH, type Layer, type Motion, type PetSpot } from '@/lib/world/common';
+export { COLOURABLE_SLOTS, colourKey, ITEM_COLOURS, slotColourKey, type ItemColour } from '@/lib/world/colours';
 export { MOOD_SAYS, moodLine, moodOf, type Mood } from '@/lib/world/mood';
 export { learnedTricks, training, TRICKS, type Trick, type TrickId } from '@/lib/world/tricks';
 
@@ -59,7 +61,7 @@ export function choiceLevel(slot: Slot, choice: Choice): number {
  * Every unlocked slot's choice: the saved one if it's still valid and unlocked, else the default (its
  * first choice that isn't from the shop). A souvenir (brought home from a trip, or for a full passport
  * page) or something bought in the shop counts whatever the level, even in a slot not unlocked yet:
- * it was earned.
+ * it was earned. A thing worn in a chosen colour brings it along as `colour.<slot>`.
  */
 export function resolvePicks(def: WorldDef, level: number, saved: KindPicks | undefined): Picks {
   const picks: Picks = {};
@@ -77,6 +79,11 @@ export function resolvePicks(def: WorldDef, level: number, saved: KindPicks | un
       slot.choices.find((c) => c.id === wanted && !c.shop && choiceLevel(slot, c) <= level) ??
       slot.choices.find((c) => !c.shop)!;
     picks[slot.id] = choice.id;
+  }
+  for (const slot of COLOURABLE_SLOTS) {
+    const worn = picks[slot];
+    const colour = worn && worn !== 'none' ? saved?.[colourKey(slot, worn)] : undefined;
+    if (itemColour(colour)) picks[slotColourKey(slot)] = colour!;
   }
   return picks;
 }
@@ -149,8 +156,10 @@ export function drawVisit(
   const level = levelOf(steps);
   const theirs = resolvePicks(PET, levelOf(host.steps), host.saved);
   const mine = resolvePicks(PET, level, saved);
-  const yard = Object.entries(theirs).filter(([slot]) => !LOOK_SLOTS.includes(slot));
-  const look = Object.entries(mine).filter(([slot]) => LOOK_SLOTS.includes(slot));
+  // A thing's colour (`colour.hat`) goes along with the thing.
+  const isLook = (key: string) => LOOK_SLOTS.includes(key.replace(/^colour\./, ''));
+  const yard = Object.entries(theirs).filter(([key]) => !isLook(key));
+  const look = Object.entries(mine).filter(([key]) => isLook(key));
   const picks: Picks = Object.fromEntries([...yard, ...look]);
   return PET.draw(level, picks, time, steps, mood, guestOf(host));
 }
