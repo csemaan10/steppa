@@ -24,6 +24,7 @@ import {
   ring,
   roundRect,
   SKY_CHOICES,
+  type Choice,
   stageOf,
   star,
   type Guest,
@@ -738,11 +739,11 @@ const HATS: Record<string, (head: Pen) => void> = {
     head.fill('M-22 -72.6Q0 -77.6 22 -72.6L21 -70.6Q0 -75.4 -21 -70.6Z', lighter('#3B4A6B', 0.2), 0.8);
   },
   'lenin-cap'(head) {
-    // A flat cloth cap with a short peak, as Lenin wore.
+    // A flat cloth cap with a short peak.
     const cloth = '#3D3A45';
-    head.fill('M-26 -74C-28 -91 -10 -98 5 -97C21 -96 30 -88 27 -76Q0 -80 -26 -74Z', cloth);
-    head.fill(rect(-0.5, -96, 1, 18), darker(cloth, 0.25), 0.7);
-    head.fill(circle(1.6, -96.6, 1.7), darker(cloth, 0.3));
+    head.fill('M-27 -75C-28 -92 -12 -98 0 -98C12 -98 28 -92 27 -75Q0 -80 -27 -75Z', cloth);
+    head.fill(rect(-0.5, -97, 1, 19), darker(cloth, 0.25), 0.7);
+    head.fill(circle(0, -97.4, 1.7), darker(cloth, 0.3));
     head.fill(ellipse(-10, -91, 9, 2.4), lighter(cloth, 0.18), 0.6);
     head.fill('M-24 -76Q0 -82 24 -76Q27 -71 20 -69.5Q0 -74 -20 -69.5Q-27 -71 -24 -76Z', darker(cloth, 0.22));
   },
@@ -1115,8 +1116,8 @@ function dressSkirt(body: Pen, outfit: string, top: string) {
 /** Outfits that come with a skirt. */
 const DRESSES = ['sundress', 'gown', 'fairy'];
 
-/** Lenin's suit: a dark three-piece with a white shirt and a red tie. */
-function leninSuit(body: Pen, top: string) {
+/** A dark three-piece suit with a white shirt and a red tie. */
+function threePieceSuit(body: Pen, top: string) {
   const tie = '#D7263D';
   body.fill(poly(-6.5, -36.6, 6.5, -36.6, 0, -24), '#F4F1EA');
   body.fill(poly(-6.5, -36.6, -12.4, -33, -2.8, -21.6, 0, -24) + poly(6.5, -36.6, 12.4, -33, 2.8, -21.6, 0, -24), lighter(top, 0.12));
@@ -1194,7 +1195,7 @@ function drawPet(art: Art, x: number, feet: number, s: number, hb: number, look:
         body.fill(roundRect(-10.5, -19, 21, 8.5, 3.5), darker(top, 0.1));
         body.fill(rect(-4.2, -33, 1.2, 9) + rect(3, -33, 1.2, 9) + circle(-3.6, -23.6, 1.2) + circle(3.6, -23.6, 1.2), '#FFFFFF');
       } else if (look.outfit === 'lenin-suit') {
-        leninSuit(body, top);
+        threePieceSuit(body, top);
       } else if (look.outfit === 'tuxedo') {
         tuxedo(body, top);
       } else if (look.outfit === 'raincoat') {
@@ -1517,7 +1518,7 @@ const YARDS: Record<string, (art: Art) => void> = { backyard, beach, snowy, mead
 /** Where something goes and how big: [x, y, scale]. */
 type Spot = readonly [number, number, number];
 type Layout = Record<
-  'kennel' | 'bed' | 'bowl' | 'toy' | 'buddy' | 'butterfly' | 'fun' | 'balloon' | 'season' | 'keepsake' | 'guest' | 'flag',
+  'kennel' | 'bed' | 'bowl' | 'toy' | 'buddy' | 'butterfly' | 'fun' | 'balloon' | 'season' | 'keepsake' | 'guest' | 'flag' | 'fun2',
   Spot
 > & {
   kites: readonly (readonly [number, number])[];
@@ -1531,6 +1532,7 @@ const SMALL: Layout = {
   buddy: [34, 234, 1.15],
   butterfly: [242, 128, 1],
   fun: [250, 195, 1],
+  fun2: [66, 232, 0.72],
   balloon: [196, 66, 1],
   season: [334, 204, 0.9],
   keepsake: [100, 192, 0.85],
@@ -1546,6 +1548,7 @@ const GROWN: Layout = {
   buddy: [26, 240, 1.08],
   butterfly: [262, 112, 1],
   fun: [272, 192, 0.86],
+  fun2: [60, 236, 0.66],
   balloon: [306, 100, 1],
   season: [338, 206, 0.84],
   keepsake: [88, 188, 0.76],
@@ -1561,6 +1564,7 @@ const BIG: Layout = {
   buddy: [22, 244, 1],
   butterfly: [278, 100, 1],
   fun: [290, 186, 0.74],
+  fun2: [56, 238, 0.6],
   balloon: [306, 100, 1],
   season: [342, 208, 0.78],
   // At the pool's edge: anywhere nearer the middle, a legend's mane or wings would hide it.
@@ -2188,11 +2192,15 @@ function flagFace(pen: Pen, id: string) {
       const gold = '#F7C531';
       pen.fill(rect(0, 0, W, H), '#CC2229');
       // A gold-edged star over the hammer and sickle, in the top corner.
-      pen.fill(star(7.6, 3.4, 2, 5, 0.42), gold);
-      pen.fill(star(7.6, 3.5, 1.1, 5, 0.42), '#CC2229');
-      pen.fill(arcBand(7.6, 10.2, 3.5, 1.15, 150, 385), gold);
-      pen.fill(bar(4.6, 11.9, 3, 13.8, 1.3), gold);
-      pen.fill(bar(11.4, 14, 5.9, 8.4, 1.1) + bar(4.7, 9.6, 7.1, 7.2, 1.9), gold);
+      pen.fill(star(8, 3, 2.1, 5, 0.42), gold);
+      pen.fill(star(8, 3.1, 1.15, 5, 0.42), '#CC2229');
+      // The sickle: a blade curling from its handle (bottom left) round under and up the right to
+      // its tip (top left), around the hammer's head.
+      pen.fill(arcBand(8, 10.4, 4.1, 1.4, -150, 112), gold);
+      pen.fill(bar(6.6, 14.2, 4.2, 16.2, 1.5), gold);
+      // The hammer, its handle crossing the blade, its head up in the sickle's curve.
+      pen.fill(bar(12.6, 15.6, 6.6, 8.6, 1.2), gold);
+      pen.fill(bar(5, 10.2, 8.4, 7.2, 2.2), gold);
       break;
     }
     case 'flag-pirate': {
@@ -2273,9 +2281,8 @@ function flagFace(pen: Pen, id: string) {
       break;
     }
   }
-  // Soft folds, as if it's rippling.
-  pen.fill(rect(W * 0.26, 0, W * 0.12, H), '#000000', 0.08);
-  pen.fill(rect(W * 0.6, 0, W * 0.1, H), '#FFFFFF', 0.12);
+  // A little shade down the side at the pole.
+  pen.fill(rect(0, 0, 1.4, H), '#000000', 0.12);
 }
 
 /** A flagpole with a gold ball on top, its flag swaying in the breeze. */
@@ -2286,7 +2293,10 @@ function flag(art: Art, id: string, spot: Spot) {
   pen.fill(rect(-1.1, -112, 0.8, 112), '#FFFFFF', 0.4);
   pen.fill(circle(0, -113.6, 2.6), '#F2C14E');
   const [px, py] = pen.at(1.1, -110);
-  art.move({ type: 'sway', deg: 2.5, x: px, y: py, period: 2400 }, () => flagFace(new Pen(art, px, py, spot[2]), id));
+  // Flags keep their colours at dusk and after dark, rather than fading into the sky.
+  art.move({ type: 'sway', deg: 2.5, x: px, y: py, period: 2400 }, () =>
+    art.lightlyTinted(0.3, () => flagFace(new Pen(art, px, py, spot[2]), id))
+  );
 }
 
 // ---------- Party things (from the shop), hung up over the yard ----------
@@ -2851,6 +2861,22 @@ export function petAway(
   return art.done(backdrop.sky);
 }
 
+/**
+ * Fun things for the yard, for either of its two fun spots (the shop's are bought once and go in
+ * either). The first non-shop choice is a slot's default, so the second spot leads with None.
+ */
+const FUN_CHOICES: Choice[] = [
+  { id: 'pool', label: 'Paddling pool', emoji: '💦' },
+  { id: 'sandpit', label: 'Sandpit', emoji: '🪣' },
+  { id: 'pond', label: 'Pond', emoji: '🐸', shop: true },
+  { id: 'flowerbed', label: 'Flower beds', emoji: '🌹', shop: true },
+  { id: 'trampoline', label: 'Trampoline', emoji: '🤸', shop: true },
+  { id: 'swing', label: 'Swing set', emoji: '🛝', shop: true },
+  { id: 'picnic', label: 'Picnic', emoji: '🍉', shop: true },
+  { id: 'fountain', label: 'Fountain', emoji: '⛲', shop: true },
+  { id: 'ballpit', label: 'Ball pit', emoji: '🟣', shop: true },
+];
+
 export const PET: WorldDef = {
   kind: 'pet',
   title: 'Pet',
@@ -2980,7 +3006,7 @@ export const PET: WorldDef = {
         { id: 'crown', label: 'Crown', emoji: '👑', level: 13 },
         { id: 'wizard', label: 'Wizard hat', emoji: '🧙', level: 13 },
         { id: 'tophat', label: 'Top hat', emoji: '🎩', level: 13 },
-        { id: 'lenin-cap', label: "Lenin's cap", emoji: '🧢', shop: true },
+        { id: 'lenin-cap', label: 'Flat cap', emoji: '🧢', shop: true },
         { id: 'tricorn', label: 'Pirate hat', emoji: '🏴‍☠️', shop: true },
         { id: 'tiara', label: 'Tiara', emoji: '👸', shop: true },
         { id: 'hairbow', label: 'Hair bow', emoji: '🎀', shop: true },
@@ -3048,7 +3074,7 @@ export const PET: WorldDef = {
         { id: 'sweater', label: 'Sweater', emoji: '🧶' },
         { id: 'hoodie', label: 'Hoodie', emoji: '💜', level: 13 },
         { id: 'puffer', label: 'Puffer jacket', emoji: '🧥', level: 13 },
-        { id: 'lenin-suit', label: 'Lenin outfit', emoji: '🧔', shop: true },
+        { id: 'lenin-suit', label: 'Three-piece suit', emoji: '👔', shop: true },
         { id: 'tuxedo', label: 'Tuxedo', emoji: '🤵', shop: true },
         { id: 'raincoat', label: 'Raincoat', emoji: '☔', shop: true },
         { id: 'pirate-coat', label: 'Pirate coat', emoji: '🏴‍☠️', shop: true },
@@ -3066,19 +3092,10 @@ export const PET: WorldDef = {
       id: 'fun',
       title: 'Fun',
       level: 12,
-      choices: [
-        { id: 'pool', label: 'Paddling pool', emoji: '💦' },
-        { id: 'sandpit', label: 'Sandpit', emoji: '🪣' },
-        { id: 'pond', label: 'Pond', emoji: '🐸', shop: true },
-        { id: 'flowerbed', label: 'Flower beds', emoji: '🌹', shop: true },
-        { id: 'trampoline', label: 'Trampoline', emoji: '🤸', shop: true },
-        { id: 'swing', label: 'Swing set', emoji: '🛝', shop: true },
-        { id: 'picnic', label: 'Picnic', emoji: '🍉', shop: true },
-        { id: 'fountain', label: 'Fountain', emoji: '⛲', shop: true },
-        { id: 'ballpit', label: 'Ball pit', emoji: '🟣', shop: true },
-        { id: 'none', label: 'None' },
-      ],
+      choices: [...FUN_CHOICES, { id: 'none', label: 'None' }],
     },
+    // A second spot for something fun, on the other side of the yard: empty until you choose.
+    { id: 'fun2', title: 'More fun', level: 12, choices: [{ id: 'none', label: 'None' }, ...FUN_CHOICES] },
     {
       id: 'friend',
       title: 'Second pet',
@@ -3213,7 +3230,7 @@ export const PET: WorldDef = {
     if (picks.flag && picks.flag !== 'none') flag(art, picks.flag, layout.flag);
     if (stage === 5) glow(art, picks.aura ?? 'golden', PET_X, centre, s);
 
-    const { house, season, fun: fun_, keepsake: kept, bed: bed_ } = picks;
+    const { house, season, fun: fun_, fun2, keepsake: kept, bed: bed_ } = picks;
     if (house) {
       paint('house', () => {
         const drawHouse = HOUSES[house];
@@ -3223,6 +3240,7 @@ export const PET: WorldDef = {
     }
     if (season && season !== 'none') paint('season', () => seasonal(art, season, layout.season));
     if (fun_ && fun_ !== 'none') paint('fun', () => fun(art, fun_, layout.fun));
+    if (fun2 && fun2 !== 'none') paint('fun2', () => fun(art, fun2, layout.fun2));
     if (kept && kept !== 'none') paint('keepsake', () => keepsake(art, kept, layout.keepsake));
     if (bed_) {
       paint('bed', () => bed(art, bed_, layout.bed));

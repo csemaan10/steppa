@@ -17,6 +17,7 @@ export const COLOURABLE_SLOTS = [
   'buddy',
   'house',
   'fun',
+  'fun2',
   'party',
   'season',
   'keepsake',

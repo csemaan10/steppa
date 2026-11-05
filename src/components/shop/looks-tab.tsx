@@ -78,21 +78,17 @@ type Props = {
   owned: ReadonlySet<string>;
   /** What the shop sells, by item (empty before migration 021). */
   prices: ReadonlyMap<string, ShopPrice>;
-  /** Treats to spend. */
-  available: number;
-  /** What's being bought right now. */
-  buying: string | null;
-  /** Shown on the pet above before you buy it. */
+  /** Shown on the pet above before you buy it (the shop floats a BuyCard for it). */
   trying: ShopThing | null;
   onTry: (thing: ShopThing | null) => void;
-  onBuy: (thing: ShopThing, price: number) => void;
 };
 
 /**
  * Looks, in three parts. The wardrobe: every look on shelves of tiles, tap one to put it on (and
- * choose its colour, for things that come in colours), locked ones saying when they unlock, and souvenirs from its trips (and keepsakes from full passport pages)
- * on a shelf of their own. For sale: toys and things for the yard to buy with treats, each tried on
- * above before you buy it. Name & species: who your pet is, kept apart from what it wears.
+ * choose its colour, for things that come in colours), locked ones saying when they unlock, and
+ * souvenirs from its trips (and keepsakes from full passport pages) on a shelf of their own. For
+ * sale: things to buy with treats, each tried on above before you buy it (see BuyCard). Name &
+ * species: who your pet is, kept apart from what it wears.
  */
 export function LooksTab({
   def,
@@ -107,11 +103,8 @@ export function LooksTab({
   onPick,
   owned,
   prices,
-  available,
-  buying,
   trying,
   onTry,
-  onBuy,
 }: Props) {
   const theme = useAppTheme();
   const { width } = useWindowDimensions();
@@ -155,8 +148,6 @@ export function LooksTab({
     return SECTIONS.map((section) => {
       const things = SHOP.filter((t) => t.section === section && prices.get(t.id)?.treats);
       if (!things.length) return null;
-      const tryingHere = trying && things.includes(trying) ? trying : null;
-      const price = tryingHere ? prices.get(tryingHere.id)! : null;
       return (
         <View key={section} style={styles.shelf}>
           <Shelf title={SECTION_TITLES[section]} note={`${things.filter((t) => owned.has(t.id)).length} of ${things.length} yours`}>
@@ -185,32 +176,6 @@ export function LooksTab({
               );
             })}
           </Shelf>
-          {tryingHere && price?.treats ? (
-            <View style={[glass(theme, 'card'), styles.buy]}>
-              <View style={styles.flex}>
-                <Text variant="titleSmall" style={styles.bold}>
-                  {tryingHere.name}
-                </Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {tryingHere.blurb}
-                </Text>
-              </View>
-              <View style={styles.buyActions}>
-                <SpendButton
-                  label="Buy"
-                  price={price.treats}
-                  compact
-                  disabled={available < price.treats || !!buying}
-                  loading={buying === tryingHere.id}
-                  onPress={() => onBuy(tryingHere, price.treats!)}
-                  accessibilityLabel={`Buy ${tryingHere.name} for ${price.treats} treats`}
-                />
-                <Button compact onPress={() => onTry(null)}>
-                  Not now
-                </Button>
-              </View>
-            </View>
-          ) : null}
         </View>
       );
     });
@@ -385,6 +350,56 @@ export function LooksTab({
             </View>
           ) : null
         )}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Buying what's being tried on: its name and what it is, the price, and Not now. The shop floats it
+ * over the bottom of the screen, so it's in view however far down the shelf you've scrolled.
+ */
+export function BuyCard({
+  thing,
+  price,
+  available,
+  buying,
+  onBuy,
+  onCancel,
+}: {
+  thing: ShopThing;
+  price: number;
+  /** Treats to spend. */
+  available: number;
+  /** What's being bought right now. */
+  buying: string | null;
+  onBuy: () => void;
+  onCancel: () => void;
+}) {
+  const theme = useAppTheme();
+  return (
+    <View style={[glass(theme, 'strong'), styles.buy]}>
+      <View style={styles.flex}>
+        <Text variant="titleSmall" style={styles.bold}>
+          {thing.name}
+        </Text>
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          {thing.blurb}
+        </Text>
+      </View>
+      <View style={styles.buyActions}>
+        <SpendButton
+          label="Buy"
+          price={price}
+          compact
+          disabled={available < price || !!buying}
+          loading={buying === thing.id}
+          onPress={onBuy}
+          accessibilityLabel={`Buy ${thing.name} for ${price} treats`}
+        />
+        <Button compact onPress={onCancel}>
+          Not now
+        </Button>
       </View>
     </View>
   );

@@ -246,6 +246,17 @@ export class Art {
     this.tint = t ? { color: t.color, amount: t.amount * amount } : null;
   }
 
+  /** Draws whatever `draw` paints with only `share` of the hour's tint (bright colours that should hold their own after dark). */
+  lightlyTinted(share: number, draw: () => void) {
+    const before = this.tint;
+    if (before) this.tint = { color: before.color, amount: before.amount * share };
+    try {
+      draw();
+    } finally {
+      this.tint = before;
+    }
+  }
+
   /** The colour as it looks at this hour. */
   tinted(color: string): string {
     return this.tint ? mix(color, this.tint.color, this.tint.amount) : color;

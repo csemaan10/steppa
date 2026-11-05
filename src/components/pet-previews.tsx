@@ -215,7 +215,7 @@ export function AdventuresPreview({
 const LOOK_GROUPS: { title: string; slots: string[] }[] = [
   { title: 'Wearing', slots: ['hat', 'glasses', 'outfit', 'collar', 'kicks'] },
   { title: 'Toys and friends', slots: ['toy', 'buddy', 'friend'] },
-  { title: 'In the yard', slots: ['yard', 'house', 'bed', 'bowl', 'fun', 'party', 'flag', 'season', 'keepsake', 'sky'] },
+  { title: 'In the yard', slots: ['yard', 'house', 'bed', 'bowl', 'fun', 'fun2', 'party', 'flag', 'season', 'keepsake', 'sky'] },
 ];
 
 /** One thing in use: its emoji (or colour) and name. */

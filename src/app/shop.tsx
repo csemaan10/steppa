@@ -2,12 +2,19 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useDeferredValue, useEffect, useRef, useState, type RefObject } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, Text } from 'react-native-paper';
-import Animated, { FadeIn, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeOutDown,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCookieFlights } from '@/components/game/cookie-flights';
 import { MagicPoof } from '@/components/game/game-fx';
-import { gameMotion } from '@/components/game/game-motion';
+import { gameMotion, riseIn } from '@/components/game/game-motion';
 import { useGameToast } from '@/components/game/game-toast';
 import { NewTrick } from '@/components/game/new-trick';
 import { SouvenirReveal } from '@/components/game/souvenir-reveal';
@@ -19,7 +26,7 @@ import { usePetPlay } from '@/components/pet-play';
 import { TreatsSheet } from '@/components/pet-treats';
 import { TreatIcon } from '@/components/treat-icon';
 import { PrimaryTabs } from '@/components/primary-tabs';
-import { LooksTab } from '@/components/shop/looks-tab';
+import { BuyCard, LooksTab } from '@/components/shop/looks-tab';
 import { TricksTab } from '@/components/shop/tricks-tab';
 import { TripsTab, type Outing } from '@/components/shop/trips-tab';
 import { visitCardFor, type VisitCard } from '@/components/visit-postcard';
@@ -302,7 +309,11 @@ function Shop({
   const counterRef = useRef<View>(null);
   const mouthRef = useRef<View>(null);
   const { fly, flights } = useCookieFlights();
-  const { show, toast } = useGameToast(insets.bottom + 24);
+  // Something tried on brings up a card to buy it, floating over the bottom of the screen; the
+  // shelves leave room for it, and toasts pop up above it.
+  const tryingPrice = trying ? price.get(trying.id)?.treats : undefined;
+  const buyCardShown = !!trying && !!tryingPrice;
+  const { show, toast } = useGameToast(insets.bottom + (buyCardShown ? BUY_CARD_ROOM : 24));
 
   // On Trips the stage shrinks toward its top, giving the passport the room.
   const small = useSharedValue(initialTab === 'trips' ? 1 : 0);
@@ -466,11 +477,8 @@ function Shop({
           onPick={pick}
           owned={owned}
           prices={price}
-          available={available}
-          buying={buying}
           trying={trying}
           onTry={tryOn}
-          onBuy={buy}
         />
       );
     }
@@ -573,7 +581,11 @@ function Shop({
               pointerEvents={value === page ? 'auto' : 'none'}
               importantForAccessibility={value === page ? 'auto' : 'no-hide-descendants'}
               accessibilityElementsHidden={value !== page}>
-              <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
+              <ScrollView
+                contentContainerStyle={[
+                  styles.content,
+                  { paddingBottom: insets.bottom + 32 + (buyCardShown && value === 'looks' ? BUY_CARD_ROOM : 0) },
+                ]}>
                 <Animated.View entering={FadeIn.duration(180)}>{renderTab(value)}</Animated.View>
               </ScrollView>
             </View>
@@ -581,6 +593,21 @@ function Shop({
         )}
       </View>
 
+      {trying && tryingPrice ? (
+        <Animated.View
+          entering={riseIn()}
+          exiting={FadeOutDown.duration(160)}
+          style={[styles.buyCard, { bottom: insets.bottom + 12 }]}>
+          <BuyCard
+            thing={trying}
+            price={tryingPrice}
+            available={available}
+            buying={buying}
+            onBuy={() => buy(trying, tryingPrice)}
+            onCancel={() => tryOn(null)}
+          />
+        </Animated.View>
+      ) : null}
       {ticket ? (
         <TripTicket
           place={ticket.place}
@@ -638,8 +665,12 @@ function Shop({
   );
 }
 
+/** Room kept at the bottom for the floating buy card: its height and a gap. */
+const BUY_CARD_ROOM = 112;
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  buyCard: { position: 'absolute', left: 16, right: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   stage: { alignItems: 'center', marginBottom: 8 },
   stageScale: { transformOrigin: 'top' },
