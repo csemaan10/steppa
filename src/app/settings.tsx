@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Appbar, Card, HelperText, Text, TextInput } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { AccountCard } from '@/components/account-card';
 import { AppLockCard } from '@/components/app-lock-card';
 import { BackgroundSyncCard } from '@/components/background-sync-card';
 import { BlockedUsersCard } from '@/components/blocked-users-card';
-import { CharacterEditorCard } from '@/components/character/character-editor-card';
+import { CharacterCard } from '@/components/character/character-card';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { GlassBackAction } from '@/components/glass-action';
 import { NotificationsCard } from '@/components/notifications-card';
@@ -47,20 +47,6 @@ export default function SettingsScreen() {
 function SettingsForm({ profile, userId }: { profile: Profile; userId: string }) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  // Opened from the Today card with focus=character: scroll the character editor into view.
-  const { focus } = useLocalSearchParams<{ focus?: string }>();
-  const scroller = useRef<ScrollView>(null);
-  const scrolledToFocus = useRef(false);
-  const scrollY = useRef(0);
-  /** Where the character editor starts in the scrolling content. */
-  const characterY = useRef(0);
-
-  // Opening or closing one of the character editor's sections can leave you far down the page (a long
-  // section like Clothes folds away under you), so come back up to the character if it's gone off the top.
-  function backToCharacter() {
-    const top = Math.max(0, characterY.current - 8);
-    if (scrollY.current > top) scroller.current?.scrollTo({ y: top, animated: true });
-  }
   const [displayName, setDisplayName] = useState(profile.display_name);
   const [goal, setGoal] = useState(String(profile.daily_goal));
   const [color, setColor] = useState(profile.avatar_color);
@@ -112,11 +98,7 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
         <Appbar.Content title="Settings" />
       </Appbar.Header>
 
-      <ScrollView
-        ref={scroller}
-        onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
-        scrollEventThrottle={32}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.preview}>
           <UserAvatar name={displayName || profile.display_name} color={color} icon={icon} size={88} />
           <Text variant="titleLarge" numberOfLines={1}>
@@ -204,15 +186,7 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
           </Card.Content>
         </Card>
 
-        <View
-          onLayout={(e) => {
-            characterY.current = e.nativeEvent.layout.y;
-            if (focus !== 'character' || scrolledToFocus.current) return;
-            scrolledToFocus.current = true;
-            scroller.current?.scrollTo({ y: e.nativeEvent.layout.y - 8, animated: true });
-          }}>
-          <CharacterEditorCard key={profile.id} profile={profile} onSectionToggle={backToCharacter} />
-        </View>
+        <CharacterCard profile={profile} />
 
         <ThemePicker />
 

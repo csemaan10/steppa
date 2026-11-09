@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Card, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 
 import { ButtonGroup } from '@/components/button-group';
+import { CollapsibleCard } from '@/components/collapsible-card';
 import { ProgressRing } from '@/components/progress-ring';
 import {
   RING_COLORS,
@@ -12,7 +13,9 @@ import {
   type RingCat,
   type RingThickness,
 } from '@/lib/ring-style';
-import { glassCard, ringTrack, useAppTheme, withAlpha } from '@/theme';
+import { ringTrack, useAppTheme, withAlpha } from '@/theme';
+
+const THICKNESS_LABELS: Record<RingThickness, string> = { slim: 'Slim', regular: 'Regular', bold: 'Bold' };
 
 /**
  * Settings card for the step ring: style (each a small live preview), the cat's coat on Cat paws,
@@ -23,9 +26,20 @@ export function RingStylePicker() {
   const settings = useRingSettings();
 
   return (
-    <Card mode="contained" style={glassCard(theme)}>
-      <Card.Title title="Progress ring" titleVariant="titleMedium" />
-      <Card.Content style={styles.content}>
+    <CollapsibleCard
+      title="Progress ring"
+      summary={`${RING_STYLE_LABELS[settings.style]} · ${THICKNESS_LABELS[settings.thickness]}`}
+      preview={
+        <ProgressRing
+          progress={0.7}
+          size={36}
+          stroke={5}
+          color={theme.colors.primary}
+          overflowColor={theme.colors.accent}
+          trackColor={ringTrack(theme)}
+        />
+      }>
+      <View style={styles.content}>
         <View style={styles.grid}>
           {RING_STYLES.map((s) => {
             const selected = s === settings.style;
@@ -111,13 +125,13 @@ export function RingStylePicker() {
             { value: 'bold', label: 'Bold' },
           ]}
         />
-      </Card.Content>
-    </Card>
+      </View>
+    </CollapsibleCard>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 10, paddingBottom: 16 },
+  content: { gap: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 8 },
   // Overflow visible so the neon glow can spread past the option's edges.
   option: {

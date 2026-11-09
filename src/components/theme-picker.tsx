@@ -1,17 +1,23 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Card, Icon, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { Icon, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+
+import { CollapsibleCard } from '@/components/collapsible-card';
 
 import { useThemeChoice, type AppearanceMode } from '@/providers/theme-provider';
-import { glassCard, PALETTES, THEME_NAMES } from '@/theme';
+import { PALETTES, THEME_NAMES } from '@/theme';
+
+const MODE_LABELS: Record<AppearanceMode, string> = { system: 'System', light: 'Light', dark: 'Dark' };
 
 export function ThemePicker() {
   const theme = useTheme();
   const { themeName, setThemeName, mode, setMode } = useThemeChoice();
 
   return (
-    <Card mode="contained" style={glassCard(theme)}>
-      <Card.Title title="Theme" titleVariant="titleMedium" />
-      <Card.Content style={styles.mode}>
+    <CollapsibleCard
+      title="Theme"
+      summary={`${PALETTES[themeName].label} · ${MODE_LABELS[mode]}`}
+      preview={<View style={[styles.preview, { backgroundColor: PALETTES[themeName].swatch }]} />}>
+      <View style={styles.mode}>
         <SegmentedButtons
           value={mode}
           onValueChange={(v) => setMode(v as AppearanceMode)}
@@ -21,8 +27,8 @@ export function ThemePicker() {
             { value: 'dark', label: 'Dark', icon: 'weather-night' },
           ]}
         />
-      </Card.Content>
-      <Card.Content style={styles.row}>
+      </View>
+      <View style={styles.row}>
         {THEME_NAMES.map((name) => {
           const palette = PALETTES[name];
           const selected = name === themeName;
@@ -51,15 +57,16 @@ export function ThemePicker() {
             </Pressable>
           );
         })}
-      </Card.Content>
-    </Card>
+      </View>
+    </CollapsibleCard>
   );
 }
 
 const styles = StyleSheet.create({
   mode: { paddingBottom: 16 },
+  preview: { width: 32, height: 32, borderRadius: 16 },
   // Four per row, so the names have room; the last row may be short.
-  row: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 16, paddingBottom: 16 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 16 },
   option: { width: '25%', alignItems: 'center', gap: 6 },
   ring: { borderWidth: 2, borderRadius: 999, padding: 3 },
   swatch: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },

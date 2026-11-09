@@ -76,6 +76,15 @@ function RootNavigator() {
               : { presentation: 'transparentModal', animation: 'none', gestureEnabled: false }
           }
         />
+        {/* Opens out of the Settings card the same way. */}
+        <Stack.Screen
+          name="character"
+          options={
+            Platform.OS === 'ios'
+              ? { gestureEnabled: true }
+              : { presentation: 'transparentModal', animation: 'none', gestureEnabled: false }
+          }
+        />
         <Stack.Screen name="user/[id]" />
         <Stack.Screen name="group-settings/[id]" />
         <Stack.Screen name="settings" />

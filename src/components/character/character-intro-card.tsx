@@ -8,6 +8,7 @@ import { Button } from '@/components/button';
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import type { Profile } from '@/lib/api';
 import { hashString, normalizeLook } from '@/lib/character';
+import { rememberLook } from '@/lib/look-store';
 import { glassCard } from '@/theme';
 
 const SEEN_KEY = 'steppa:character-intro-seen';
@@ -47,7 +48,8 @@ export function CharacterIntroCard({ profile, onDone }: { profile: Profile; onDo
 
   function customize() {
     dismiss();
-    router.push({ pathname: '/settings', params: { focus: 'character' } });
+    rememberLook(profile.id, look);
+    router.push('/character');
   }
 
   return (

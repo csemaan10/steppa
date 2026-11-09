@@ -1,11 +1,9 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { Card, Chip, HelperText, Text, useTheme } from 'react-native-paper';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Chip, Text, useTheme } from 'react-native-paper';
 
-import { CharacterCanvas } from '@/components/character/character-canvas';
 import { EntrancePreview } from '@/components/character/entrance-preview';
 import { CollapsibleSection } from '@/components/collapsible-section';
-import { updateProfile, type Profile } from '@/lib/api';
 import {
   BOTTOMS,
   ENTRANCES,
@@ -28,45 +26,32 @@ import {
   TOPS,
   WATCHES,
   WATCH_COLORS,
-  hashString,
-  normalizeLook,
   togglePet,
   type CharacterLook,
 } from '@/lib/character';
-import { glassCard } from '@/theme';
 
 type Props = {
-  profile: Profile;
-  /** A section opened or closed, which changes the card's height under the person scrolling. */
-  onSectionToggle?: () => void;
+  look: CharacterLook;
+  userId: string;
+  onChange: (patch: Partial<CharacterLook>) => void;
+  /** A section was opened, e.g. to bring it into view once the one above has folded away. */
+  onSectionOpen?: (key: SectionKey) => void;
+  /** Where each section sits within the editor, for scrolling one into view. */
+  onSectionLayout?: (key: SectionKey, y: number) => void;
 };
-type SectionKey = 'move' | 'entrance' | 'body' | 'face' | 'clothes' | 'watch' | 'pets';
+export type SectionKey = 'move' | 'entrance' | 'body' | 'face' | 'clothes' | 'watch' | 'pets';
 
-/** Settings card for designing your podium character. Each change saves immediately. */
-export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
+/** The podium character's options, in folding sections. `onChange` applies (and saves) each pick. */
+export function CharacterEditor({ look, userId, onChange: change, onSectionOpen, onSectionLayout }: Props) {
   const theme = useTheme();
-  const [look, setLook] = useState<CharacterLook>(() => normalizeLook(profile.podium_character, profile.id));
-  const [error, setError] = useState<string | null>(null);
-  const [stageWidth, setStageWidth] = useState(0);
-  // One section open at a time keeps the card short; all start closed.
+  // One section open at a time keeps the list short; all start closed.
   const [open, setOpen] = useState<SectionKey | null>(null);
-  const seed = (hashString(profile.id) % 1000) / 1000;
   const toggle = (key: SectionKey) => {
-    setOpen((current) => (current === key ? null : key));
-    onSectionToggle?.();
+    const opening = open !== key;
+    setOpen(opening ? key : null);
+    if (opening) onSectionOpen?.(key);
   };
-
-  // Save each change right away; roll back if the server rejects it.
-  function change(patch: Partial<CharacterLook>) {
-    const previous = look;
-    const next = { ...look, ...patch };
-    setLook(next);
-    setError(null);
-    updateProfile(profile.id, { podium_character: next }).catch((e) => {
-      setLook(previous);
-      setError(e instanceof Error ? e.message : 'Could not save');
-    });
-  }
+  const at = (key: SectionKey) => (e: LayoutChangeEvent) => onSectionLayout?.(key, e.nativeEvent.layout.y);
 
   const chipRow = <K extends keyof CharacterLook>(title: string, key: K, values: readonly string[]) => (
     <View style={styles.group}>
@@ -115,16 +100,9 @@ export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
   const ownFace = OWN_FACE_IDLES.includes(look.idle);
 
   return (
-    <Card mode="contained" style={glassCard(theme)}>
-      <Card.Title title="Podium character" subtitle="How you appear on podiums and in trophy cabinets" titleVariant="titleMedium" />
-      <Card.Content style={styles.content}>
-        <View
-          style={[styles.stage, { backgroundColor: theme.colors.surfaceVariant }]}
-          onLayout={(e) => setStageWidth(e.nativeEvent.layout.width)}>
-          {stageWidth > 0 ? <CharacterCanvas look={look} seed={seed} width={stageWidth} /> : null}
-        </View>
-
-        <CollapsibleSection title="Move" summary={LABELS[look.idle]} expanded={open === 'move'} onToggle={() => toggle('move')}>
+    <View style={styles.content}>
+        <CollapsibleSection title="Move" summary={LABELS[look.idle]} expanded={open === 'move'} onToggle={() => toggle('move')}
+          onLayout={at('move')}>
           {IDLE_GROUPS.map((g) => (
             <View key={g.title}>{chipRow(g.title, 'idle', g.idles)}</View>
           ))}
@@ -134,9 +112,10 @@ export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
           title="Podium entrance"
           summary={LABELS[look.entrance]}
           expanded={open === 'entrance'}
-          onToggle={() => toggle('entrance')}>
+          onToggle={() => toggle('entrance')}
+          onLayout={at('entrance')}>
           {chipRow('How you get up on the podium', 'entrance', ENTRANCES)}
-          <EntrancePreview key={look.entrance} look={look} userId={profile.id} />
+          <EntrancePreview key={look.entrance} look={look} userId={userId} />
         </CollapsibleSection>
 
         <CollapsibleSection
@@ -144,7 +123,8 @@ export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
           summary={LABELS[look.hair]}
           accessory={<View style={[styles.dot, { backgroundColor: look.skin }]} />}
           expanded={open === 'body'}
-          onToggle={() => toggle('body')}>
+          onToggle={() => toggle('body')}
+          onLayout={at('body')}>
           {swatchRow('Skin', 'skin', SKINS)}
           {chipRow('Hair', 'hair', HAIR_STYLES)}
           {/* Also colours a beard or moustache. */}
@@ -156,7 +136,8 @@ export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
           summary={ownFace ? 'Set by move' : LABELS[look.expression]}
           accessory={<View style={[styles.dot, { backgroundColor: look.eyeColor }]} />}
           expanded={open === 'face'}
-          onToggle={() => toggle('face')}>
+          onToggle={() => toggle('face')}
+          onLayout={at('face')}>
           {ownFace ? (
             <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
               {LABELS[look.idle]} has its own face, so expressions are hidden. Pick another move to choose one.
@@ -184,7 +165,8 @@ export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
           title="Clothes"
           summary={`${look.topFit === 'baggy' ? 'Baggy ' : ''}${LABELS[look.top]} · ${look.bottomFit === 'baggy' && look.bottom !== 'skirt' ? 'Baggy ' : ''}${LABELS[look.bottom]}`}
           expanded={open === 'clothes'}
-          onToggle={() => toggle('clothes')}>
+          onToggle={() => toggle('clothes')}
+          onLayout={at('clothes')}>
           {chipRow('Top', 'top', TOPS)}
           {chipRow('Top fit', 'topFit', FITS)}
           {swatchRow('Top colour', 'topColor', TOP_COLORS)}
@@ -230,7 +212,8 @@ export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
           title="Watch"
           summary={LABELS[look.watch]}
           expanded={open === 'watch'}
-          onToggle={() => toggle('watch')}>
+          onToggle={() => toggle('watch')}
+          onLayout={at('watch')}>
           {chipRow('Watch', 'watch', WATCHES)}
           {look.watch !== 'none' && look.watch !== 'ring' ? swatchRow('Strap colour', 'watchColor', WATCH_COLORS) : null}
         </CollapsibleSection>
@@ -239,7 +222,8 @@ export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
           title="Pets"
           summary={pets.length ? pets.join(', ') : 'None'}
           expanded={open === 'pets'}
-          onToggle={() => toggle('pets')}>
+          onToggle={() => toggle('pets')}
+          onLayout={at('pets')}>
           <View style={styles.wrap}>
             {PETS.map((pet) => {
               const selected = look.pets.includes(pet);
@@ -257,20 +241,12 @@ export function CharacterEditorCard({ profile, onSectionToggle }: Props) {
             })}
           </View>
         </CollapsibleSection>
-
-        {error ? (
-          <HelperText type="error" visible>
-            {error}
-          </HelperText>
-        ) : null}
-      </Card.Content>
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 10, paddingBottom: 16 },
-  stage: { borderRadius: 16, overflow: 'hidden', paddingTop: 8, marginBottom: 6 },
+  content: { gap: 10 },
   group: { gap: 8 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   swatch: { width: 30, height: 30, borderRadius: 15, borderWidth: 1 },

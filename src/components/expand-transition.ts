@@ -37,6 +37,17 @@ export function openGroupFrom(card: View | null, id: string) {
   });
 }
 
+/** Opens the podium character editor out of the tapped card, like a group (see openGroupFrom). */
+export function openCharacterFrom(card: View | null) {
+  if (!card || !EXPAND) {
+    router.push('/character');
+    return;
+  }
+  card.measureInWindow((_x, y, _w, h) => {
+    router.push({ pathname: '/character', params: { oy: String(Math.round(y)), oh: String(Math.round(h)) } });
+  });
+}
+
 /**
  * Material "container transform": the screen grows from the source card's rect to full screen,
  * and shrinks back into it on close. Content stays full-size and is clipped, so it never re-lays out.

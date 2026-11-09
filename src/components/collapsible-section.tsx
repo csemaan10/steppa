@@ -1,7 +1,10 @@
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, type ReactNode } from 'react';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Icon, Text, useTheme } from 'react-native-paper';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+
+import { Collapsible } from '@/components/collapsible';
+import { motion } from '@/theme/motion';
 
 type Props = {
   title: string;
@@ -11,14 +14,15 @@ type Props = {
   accessory?: ReactNode;
   expanded: boolean;
   onToggle: () => void;
+  onLayout?: (e: LayoutChangeEvent) => void;
   children: ReactNode;
 };
 
 /** A tappable header that shows or hides its options, for keeping long settings cards short. */
-export function CollapsibleSection({ title, summary, accessory, expanded, onToggle, children }: Props) {
+export function CollapsibleSection({ title, summary, accessory, expanded, onToggle, onLayout, children }: Props) {
   const theme = useTheme();
   return (
-    <View style={[styles.box, { borderColor: theme.colors.outlineVariant }]}>
+    <View style={[styles.box, { borderColor: theme.colors.outlineVariant }]} onLayout={onLayout}>
       <Pressable
         onPress={onToggle}
         accessibilityRole="button"
@@ -35,14 +39,26 @@ export function CollapsibleSection({ title, summary, accessory, expanded, onTogg
             {summary}
           </Text>
         ) : null}
-        <Icon source={expanded ? 'chevron-up' : 'chevron-down'} size={22} color={theme.colors.onSurfaceVariant} />
+        <Chevron expanded={expanded} color={theme.colors.onSurfaceVariant} />
       </Pressable>
-      {expanded ? (
-        <Animated.View entering={FadeIn.duration(180)} style={styles.body}>
-          {children}
-        </Animated.View>
-      ) : null}
+      <Collapsible expanded={expanded} style={styles.body}>
+        {children}
+      </Collapsible>
     </View>
+  );
+}
+
+/** A down chevron that turns to point up while its section is open. */
+export function Chevron({ expanded, color, size = 22 }: { expanded: boolean; color: string; size?: number }) {
+  const turn = useSharedValue(expanded ? 1 : 0);
+  useEffect(() => {
+    turn.set(withSpring(expanded ? 1 : 0, motion.spatial));
+  }, [turn, expanded]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value * 180}deg` }] }));
+  return (
+    <Animated.View style={style}>
+      <Icon source="chevron-down" size={size} color={color} />
+    </Animated.View>
   );
 }
 
