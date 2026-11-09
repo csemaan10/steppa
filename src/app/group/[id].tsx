@@ -57,12 +57,16 @@ export default function GroupScreen() {
   function markVisited(next: GroupView) {
     setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
   }
+  // The page whose animations run. It follows `view` once the slide has landed, so a page's
+  // characters and scenes don't start up on the UI thread while the pages are still moving.
+  const [activeView, setActiveView] = useState<GroupView>('board');
   function openView(next: GroupView) {
     setView(next);
     markVisited(next);
     page.value = withTiming(VIEWS.indexOf(next), { duration: PAGE_MS });
   }
   // A swipe has started from page i: build the pages either side so they slide in with content.
+  // Usually they're built already (see below); this covers a swipe before that.
   function prepareNeighbours(i: number) {
     if (VIEWS[i - 1]) markVisited(VIEWS[i - 1]);
     if (VIEWS[i + 1]) markVisited(VIEWS[i + 1]);
@@ -71,6 +75,23 @@ export default function GroupScreen() {
     setView(VIEWS[i]);
     markVisited(VIEWS[i]);
   }
+  // Once the slide lands, the new page's animations start. A bit later (and, on open, once the
+  // screen has expanded) the pages either side are built while nothing is moving, rather than
+  // mid-swipe when building them drops frames.
+  useEffect(() => {
+    const landed = setTimeout(() => setActiveView(view), PAGE_MS);
+    const i = VIEWS.indexOf(view);
+    const timer = setTimeout(() => {
+      setVisited((prev) => {
+        const around = [VIEWS[i - 1], VIEWS[i + 1]].filter((v): v is GroupView => !!v && !prev.has(v));
+        return around.length ? new Set([...prev, ...around]) : prev;
+      });
+    }, PAGE_MS + 400);
+    return () => {
+      clearTimeout(landed);
+      clearTimeout(timer);
+    };
+  }, [view]);
 
   // Swipe between the tabs. `page` is the live page position (0 = Leaderboard, between two pages
   // mid-swipe); the pages and the tab indicator both follow it.
@@ -338,7 +359,7 @@ export default function GroupScreen() {
                         {data?.leaderboard.length ? (
                           <Podium
                             replayKey={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
-                            animate={view === 'board' && podiumInView}
+                            animate={activeView === 'board' && podiumInView}
                             rows={data.leaderboard}
                             userId={userId}
                             showAverage={!singleDay}
@@ -396,7 +417,7 @@ export default function GroupScreen() {
                       userId={userId}
                       members={members}
                       onRead={onChatRead}
-                      active={view === 'chat'}
+                      active={activeView === 'chat'}
                     />
                   ) : null}
                 </View>
@@ -406,7 +427,7 @@ export default function GroupScreen() {
                       group={data.group}
                       userId={userId}
                       members={data.leaderboard}
-                      active={view === 'journey'}
+                      active={activeView === 'journey'}
                     />
                   ) : null}
                 </View>
@@ -416,7 +437,7 @@ export default function GroupScreen() {
                       rows={data?.leaderboard ?? []}
                       userId={userId}
                       onPressUser={openUser}
-                      active={view === 'trophies'}
+                      active={activeView === 'trophies'}
                     />
                   ) : null}
                 </View>

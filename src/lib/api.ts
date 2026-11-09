@@ -287,6 +287,31 @@ export async function getMyGroups(): Promise<GroupWithCount[]> {
   }));
 }
 
+/**
+ * Your groups with the id of the newest message someone else posted in each, in one request
+ * (rather than a getLatestMessageId call per group).
+ */
+export async function getMyGroupsWithLatestMessage(
+  userId: string
+): Promise<(GroupWithCount & { latest_message_id: number | null })[]> {
+  const rows = unwrap<
+    (Group & { group_members: { count: number }[]; group_messages: { id: number }[] })[]
+  >(
+    await supabase
+      .from('groups')
+      .select('*, group_members(count), group_messages(id)')
+      .neq('group_messages.user_id', userId)
+      .order('created_at', { ascending: false })
+      .order('id', { referencedTable: 'group_messages', ascending: false })
+      .limit(1, { referencedTable: 'group_messages' })
+  );
+  return rows.map(({ group_members, group_messages, ...g }) => ({
+    ...g,
+    member_count: group_members[0]?.count ?? 0,
+    latest_message_id: group_messages[0]?.id ?? null,
+  }));
+}
+
 export async function getGroup(id: string): Promise<Group> {
   return unwrap<Group>(await supabase.from('groups').select('*').eq('id', id).single());
 }

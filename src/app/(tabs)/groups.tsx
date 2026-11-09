@@ -17,7 +17,7 @@ import { FabMenu } from '@/components/fab-menu';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GroupPreview } from '@/components/group-preview';
 import { useLoader } from '@/hooks/use-loader';
-import { createGroup, getLatestMessageId, getLeaderboard, getMyGroups, joinGroup } from '@/lib/api';
+import { createGroup, getLeaderboard, getMyGroupsWithLatestMessage, joinGroup } from '@/lib/api';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
@@ -29,17 +29,23 @@ export default function GroupsScreen() {
   const tabBarSpace = useTabBarSpace();
   const insets = useSafeAreaInsets();
   const { data: groups, loading, error, reload } = useLoader(async () => {
-    const list = await getMyGroups();
+    // One request for the groups and their unread markers, then each group's board in parallel.
+    const list = await getMyGroupsWithLatestMessage(userId);
     return Promise.all(
-      list.map(async (group) => {
-        const [rows, latestMessageId] = await Promise.all([
-          getLeaderboard(group.id, 'today'),
-          getLatestMessageId(group.id, userId),
-        ]);
-        return { group, rows, latestMessageId };
-      })
+      list.map(async ({ latest_message_id, ...group }) => ({
+        group,
+        rows: await getLeaderboard(group.id, 'today'),
+        latestMessageId: latest_message_id,
+      }))
     );
   }, userId);
+  // Only pull-to-refresh shows the spinner; coming back to the tab refreshes quietly over the old list.
+  const [refreshing, setRefreshing] = useState(false);
+  async function pullToRefresh() {
+    setRefreshing(true);
+    await reload();
+    setRefreshing(false);
+  }
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -84,9 +90,11 @@ export default function GroupsScreen() {
         data={groups ?? []}
         keyExtractor={(g) => g.group.id}
         contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace + 64 }]}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing || (loading && !groups)} onRefresh={pullToRefresh} />
+        }
         ListEmptyComponent={
-          !loading ? (
+          groups || error ? (
             <View style={styles.empty}>
               <Avatar.Icon icon="account-group-outline" size={72} />
               <Text variant="titleMedium">{error ?? 'No groups yet'}</Text>

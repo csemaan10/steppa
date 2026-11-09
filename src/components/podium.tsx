@@ -134,10 +134,16 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
     };
   }, [height, reveal, clock, delay, place, entrance, replayKey]);
 
-  const blockStyle = useAnimatedStyle(() => ({ height: height.value }));
+  // The rise is drawn with transforms over a block laid out at full height, so the podium keeps
+  // one size and the list it heads isn't laid out again every frame. The block slides up out of
+  // its clip, and everything on it rides down by the part still hidden.
+  const blockStyle = useAnimatedStyle(() => ({ transform: [{ translateY: HEIGHTS[place]! - height.value }] }));
   const headStyle = useAnimatedStyle(() => ({
     opacity: reveal.value,
-    transform: [{ translateY: (1 - reveal.value) * 12 }, { scale: 0.85 + reveal.value * 0.15 }],
+    transform: [
+      { translateY: (1 - reveal.value) * 12 + HEIGHTS[place]! - height.value },
+      { scale: 0.85 + reveal.value * 0.15 },
+    ],
   }));
 
   const seed = (hashString(row.user_id) % 1000) / 1000;
@@ -197,16 +203,13 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
           )}
         </View>
       </Animated.View>
-      <Animated.View
-        style={[
-          styles.block,
-          { backgroundColor: blockColors[0] },
-          blockStyle,
-        ]}>
-        <Text variant="headlineMedium" style={[styles.place, { color: blockColors[1] }]}>
-          {place + 1}
-        </Text>
-      </Animated.View>
+      <View style={[styles.blockClip, { height: HEIGHTS[place] }]}>
+        <Animated.View style={[styles.block, { backgroundColor: blockColors[0] }, blockStyle]}>
+          <Text variant="headlineMedium" style={[styles.place, { color: blockColors[1] }]}>
+            {place + 1}
+          </Text>
+        </Animated.View>
+      </View>
     </Pressable>
   );
 }
@@ -221,14 +224,14 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%' },
   name: { flexShrink: 1 },
   stepsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  blockClip: { width: '100%', overflow: 'hidden', zIndex: 1 },
   block: {
-    width: '100%',
+    flex: 1,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     alignItems: 'center',
     paddingTop: 8,
     overflow: 'hidden',
-    zIndex: 1,
   },
   place: { fontWeight: '700' },
 });
