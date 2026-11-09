@@ -46,7 +46,7 @@ import {
   requestHealthPermission,
 } from '@/lib/health';
 import { syncPushToken } from '@/lib/notifications';
-import { notifyPetMilestone } from '@/lib/pet-milestones';
+import { notifyPetMilestone, syncPetPushSetting } from '@/lib/pet-milestones';
 import { firstUnseenGroup, isRecapShowing, loadRecap, markRecapSeen } from '@/lib/recap';
 import { useUserId } from '@/providers/auth-provider';
 import { glassCard, ringTrack, screenBackground, transparentHeader, useAppTheme } from '@/theme';
@@ -81,9 +81,11 @@ export default function TodayScreen() {
   const { data, loading, reload } = useLoader(async () => {
     const { health, syncError } = await connectAndSync(userId);
     await syncTimezone(userId);
-    // In the background: neither blocks the screen, and both do nothing without permission.
+    // In the background, none blocking the screen. The first two do nothing without permission; the
+    // last copies the pet switch to the account once, for the server's visit pushes.
     syncPushToken(userId);
     notifyPetMilestone(userId);
+    syncPetPushSetting(userId);
     const [profile, history, groups, lifetime, journey, hasPet] = await Promise.all([
       getProfile(userId),
       // Two weeks: the tiles show the last 7 days, and the detail card compares them with the 7 before.

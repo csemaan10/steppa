@@ -16,6 +16,8 @@ export type Profile = {
   daily_goal: number;
   /** Push when a group's daily results are in (migration 017; missing before it, which means on). */
   recap_push?: boolean;
+  /** Pet notifications that come from the server (a friend's pet visiting); mirrors the switch on the phone. */
+  pet_push?: boolean;
   created_at: string;
 };
 
@@ -226,7 +228,7 @@ export async function getProfile(id: string): Promise<Profile> {
 export async function updateProfile(
   id: string,
   patch: Partial<
-    Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon' | 'podium_character' | 'recap_push'>
+    Pick<Profile, 'display_name' | 'daily_goal' | 'avatar_color' | 'avatar_icon' | 'podium_character' | 'recap_push' | 'pet_push'>
   >
 ): Promise<Profile> {
   return unwrap<Profile>(

@@ -6,7 +6,7 @@ import 'expo-sqlite/localStorage/install';
 
 import * as Notifications from 'expo-notifications';
 
-import { getWorld } from '@/lib/api';
+import { getWorld, updateProfile } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { ensureChannels, PET_CHANNEL, pushPermission } from '@/lib/notifications';
 import { milestoneTreats } from '@/lib/treats';
@@ -34,6 +34,24 @@ export function setPetPushEnabled(on: boolean) {
   try {
     localStorage.setItem(ENABLED_KEY, on ? '1' : '0');
   } catch {}
+}
+
+/** The switch's value last saved on the account from this phone. */
+const syncedKey = (userId: string) => `steppa:pet-push-synced:${userId}`;
+
+/**
+ * Copies the switch to the account (profiles.pet_push), where the server reads it before telling you a
+ * friend's pet came over (migration 028). Only writes when it changed; retried on the next call if it fails.
+ */
+export async function syncPetPushSetting(userId: string): Promise<void> {
+  const value = isPetPushEnabled() ? '1' : '0';
+  try {
+    if (localStorage.getItem(syncedKey(userId)) === value) return;
+    await updateProfile(userId, { pet_push: value === '1' });
+    localStorage.setItem(syncedKey(userId), value);
+  } catch {
+    // Offline, or before migration 028: try again next time.
+  }
 }
 
 /** 7 am next if it's night now, else null (straight away). */

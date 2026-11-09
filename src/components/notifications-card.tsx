@@ -6,7 +6,7 @@ import { Card, List, Switch, useTheme } from 'react-native-paper';
 import { Button } from '@/components/button';
 import { updateProfile, type Profile } from '@/lib/api';
 import { askForPush, pushPermission, type PushPermission } from '@/lib/notifications';
-import { isPetPushEnabled, setPetPushEnabled } from '@/lib/pet-milestones';
+import { isPetPushEnabled, setPetPushEnabled, syncPetPushSetting } from '@/lib/pet-milestones';
 import { glassCard } from '@/theme';
 
 /** Settings switches for the two notifications Steppa sends, with whether the phone lets it notify. */
@@ -46,10 +46,11 @@ export function NotificationsCard({ profile }: { profile: Profile }) {
     }
   }
 
-  // Kept on this phone: it's the phone that notices the milestone.
+  // Kept on this phone, which notices milestones, and copied to the account for friends' visits.
   async function togglePet(on: boolean) {
     setPet(on);
     setPetPushEnabled(on);
+    syncPetPushSetting(profile.id);
     if (on) await askIfUndecided();
   }
 
@@ -69,8 +70,8 @@ export function NotificationsCard({ profile }: { profile: Profile }) {
         disabled={busy}
       />
       <List.Item
-        title="Pet milestones"
-        description={describe(pet, 'When your pet reaches a new milestone')}
+        title="Pet"
+        description={describe(pet, "When your pet reaches a new milestone, or a friend's pet comes over to visit")}
         descriptionNumberOfLines={3}
         left={(props) => <List.Icon {...props} icon="paw" />}
         right={() => <Switch value={pet} onValueChange={togglePet} />}

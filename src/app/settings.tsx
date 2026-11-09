@@ -12,6 +12,7 @@ import { CharacterCard } from '@/components/character/character-card';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { GlassBackAction } from '@/components/glass-action';
 import { NotificationsCard } from '@/components/notifications-card';
+import { SectionHeader } from '@/components/section-header';
 import { RingStylePicker } from '@/components/ring-style-picker';
 import { StepCheckCard } from '@/components/step-check-card';
 import { ThemePicker } from '@/components/theme-picker';
@@ -196,12 +197,14 @@ function SettingsForm({ profile, userId }: { profile: Profile; userId: string })
 
         <BackgroundSyncCard />
 
-        <NotificationsCard profile={profile} />
-
         <BlockedUsersCard userId={userId} />
 
         <StepCheckCard />
 
+        <SectionHeader title="Notifications" />
+        <NotificationsCard profile={profile} />
+
+        <SectionHeader title="Account" />
         <AccountCard userId={userId} />
       </ScrollView>
     </View>
