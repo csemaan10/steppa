@@ -4,8 +4,9 @@ import { Portal, Text } from 'react-native-paper';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Frost, frostPane } from '@/components/frost';
 import { GlassAction } from '@/components/glass-action';
-import { glass, useAppTheme } from '@/theme';
+import { useAppTheme } from '@/theme';
 import { motion } from '@/theme/motion';
 
 export type Rect = { x: number; y: number; width: number; height: number };
@@ -103,7 +104,9 @@ export function ExpandingCard({ origin, title, subtitle, onClose, children }: Pr
           <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close" />
         </Animated.View>
 
-        <Animated.View style={[styles.card, glass(theme, 'strong'), cardStyle]} accessibilityViewIsModal>
+        <Animated.View style={[styles.card, frostPane(theme), cardStyle]} accessibilityViewIsModal>
+          {/* Frosted like the tab bar: the screen behind blurs, rather than showing through a tint. */}
+          <Frost />
           <Animated.View style={[styles.content, { width: target.width, height: target.height }, contentStyle]}>
             <View style={styles.header}>
               <View style={styles.flex}>

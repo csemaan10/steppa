@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useDeferredValue, useEffect, useRef, useState, type RefObject } from 'react';
+import { BlurTargetView } from 'expo-blur';
+import { createRef, useDeferredValue, useEffect, useRef, useState, type RefObject } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, Text } from 'react-native-paper';
 import Animated, {
@@ -158,7 +159,8 @@ export default function ShopScreen() {
   const world = editor.world && WORLDS[editor.world.kind] ? editor.world : null;
 
   return (
-    <View style={[styles.flex, screenBackground(theme)]}>
+    // The treat sheet floats over the shop, so on Android it blurs this rather than the tabs below.
+    <BlurTargetView ref={shopBlurTarget} style={[styles.flex, screenBackground(theme)]}>
       {!data || !world ? (
         <>
           <Appbar.Header style={transparentHeader}>
@@ -193,9 +195,11 @@ export default function ShopScreen() {
           editor={editor}
         />
       )}
-    </View>
+    </BlurTargetView>
   );
 }
+
+const shopBlurTarget = createRef<View>();
 
 function Shop({
   world,
@@ -657,6 +661,7 @@ function Shop({
           available={available}
           toNext={treats.toNext}
           onClose={() => setSheetOpen(false)}
+          blurTarget={shopBlurTarget}
         />
       ) : null}
       {flights}

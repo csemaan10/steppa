@@ -5,8 +5,9 @@ import { Icon, ProgressBar, Text } from 'react-native-paper';
 import { ExpandingCard, type Rect } from '@/components/expanding-card';
 import { SectionHeader } from '@/components/section-header';
 import { WeekChart } from '@/components/week-chart';
-import { summarize, type DaySteps } from '@/lib/api';
-import { addDays, formatSteps, toDayKey } from '@/lib/dates';
+import { WeekdayChart, weekdayAverages } from '@/components/weekday-chart';
+import { activeAverage, summarize, type DaySteps } from '@/lib/api';
+import { addDays, formatSteps, shortWeekday, toDayKey } from '@/lib/dates';
 import { KCAL_PER_STEP, KM_PER_STEP, STEPS_PER_MINUTE } from '@/lib/estimates';
 import { useAppTheme, withAlpha } from '@/theme';
 
@@ -19,10 +20,12 @@ const TITLES: Record<WeekDetailKind, string> = {
   goal: 'Goal met',
 };
 
+const WEEKDAY_NAMES = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
 const SHORT_DATE = { month: 'short', day: 'numeric' } as const;
 
 const dayLabel = (day: string, opts: Intl.DateTimeFormatOptions) =>
   new Date(`${day}T12:00:00`).toLocaleDateString(undefined, opts);
+const dayOfWeek = (day: string) => new Date(`${day}T12:00:00`).getDay();
 
 /** "Today", "Yesterday", else the weekday. */
 function dayName(day: string) {
@@ -40,9 +43,20 @@ function walkingTime(minutes: number) {
   return h ? `${h} h ${m} min` : `${m} min`;
 }
 
+/**
+ * The history in 7-day blocks ending today, newest first, the same windows as the Today tiles.
+ * Older blocks with no steps at all (before you joined) are left off.
+ */
+function weekBlocks(history: DaySteps[]): DaySteps[][] {
+  const blocks: DaySteps[][] = [];
+  for (let end = history.length; end >= 7; end -= 7) blocks.push(history.slice(end - 7, end));
+  while (blocks.length > 1 && blocks[blocks.length - 1]!.every((d) => d.steps === 0)) blocks.pop();
+  return blocks;
+}
+
 type Props = {
   kind: WeekDetailKind;
-  /** Oldest first: the 7 days shown, after the 7 before them for comparison. */
+  /** Oldest first, ending today: the last 8 weeks. The cards look at the last 7 days against this. */
   history: DaySteps[];
   goal: number;
   streak: number;
@@ -51,12 +65,12 @@ type Props = {
   onClose: () => void;
 };
 
-/** One of the Today tiles opened up: the detail behind that one number. */
+/** One of the Today tiles opened up: the story behind that one number, different for each. */
 export function WeekDetail({ kind, history, goal, streak, origin, onClose }: Props) {
   const week = history.slice(-7);
-  const before = history.slice(0, -7);
+  const before = history.slice(-14, -7);
   const range = week.length ? `${dayLabel(week[0].day, SHORT_DATE)} – ${dayLabel(week[week.length - 1].day, SHORT_DATE)}` : '';
-  const props = { week, before, goal };
+  const props = { week, before, history, goal };
 
   return (
     <ExpandingCard origin={origin} title={TITLES[kind]} subtitle={`Last 7 days · ${range}`} onClose={onClose}>
@@ -68,15 +82,25 @@ export function WeekDetail({ kind, history, goal, streak, origin, onClose }: Pro
   );
 }
 
-type DetailProps = { week: DaySteps[]; before: DaySteps[]; goal: number };
+type DetailProps = { week: DaySteps[]; before: DaySteps[]; history: DaySteps[]; goal: number };
 
-function AverageDetail({ week, before, goal }: DetailProps) {
-  const theme = useAppTheme();
+/** The average, and the weekly rhythm behind it. */
+function AverageDetail({ week, before, history, goal }: DetailProps) {
   const { average } = summarize(week);
   const previous = summarize(before).average;
   const walked = week.filter((d) => d.steps > 0);
-  const above = walked.filter((d) => d.steps >= average).length;
-  const quietest = walked.reduce<DaySteps | null>((q, d) => (!q || d.steps < q.steps ? d : q), null);
+  const weeks = weekBlocks(history).length;
+
+  // Weekdays against weekends, over every day walked in the 8 weeks.
+  const split = (weekend: boolean) => {
+    const days = history.filter((d) => d.steps > 0 && [0, 6].includes(dayOfWeek(d.day)) === weekend);
+    return activeAverage(days.reduce((s, d) => s + d.steps, 0), days.length);
+  };
+  const weekdays = split(false);
+  const weekends = split(true);
+  const byWeekday = weekdayAverages(history);
+  const walkedWeekdays = byWeekday.map((avg, i) => ({ avg, i })).filter((w) => w.avg > 0);
+  const quietest = walkedWeekdays.reduce<{ avg: number; i: number } | null>((q, w) => (!q || w.avg < q.avg ? w : q), null);
 
   return (
     <>
@@ -85,28 +109,33 @@ function AverageDetail({ week, before, goal }: DetailProps) {
         caption={walked.length ? `steps a day, over the ${plural(walked.length, 'day')} you walked` : 'No steps yet'}>
         <Change now={average} then={previous} />
       </Hero>
-      <WeekChart series={[{ name: 'Steps', color: theme.colors.primary, data: week }]} goal={goal} />
+      <SectionHeader title="Your rhythm" note={`Last ${plural(weeks, 'week')}`} />
+      <WeekdayChart history={history} />
       <Tiles
         items={[
-          { label: 'Of your goal', value: `${Math.round((average / goal) * 100)}%`, supporting: `Goal: ${formatSteps(goal)}` },
-          { label: 'At or above average', value: plural(above, 'day'), supporting: `of ${walked.length} you walked` },
+          { label: 'Weekdays', value: weekdays ? formatSteps(weekdays) : '–', supporting: 'Mon to Fri, average' },
+          { label: 'Weekends', value: weekends ? formatSteps(weekends) : '–', supporting: 'Sat and Sun, average' },
           {
-            label: 'Quietest day',
-            value: quietest ? formatSteps(quietest.steps) : '–',
-            supporting: quietest ? dayName(quietest.day) : 'No steps yet',
+            label: 'Quietest weekday',
+            value: quietest ? WEEKDAY_NAMES[quietest.i]! : '–',
+            supporting: quietest ? `avg ${formatSteps(quietest.avg)}` : 'No steps yet',
           },
-          { label: 'The 7 days before', value: previous ? formatSteps(previous) : '–', supporting: 'daily average' },
+          { label: 'Of your goal', value: `${Math.round((average / goal) * 100)}%`, supporting: `Goal: ${formatSteps(goal)}` },
         ]}
       />
     </>
   );
 }
 
-function TotalDetail({ week, before, goal }: DetailProps) {
+/** The week's total, what it adds up to, and how it compares with the weeks before. */
+function TotalDetail({ week, before, history, goal }: DetailProps) {
   const theme = useAppTheme();
   const { total } = summarize(week);
   const previous = summarize(before).total;
   const weekly = goal * 7;
+  const blocks = weekBlocks(history);
+  const totals = blocks.map((b) => summarize(b).total);
+  const scale = Math.max(weekly, ...totals, 1);
 
   return (
     <>
@@ -120,40 +149,89 @@ function TotalDetail({ week, before, goal }: DetailProps) {
         </View>
         <Change now={total} then={previous} />
       </Hero>
-      <WeekChart series={[{ name: 'Steps', color: theme.colors.primary, data: week }]} goal={goal} />
       <SectionHeader title="That's about" />
       <Tiles
         items={[
           { label: 'Distance', value: `${(total * KM_PER_STEP).toFixed(1)} km`, supporting: 'estimated' },
           { label: 'Walking time', value: walkingTime(total / STEPS_PER_MINUTE), supporting: 'at an easy pace' },
           { label: 'Calories', value: `~${formatSteps(total * KCAL_PER_STEP)}`, supporting: 'kcal, estimated' },
-          { label: 'The 7 days before', value: previous ? formatSteps(previous) : '–', supporting: 'steps in total' },
+          total >= weekly
+            ? { label: 'Weekly goal', value: 'Met', supporting: `${formatSteps(total - weekly)} over` }
+            : { label: 'Weekly goal', value: formatSteps(weekly - total), supporting: 'steps to go' },
         ]}
       />
+      {blocks.length > 1 ? (
+        <>
+          <SectionHeader title="Week by week" note={`Goal ${formatSteps(weekly)}`} />
+          <View style={styles.weeks}>
+            {blocks.map((block, i) => (
+              <WeekBar
+                key={block[0]!.day}
+                label={i === 0 ? 'Last 7 days' : `${dayLabel(block[0]!.day, SHORT_DATE)} – ${dayLabel(block[6]!.day, SHORT_DATE)}`}
+                total={totals[i]!}
+                share={totals[i]! / scale}
+                goalAt={weekly / scale}
+                current={i === 0}
+                met={totals[i]! >= weekly}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
     </>
   );
 }
 
-function BestDetail({ week, before, goal }: DetailProps) {
+/** One week's total as a bar, with a tick where the weekly goal sits. */
+function WeekBar(props: { label: string; total: number; share: number; goalAt: number; current: boolean; met: boolean }) {
+  const theme = useAppTheme();
+  const { label, total, share, goalAt, current, met } = props;
+  const fill = current ? theme.colors.primary : met ? withAlpha(theme.colors.primary, 0.55) : theme.colors.secondaryContainer;
+  return (
+    <View style={styles.weekRow} accessibilityLabel={`${label}: ${formatSteps(total)} steps${met ? ', weekly goal met' : ''}`}>
+      <View style={styles.weekLabels}>
+        <Text variant="bodySmall" numberOfLines={1} style={[current && styles.bold, { color: current ? theme.colors.onSurface : theme.colors.onSurfaceVariant }]}>
+          {label}
+        </Text>
+        <Text variant="labelLarge" style={[styles.bold, styles.tabular]}>
+          {total ? formatSteps(total) : '–'}
+        </Text>
+      </View>
+      <View style={[styles.weekTrack, { backgroundColor: withAlpha(theme.colors.onSurface, 0.06) }]}>
+        <View style={[styles.weekFill, { width: `${Math.max(share * 100, total ? 2 : 0)}%`, backgroundColor: fill }]} />
+        <View style={[styles.goalTick, { left: `${goalAt * 100}%`, backgroundColor: theme.colors.onSurfaceVariant }]} />
+      </View>
+    </View>
+  );
+}
+
+/** The best day, the week around it, and how it ranks. */
+function BestDetail({ week, history, goal }: DetailProps) {
   const theme = useAppTheme();
   const ranked = week.filter((d) => d.steps > 0).sort((a, b) => b.steps - a.steps);
   const best = ranked[0];
   const { average } = summarize(week);
-  const previousBest = before.reduce<DaySteps | null>((b, d) => (d.steps > 0 && (!b || d.steps > b.steps) ? d : b), null);
+  const longBest = history.reduce<DaySteps | null>((b, d) => (d.steps > 0 && (!b || d.steps > b.steps) ? d : b), null);
+  const weeks = weekBlocks(history).length;
 
   if (!best) return <Hero value="–" caption="No steps yet this week" />;
 
   return (
     <>
       <Hero value={formatSteps(best.steps)} caption={`steps on ${dayName(best.day)}, ${dayLabel(best.day, SHORT_DATE)}`}>
-        <Pill
-          color={best.steps >= goal ? theme.colors.primary : theme.colors.onSurfaceVariant}
-          text={
-            best.steps >= goal
-              ? `${formatSteps(best.steps - goal)} over your goal`
-              : `${Math.round((best.steps / goal) * 100)}% of your goal`
-          }
-        />
+        <View style={styles.pills}>
+          <Pill
+            color={best.steps >= goal ? theme.colors.primary : theme.colors.onSurfaceVariant}
+            text={
+              best.steps >= goal
+                ? `${formatSteps(best.steps - goal)} over your goal`
+                : `${Math.round((best.steps / goal) * 100)}% of your goal`
+            }
+          />
+          {longBest && longBest.day === best.day && weeks > 1 ? (
+            <Pill color={theme.colors.primary} text={`Best in ${plural(weeks, 'week')}`} />
+          ) : null}
+        </View>
       </Hero>
       <WeekChart
         series={[{ name: 'Steps', color: theme.colors.primary, data: week }]}
@@ -164,9 +242,9 @@ function BestDetail({ week, before, goal }: DetailProps) {
         items={[
           { label: 'Above your average', value: `+${formatSteps(best.steps - average)}`, supporting: `average ${formatSteps(average)}` },
           {
-            label: 'Best of the 7 before',
-            value: previousBest ? formatSteps(previousBest.steps) : '–',
-            supporting: previousBest ? dayLabel(previousBest.day, { weekday: 'long' }) : 'No steps',
+            label: `Best in ${plural(weeks, 'week')}`,
+            value: longBest ? formatSteps(longBest.steps) : '–',
+            supporting: longBest ? `${dayLabel(longBest.day, { weekday: 'short' })}, ${dayLabel(longBest.day, SHORT_DATE)}` : 'No steps',
           },
         ]}
       />
@@ -184,10 +262,18 @@ function BestDetail({ week, before, goal }: DetailProps) {
   );
 }
 
-function GoalDetail({ week, before, goal, streak }: DetailProps & { streak: number }) {
+/** Goal days this week, and the run of them over the last 8 weeks. */
+function GoalDetail({ week, before, history, goal, streak }: DetailProps & { streak: number }) {
   const theme = useAppTheme();
   const hits = week.filter((d) => d.steps >= goal).length;
   const previousHits = before.filter((d) => d.steps >= goal).length;
+  const blocks = weekBlocks(history);
+  const span = blocks.flat();
+  const spanHits = span.filter((d) => d.steps >= goal).length;
+  // The nearest this week came to the goal without reaching it.
+  const miss = week
+    .filter((d) => d.steps > 0 && d.steps < goal)
+    .reduce<DaySteps | null>((m, d) => (!m || d.steps > m.steps ? d : m), null);
 
   return (
     <>
@@ -199,7 +285,26 @@ function GoalDetail({ week, before, goal, streak }: DetailProps & { streak: numb
           ) : null}
         </View>
       </Hero>
-      <WeekChart series={[{ name: 'Steps', color: theme.colors.primary, data: week }]} goal={goal} />
+      {blocks.length > 1 ? (
+        <>
+          <SectionHeader title="Goal days" note={`Last ${plural(blocks.length, 'week')}`} />
+          <GoalCalendar blocks={blocks} goal={goal} />
+        </>
+      ) : null}
+      <Tiles
+        items={[
+          {
+            label: 'Hit rate',
+            value: span.length ? `${Math.round((spanHits / span.length) * 100)}%` : '–',
+            supporting: `${spanHits} of ${span.length} days`,
+          },
+          {
+            label: 'Closest miss',
+            value: miss ? `${formatSteps(goal - miss.steps)} short` : hits ? 'None' : '–',
+            supporting: miss ? dayName(miss.day) : hits ? 'every walk made it' : 'No steps yet',
+          },
+        ]}
+      />
       <SectionHeader title="Each day" />
       <View>
         {[...week].reverse().map((d, i) => {
@@ -227,6 +332,63 @@ function GoalDetail({ week, before, goal, streak }: DetailProps & { streak: numb
         })}
       </View>
     </>
+  );
+}
+
+/** A dot for every day of the last few weeks, oldest at the top: filled where the goal was met. */
+function GoalCalendar({ blocks, goal }: { blocks: DaySteps[][]; goal: number }) {
+  const theme = useAppTheme();
+  const rows = [...blocks].reverse();
+  const today = toDayKey(new Date());
+  const legend = [
+    { label: 'Goal met', style: { backgroundColor: theme.colors.primary } },
+    { label: 'Walked', style: { backgroundColor: withAlpha(theme.colors.primary, 0.22) } },
+    { label: 'No steps', style: { borderWidth: 1.5, borderColor: theme.colors.outlineVariant } },
+  ];
+
+  return (
+    <View style={styles.calendar}>
+      <View style={styles.calRow}>
+        {rows[rows.length - 1]!.map((d) => (
+          <Text key={d.day} variant="labelSmall" style={[styles.calCell, { color: theme.colors.onSurfaceVariant }]}>
+            {shortWeekday(new Date(`${d.day}T12:00:00`))}
+          </Text>
+        ))}
+      </View>
+      {rows.map((block) => (
+        <View key={block[0]!.day} style={styles.calRow}>
+          {block.map((d) => {
+            const met = d.steps >= goal;
+            return (
+              <View key={d.day} style={styles.calCell}>
+                <View
+                  accessibilityLabel={`${dayLabel(d.day, SHORT_DATE)}: ${formatSteps(d.steps)} steps${met ? ', goal met' : ''}`}
+                  style={[
+                    styles.dot,
+                    met
+                      ? { backgroundColor: theme.colors.primary }
+                      : d.steps > 0
+                        ? { backgroundColor: withAlpha(theme.colors.primary, 0.22) }
+                        : { borderWidth: 1.5, borderColor: theme.colors.outlineVariant },
+                    d.day === today && { outlineWidth: 2, outlineOffset: 2, outlineColor: theme.colors.onSurface, outlineStyle: 'solid' },
+                  ]}
+                />
+              </View>
+            );
+          })}
+        </View>
+      ))}
+      <View style={styles.legend}>
+        {legend.map((l) => (
+          <View key={l.label} style={styles.legendItem}>
+            <View style={[styles.legendDot, l.style]} />
+            <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              {l.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -346,4 +508,17 @@ const styles = StyleSheet.create({
   dayRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   end: { alignItems: 'flex-end' },
   rank: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  weeks: { gap: 12 },
+  weekRow: { gap: 6 },
+  weekLabels: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 },
+  weekTrack: { height: 10, borderRadius: 5, overflow: 'visible' },
+  weekFill: { height: 10, borderRadius: 5 },
+  goalTick: { position: 'absolute', top: -3, width: 2, height: 16, borderRadius: 1, marginLeft: -1 },
+  calendar: { gap: 8 },
+  calRow: { flexDirection: 'row' },
+  calCell: { flex: 1, alignItems: 'center', textAlign: 'center' },
+  dot: { width: 22, height: 22, borderRadius: 11 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, paddingTop: 4 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 12, height: 12, borderRadius: 6 },
 });

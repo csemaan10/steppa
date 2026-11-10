@@ -88,8 +88,9 @@ export default function TodayScreen() {
     syncPetPushSetting(userId);
     const [profile, history, groups, lifetime, journey, hasPet] = await Promise.all([
       getProfile(userId),
-      // Two weeks: the tiles show the last 7 days, and the detail card compares them with the 7 before.
-      getStepHistory(userId, 14),
+      // Eight weeks: the tiles show the last 7 days, and their detail cards look back further (your
+      // rhythm by weekday, week-by-week totals, the goal calendar).
+      getStepHistory(userId, 56),
       getMyGroups(),
       getProfileStats(userId),
       // undefined (card hidden) rather than failing the whole screen, e.g. before migration 012.

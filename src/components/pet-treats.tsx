@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Card, Modal, Portal, Text } from 'react-native-paper';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { Button } from '@/components/button';
+import { Frost, frostPane } from '@/components/frost';
 import { getTreatBonuses, type TreatBonus } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { describeBonus, EARN_NOTES, waysToEarn } from '@/lib/treats';
-import { glass, glassCard, useAppTheme } from '@/theme';
+import { glassCard, useAppTheme } from '@/theme';
 
 /**
  * How treats work, opened from the treat count: what you have, every way to earn more and what each
@@ -20,6 +21,7 @@ export function TreatsSheet({
   toNext,
   onClose,
   onShop,
+  blurTarget,
 }: {
   open: boolean;
   /** The pet's name. */
@@ -30,6 +32,8 @@ export function TreatsSheet({
   onClose: () => void;
   /** Opens the shop; left out on the shop itself. */
   onShop?: () => void;
+  /** What the sheet floats over, to blur on Android; the tab screens unless given. */
+  blurTarget?: RefObject<View | null>;
 }) {
   const theme = useAppTheme();
   const { height } = useWindowDimensions();
@@ -47,7 +51,10 @@ export function TreatsSheet({
   return (
     <Portal>
       <Modal visible={open} onDismiss={onClose} contentContainerStyle={styles.modal}>
-        <Card mode="contained" style={[glassCard(theme), glass(theme, 'strong'), { maxHeight: height * 0.8 }]}>
+        <Card
+          mode="contained"
+          style={[frostPane(theme), { borderRadius: glassCard(theme).borderRadius, maxHeight: height * 0.8 }]}>
+          <Frost target={blurTarget} />
           <ScrollView contentContainerStyle={styles.sheet}>
             <View style={styles.head}>
               <Text variant="headlineSmall" style={styles.bold}>

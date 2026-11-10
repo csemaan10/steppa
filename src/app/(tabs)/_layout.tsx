@@ -1,13 +1,14 @@
 import { BlurTargetView } from 'expo-blur';
 import { TabList, TabSlot, TabTrigger, Tabs } from 'expo-router/ui';
-import { useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { FloatingTabBar, TabButton } from '@/components/floating-tab-bar';
+import { tabsBlurTarget } from '@/components/frost';
 
 export default function TabLayout() {
-  // Android blurs only what's inside this target, so the screens live in it and the bar sits outside.
-  const blurTarget = useRef<View>(null);
+  // Android blurs only what's inside this target, so the screens live in it and the bar (and anything
+  // frosted over the screens, see Frost) sits outside.
+  const blurTarget = tabsBlurTarget;
 
   return (
     <Tabs style={styles.flex}>
