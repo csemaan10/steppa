@@ -396,7 +396,9 @@ function Hero({ value, caption, children }: { value: string; caption: string; ch
   const theme = useAppTheme();
   return (
     <View style={styles.hero}>
-      <Text variant="displaySmall" numberOfLines={1} adjustsFontSizeToFit style={[styles.bold, { color: theme.colors.primary }]}>
+      {/* No adjustsFontSizeToFit: iOS fits it to the width at first layout (the card still opening,
+          or the text's own width) and never grows it back, leaving it tiny. Step counts always fit. */}
+      <Text variant="displaySmall" numberOfLines={1} style={[styles.bold, { color: theme.colors.primary }]}>
         {value}
       </Text>
       <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
