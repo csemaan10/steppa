@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View, type ViewToken } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,8 +27,13 @@ function shelfSpan(look: CharacterLook): { left: number; right: number } {
   if (look.pets.includes('horse')) right = Math.max(right, HORSE_X + 12);
   return { left, right };
 }
-/** Cabinet characters are drawn with Skia (trial), which keeps full frame rate with several on screen. */
-const CABINET_FPS = 60;
+/**
+ * Each character redraws its whole scene per frame on the UI thread; at the podium's 30 fps several
+ * fit on screen without taking frames from scrolling.
+ */
+const CABINET_FPS = 30;
+/** After a drag ends, how long to wait for a fling before the characters move again. */
+const SETTLE_MS = 120;
 
 /** A row counts as on screen once a fifth of it shows. */
 const VIEWABILITY = { itemVisiblePercentThreshold: 20 };
@@ -67,13 +72,33 @@ export function TrophyCabinet({ rows, userId, onPressUser, active = true }: Prop
     setVisible(new Set(viewableItems.map((v) => v.item.user_id)));
   }, []);
 
+  // Characters hold still while the list moves, so scrolling gets the frames to itself; they pick
+  // up again once it settles. A fling starts right after the drag ends, so that waits a moment.
+  const [scrolling, setScrolling] = useState(false);
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const moving = useCallback(() => {
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = null;
+    setScrolling(true);
+  }, []);
+  const stopped = useCallback(() => setScrolling(false), []);
+  const dragEnded = useCallback(() => {
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = setTimeout(stopped, SETTLE_MS);
+  }, [stopped]);
+  const animating = active && !scrolling;
+
   return (
     <FlatList
       data={sorted}
+      onScrollBeginDrag={moving}
+      onScrollEndDrag={dragEnded}
+      onMomentumScrollBegin={moving}
+      onMomentumScrollEnd={stopped}
       keyExtractor={(r) => r.user_id}
       onViewableItemsChanged={onViewableItemsChanged}
       viewabilityConfig={VIEWABILITY}
-      extraData={active ? visible : null}
+      extraData={animating ? visible : null}
       // Each row is a live scene: keep only a little beyond the screen mounted.
       initialNumToRender={4}
       maxToRenderPerBatch={2}
@@ -81,7 +106,7 @@ export function TrophyCabinet({ rows, userId, onPressUser, active = true }: Prop
       removeClippedSubviews
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
       renderItem={({ item }) => (
-        <Shelf row={item} isMe={item.user_id === userId} animate={active && visible.has(item.user_id)} onPressUser={onPressUser} />
+        <Shelf row={item} isMe={item.user_id === userId} animate={animating && visible.has(item.user_id)} onPressUser={onPressUser} />
       )}
     />
   );

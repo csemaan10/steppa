@@ -10,12 +10,16 @@ import { useFrameCallback, useReducedMotion, useSharedValue, type SharedValue } 
  */
 export function useSceneClock(active: boolean, fps: number): SharedValue<number> {
   const time = useSharedValue(0);
+  // Scene time when the clock last started: Reanimated restarts timeSinceFirstFrame each time a frame
+  // callback is switched back on, so a paused scene carries on from its pose instead of snapping back.
+  const base = useSharedValue(0);
   const reduceMotion = useReducedMotion();
   const step = 1000 / fps;
   const clock = useFrameCallback((frame) => {
+    if (frame.timeSincePreviousFrame === null) base.value = time.value;
+    const t = base.value + frame.timeSinceFirstFrame / 1000;
     // Skip frames when capped: drawing the scene is the costly part, not the clock.
-    const ms = frame.timeSinceFirstFrame;
-    if (ms - time.value * 1000 >= step || ms < time.value * 1000) time.value = ms / 1000;
+    if ((t - time.value) * 1000 >= step) time.value = t;
   }, false);
   useFocusEffect(
     useCallback(() => {
