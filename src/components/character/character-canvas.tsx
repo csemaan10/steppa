@@ -35,7 +35,7 @@ import {
   type Motion,
   type RigLook,
 } from '@/components/character/rig';
-import { CATS, DOGS, isBird, isSmallPet, type CharacterLook, type Pet } from '@/lib/character';
+import { CATS, DOGS, isBird, isSmallPet, type CharacterLook, type Glasses, type Pet } from '@/lib/character';
 
 /**
  * Paints are shared by every character: drawing only ever changes a paint's alpha for a moment and
@@ -71,12 +71,12 @@ function circle(x: number, y: number, r: number): string {
   return `M${x - r} ${y}a${r} ${r} 0 1 0 ${r * 2} 0a${r} ${r} 0 1 0 ${-r * 2} 0`;
 }
 
-function starPath(r: number): string {
+function starPath(r: number, cx = 0, cy = 0, inner = 0.45): string {
   let d = '';
   for (let i = 0; i < 10; i++) {
     const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const rr = i % 2 ? r * 0.45 : r;
-    d += `${i ? 'L' : 'M'}${(Math.cos(a) * rr).toFixed(2)} ${(Math.sin(a) * rr).toFixed(2)}`;
+    const rr = i % 2 ? r * inner : r;
+    d += `${i ? 'L' : 'M'}${(cx + Math.cos(a) * rr).toFixed(2)} ${(cy + Math.sin(a) * rr).toFixed(2)}`;
   }
   return d + 'Z';
 }
@@ -86,7 +86,25 @@ function pair(lens: (side: number) => string): string {
   return lens(-1) + lens(1);
 }
 
-const GLASSES_ARMS = 'M-0.9 0.2Q0 -0.3 0.9 0.2M-5.3 -0.1L-8.3 -0.6M5.3 -0.1L8.3 -0.6';
+/** A rounded rectangle on one side of the face, from `inner` to `outer` out from the middle. */
+function roundRect(side: number, inner: number, outer: number, top: number, bottom: number, r: number): string {
+  const x0 = Math.min(side * inner, side * outer);
+  const x1 = Math.max(side * inner, side * outer);
+  return (
+    `M${x0 + r} ${top}H${x1 - r}Q${x1} ${top} ${x1} ${top + r}V${bottom - r}Q${x1} ${bottom} ${x1 - r} ${bottom}` +
+    `H${x0 + r}Q${x0} ${bottom} ${x0} ${bottom - r}V${top + r}Q${x0} ${top} ${x0 + r} ${top}Z`
+  );
+}
+
+/** The bridge over the nose, between lenses `x` either side of the middle. */
+function glassesBridge(x: number, y: number): string {
+  return `M${-x} ${y}Q0 ${y - 0.6} ${x} ${y}`;
+}
+
+/** The arms, from each lens's outer edge back to the side of the head. */
+function glassesArms(x: number, y: number): string {
+  return `M${-x} ${y}L-8.4 -0.6M${x} ${y}L8.4 -0.6`;
+}
 
 // Fixed shapes, parsed once.
 const STATIC = {
@@ -104,21 +122,49 @@ const STATIC = {
   horseNearBackLeg: 'M4.6 -9.6L4.8 -0.7',
   yarnLines: `M${YARN_BALL.x - 2.2} ${YARN_BALL.y - 1}Q${YARN_BALL.x} ${YARN_BALL.y + 0.8} ${YARN_BALL.x + 2.2} ${YARN_BALL.y - 1}M${YARN_BALL.x - 1.2} ${YARN_BALL.y - 2.3}Q${YARN_BALL.x + 0.6} ${YARN_BALL.y} ${YARN_BALL.x + 0.4} ${YARN_BALL.y + 2.6}`,
   // Face extras, in the head's frame: origin at its centre, eyes at (±3, 0.6), mouth at y ≈ 3.9.
-  glassesRound: `${circle(-3, 0.6, 2.1)}${circle(3, 0.6, 2.1)}M-0.9 0.3Q0 -0.3 0.9 0.3M-5.1 0.2L-8.3 -0.5M5.1 0.2L8.3 -0.5`,
-  shadesLenses: 'M-5.5 -0.7H-0.8Q-0.8 2.7 -3.15 2.7Q-5.5 2.7 -5.5 -0.7ZM0.8 -0.7H5.5Q5.5 2.7 3.15 2.7Q0.8 2.7 0.8 -0.7Z',
-  shadesFrame: 'M-0.8 -0.4H0.8M-5.5 -0.5L-8.3 -0.9M5.5 -0.5L8.3 -0.9',
-  shadesShine: 'M-4.6 0.1L-3.6 -0.3M1.7 0.1L2.7 -0.3',
-  glassesSquare: pair((s) => `M${s * 0.9} -1.3H${s * 5.4}V2.3H${s * 0.9}Z`) + GLASSES_ARMS,
-  glassesCateye:
-    pair((s) => `M${s * 0.9} -0.6Q${s * 3} -0.9 ${s * 5.4} -1.2L${s * 6.3} -2.1Q${s * 5.9} 0.2 ${s * 5.2} 1.4Q${s * 3.6} 2.8 ${s * 2} 2.4Q${s * 0.8} 1.8 ${s * 0.9} -0.6Z`) +
-    GLASSES_ARMS,
-  aviatorLenses: pair((s) => `M${s * 0.8} -0.9H${s * 5.4}Q${s * 5.7} 2.6 ${s * 3.4} 3Q${s * 1} 2.9 ${s * 0.8} -0.9Z`),
-  aviatorFrame: 'M-5.4 -0.9H5.4' + GLASSES_ARMS,
-  heartLenses: pair(
+  // Glasses: each style's lenses (filled: clear glass or a tint) and its frame (stroked).
+  roundLens: pair((s) => circle(s * 3, 0.6, 2.1)),
+  roundFrame: pair((s) => circle(s * 3, 0.6, 2.1)) + glassesBridge(0.9, 0.3) + glassesArms(5.1, 0.2),
+  wireLens: pair((s) => circle(s * 3, 0.6, 1.75)),
+  wireFrame: pair((s) => circle(s * 3, 0.6, 1.75)) + glassesBridge(1.25, 0.4) + glassesArms(4.75, 0.3),
+  squareLens: pair((s) => roundRect(s, 0.9, 5.4, -1.2, 2.4, 0.6)),
+  squareFrame: pair((s) => roundRect(s, 0.9, 5.4, -1.2, 2.4, 0.6)) + glassesBridge(0.9, -0.2) + glassesArms(5.4, -0.4),
+  oversizedLens: pair((s) => roundRect(s, 0.6, 6.1, -1.9, 3.3, 1.5)),
+  oversizedFrame: pair((s) => roundRect(s, 0.6, 6.1, -1.9, 3.3, 1.5)) + glassesBridge(0.6, -0.5) + glassesArms(6.1, -0.6),
+  // Flicks up at the outer corners.
+  cateyeLens: pair(
     (s) =>
-      `M${s * 3} 2.6C${s * 3 - 2.9} 0.8 ${s * 3 - 2.3} -1.6 ${s * 3 - 1} -1.6C${s * 3 - 0.3} -1.6 ${s * 3} -1.1 ${s * 3} -0.8C${s * 3} -1.1 ${s * 3 + 0.3} -1.6 ${s * 3 + 1} -1.6C${s * 3 + 2.3} -1.6 ${s * 3 + 2.9} 0.8 ${s * 3} 2.6Z`
+      `M${s * 0.9} -0.6Q${s * 3} -0.9 ${s * 5.4} -1.2L${s * 6.3} -2.1Q${s * 5.9} 0.2 ${s * 5.2} 1.4Q${s * 3.6} 2.8 ${s * 2} 2.4Q${s * 0.8} 1.8 ${s * 0.9} -0.6Z`
   ),
-  heartFrame: GLASSES_ARMS,
+  cateyeFrame: glassesBridge(0.9, -0.3) + glassesArms(5.6, -0.9),
+  // A thick brow bar over thin metal lower rims.
+  browlineLens: pair((s) => `M${s * 0.9} -0.9H${s * 5.5}Q${s * 5.6} 2.6 ${s * 3.2} 2.7Q${s * 0.9} 2.6 ${s * 0.9} -0.9Z`),
+  browlineBar: pair((s) => `M${s * 0.7} -1.7H${s * 5.8}Q${s * 6.1} -1.7 ${s * 6} -1.1L${s * 5.8} -0.4H${s * 0.7}Z`),
+  browlineRim: glassesBridge(0.9, -0.5) + glassesArms(5.9, -1.2),
+  // Teardrops under a straight double bar.
+  aviatorLens: pair((s) => `M${s * 0.8} -0.9H${s * 5.4}Q${s * 5.7} 2.6 ${s * 3.4} 3Q${s * 1} 2.9 ${s * 0.8} -0.9Z`),
+  aviatorFrame: 'M-5.4 -0.9H5.4M-0.8 -0.2H0.8' + glassesArms(5.4, -0.9),
+  shadesLens: 'M-5.5 -0.7H-0.8Q-0.8 2.7 -3.15 2.7Q-5.5 2.7 -5.5 -0.7ZM0.8 -0.7H5.5Q5.5 2.7 3.15 2.7Q0.8 2.7 0.8 -0.7Z',
+  shadesFrame: 'M-0.8 -0.4H0.8' + glassesArms(5.5, -0.5),
+  // One wraparound shield, notched for the nose, with a mirrored sheen.
+  sportLens:
+    'M-7 -0.5Q-3.6 -1.7 0 -1.3Q3.6 -1.7 7 -0.5L6.5 1.3Q5.6 3.1 3.5 2.9Q1.7 2.7 0.9 1.7Q0 1.1 -0.9 1.7Q-1.7 2.7 -3.5 2.9Q-5.6 3.1 -6.5 1.3Z',
+  sportFrame: 'M-7 -0.5Q-3.6 -1.7 0 -1.3Q3.6 -1.7 7 -0.5M-7 -0.5L-8.4 -0.8M7 -0.5L8.4 -0.8',
+  sportSheen: 'M-5.6 1.6L-3.6 -0.6M-4.3 1.9L-2.6 0M2.4 1.6L4.4 -0.6',
+  // A glowing band across the eyes.
+  visorLens: 'M-7.6 -0.7H7.6Q8.2 0.7 7.6 2.1H-7.6Q-8.2 0.7 -7.6 -0.7Z',
+  visorLine: 'M-6.4 0.7H6.4',
+  heartLens: pair(
+    (s) =>
+      `M${s * 3} 2.8C${s * 3 - 3.1} 0.9 ${s * 3 - 2.5} -1.7 ${s * 3 - 1.1} -1.7C${s * 3 - 0.3} -1.7 ${s * 3} -1.2 ${s * 3} -0.9C${s * 3} -1.2 ${s * 3 + 0.3} -1.7 ${s * 3 + 1.1} -1.7C${s * 3 + 2.5} -1.7 ${s * 3 + 3.1} 0.9 ${s * 3} 2.8Z`
+  ),
+  starLens: pair((s) => starPath(2.9, s * 3, 0.7, 0.5)),
+  partyFrame: glassesBridge(0.9, 0) + glassesArms(5.3, -0.3),
+  // One lens on the right eye, on a chain.
+  monocleLens: circle(3, 0.6, 2.2),
+  monocleChain: 'M4.6 2.2Q6.8 5.2 5.4 9.6',
+  glint: 'M-4.5 -0.2L-3.6 -0.8M1.5 -0.2L2.4 -0.8',
+  monocleGlint: 'M1.6 -0.2L2.5 -0.8',
   // The beard runs from the sideburns round the jaw and up over the top lip, around the mouth.
   beard: 'M-8 0.4Q-8.3 8.6 0 9.6Q8.3 8.6 8 0.4Q7.6 3.9 4.6 3Q2.2 2.2 0 2.6Q-2.2 2.2 -4.6 3Q-7.6 3.9 -8 0.4Z',
   // Bare skin around the mouth inside a beard, so the mouth shows even on a black beard.
@@ -247,6 +293,37 @@ type SmallPet =
   | { kind: 'cat'; cat: CatPaints }
   | { kind: 'bunny' | 'hamster'; base: SkPaint; light: SkPaint; inner: SkPaint; eye: SkPaint; nose: SkPaint };
 
+/** Each style's own colour: its frame, or its lenses for tinted glasses (see TINTED_GLASSES). */
+const GLASSES_DEFAULT: Record<Glasses, string> = {
+  none: '#000000', round: '#263238', wire: '#C9A227', square: '#212121', oversized: '#5D4037', cateye: '#AD1457',
+  browline: '#1B1B1B', aviator: '#C9A227', shades: '#1B1B1B', sport: '#1565C0', visor: '#00E5FF', heart: '#FF4D8D',
+  star: '#FDD835', monocle: '#C9A227',
+};
+/** How thick each style's frame is drawn. */
+const FRAME_WIDTH: Partial<Record<Glasses, number>> = { wire: 0.35, oversized: 0.75, aviator: 0.4, monocle: 0.6 };
+
+function glassesPaints(look: CharacterLook): Record<string, SkPaint> {
+  const color = look.glassesColor ?? GLASSES_DEFAULT[look.glasses];
+  const edge = shade(color, -0.3);
+  return {
+    glassFrame: makePaint(color, FRAME_WIDTH[look.glasses] ?? 0.6),
+    glassBar: makePaint(color),
+    // Clear glass lifts the skin behind it a touch, so the lenses read as glass.
+    glassLens: makePaint('#FFFFFF', undefined, 0.3),
+    glassTint: makePaint(color, undefined, look.glasses === 'visor' ? 0.85 : look.glasses === 'shades' ? 1 : 0.9),
+    glassEdge: makePaint(edge, 0.5),
+    glassEdgeThin: makePaint(edge, 0.35),
+    glassRim: makePaint('#B9A57A', 0.32),
+    glassChain: makePaint(color, 0.3),
+    glassGlow: makePaint(color, 1.6, 0.25),
+    glassSheen: makePaint('#FFFFFF', 0.45, 0.4),
+    glassLine: makePaint('#FFFFFF', 0.45, 0.7),
+    glassDark: makePaint('#1B1B1B', 0.6),
+    glint: makePaint('#FFFFFF', 0.35, 0.75),
+    aviatorTint: makePaint('#6D4C41', undefined, 0.55),
+  };
+}
+
 /** Everything that doesn't change per frame: which parts exist, their paints, fixed shapes. */
 function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
   const medalColors = medal === undefined ? null : MEDAL_COLORS[Math.min(Math.max(medal, 0), 2)]!;
@@ -357,15 +434,7 @@ function makeKit(look: CharacterLook, idle: Motion, medal?: number): Kit {
       mouth: makePaint('#3B1F1F', 0.95),
       mouthFill: makePaint('#3B1F1F'),
       grinFill: makePaint('#FFFFFF'),
-      glasses: makePaint('#263238', 0.5),
-      shades: makePaint('#1B1B1B'),
-      shadesFrame: makePaint('#1B1B1B', 0.5),
-      shine: makePaint('#FFFFFF', 0.35, 0.6),
-      squareFrame: makePaint('#212121', 0.6),
-      cateyeFrame: makePaint('#AD1457', 0.6),
-      aviatorTint: makePaint('#6D4C41', undefined, 0.55),
-      aviatorFrame: makePaint('#C9A227', 0.4),
-      heartLens: makePaint('#FF4D8D', undefined, 0.85),
+      ...glassesPaints(look),
       watchStrap: makePaint(look.watchColor),
       watchCase: makePaint(look.watch === 'classic' ? '#ECEFF1' : '#111111'),
       watchRim: makePaint('#9E9E9E', 0.35),
@@ -995,22 +1064,50 @@ function drawScene(canvas: SkCanvas, F: Frame, kit: Kit) {
   if (!kit.bald) fill('hair', P.hair!);
   if (kit.glasses !== 'none') {
     inHead();
-    if (kit.glasses === 'round') canvas.drawPath(S.glassesRound, P.glasses!);
-    else if (kit.glasses === 'square') canvas.drawPath(S.glassesSquare, P.squareFrame!);
-    else if (kit.glasses === 'cateye') canvas.drawPath(S.glassesCateye, P.cateyeFrame!);
-    else if (kit.glasses === 'aviator') {
-      canvas.drawPath(S.aviatorLenses, P.aviatorTint!);
-      canvas.drawPath(S.aviatorLenses, P.aviatorFrame!);
-      canvas.drawPath(S.aviatorFrame, P.aviatorFrame!);
-    } else if (kit.glasses === 'heart') {
-      canvas.drawPath(S.heartLenses, P.heartLens!);
-      canvas.drawPath(S.heartFrame, P.shadesFrame!);
-      canvas.drawPath(S.shadesShine, P.shine!);
-    } else {
-      canvas.drawPath(S.shadesLenses, P.shades!);
-      canvas.drawPath(S.shadesFrame, P.shadesFrame!);
-      canvas.drawPath(S.shadesShine, P.shine!);
+    const g = kit.glasses;
+    // Clear lenses: a lift of glass, the rims, then the bridge and arms.
+    const clear = (lens: SkPath, frame: SkPath | null) => {
+      canvas.drawPath(lens, P.glassLens!);
+      canvas.drawPath(lens, P.glassFrame!);
+      if (frame) canvas.drawPath(frame, P.glassFrame!);
+    };
+    if (g === 'round') clear(S.roundLens, S.roundFrame);
+    else if (g === 'wire') clear(S.wireLens, S.wireFrame);
+    else if (g === 'square') clear(S.squareLens, S.squareFrame);
+    else if (g === 'oversized') clear(S.oversizedLens, S.oversizedFrame);
+    else if (g === 'cateye') clear(S.cateyeLens, S.cateyeFrame);
+    else if (g === 'browline') {
+      canvas.drawPath(S.browlineLens, P.glassLens!);
+      canvas.drawPath(S.browlineLens, P.glassRim!);
+      canvas.drawPath(S.browlineRim, P.glassRim!);
+      canvas.drawPath(S.browlineBar, P.glassBar!);
+    } else if (g === 'aviator') {
+      canvas.drawPath(S.aviatorLens, P.aviatorTint!);
+      canvas.drawPath(S.aviatorLens, P.glassFrame!);
+      canvas.drawPath(S.aviatorFrame, P.glassFrame!);
+    } else if (g === 'shades') {
+      canvas.drawPath(S.shadesLens, P.glassTint!);
+      canvas.drawPath(S.shadesFrame, P.glassEdge!);
+    } else if (g === 'sport') {
+      canvas.drawPath(S.sportLens, P.glassTint!);
+      canvas.drawPath(S.sportSheen, P.glassSheen!);
+      canvas.drawPath(S.sportFrame, P.glassDark!);
+    } else if (g === 'visor') {
+      canvas.drawPath(S.visorLens, P.glassGlow!);
+      canvas.drawPath(S.visorLens, P.glassTint!);
+      canvas.drawPath(S.visorLine, P.glassLine!);
+    } else if (g === 'heart' || g === 'star') {
+      const lens = g === 'heart' ? S.heartLens : S.starLens;
+      canvas.drawPath(lens, P.glassTint!);
+      canvas.drawPath(lens, P.glassEdgeThin!);
+      canvas.drawPath(S.partyFrame, P.glassEdge!);
+    } else if (g === 'monocle') {
+      canvas.drawPath(S.monocleChain, P.glassChain!);
+      clear(S.monocleLens, null);
     }
+    // A glint on the lenses, except where a sheen or glow already shows.
+    if (g === 'monocle') canvas.drawPath(S.monocleGlint, P.glint!);
+    else if (g !== 'sport' && g !== 'visor') canvas.drawPath(S.glint, P.glint!);
     canvas.restore();
   }
   if (kit.bird) drawBird(canvas, F, kit);

@@ -141,6 +141,9 @@ function uploadDays(userId: string, dates: Date[]): Promise<DaySteps[]> {
 async function readAndUpload(userId: string, dates: Date[]): Promise<DaySteps[]> {
   const counts = await readDailySteps(dates);
   const now = new Date().toISOString();
+  // The zone these days were counted in: once a day is over, only a phone in the same zone can
+  // update it (migration 029), so travelling never re-cuts finished days at a new midnight.
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
   // Skip unreadable days so a failed read never overwrites real data with 0.
   const rows = dates.flatMap((date, i) => {
     const count = counts[i];
@@ -152,11 +155,18 @@ async function readAndUpload(userId: string, dates: Date[]): Promise<DaySteps[]>
         steps: Math.min(Math.max(0, count), 200000),
         source: healthSourceName,
         updated_at: now,
+        timezone,
       },
     ];
   });
   if (!rows.length) throw new Error(`Couldn't read steps from ${healthSourceName}`);
-  const { error } = await supabase.from('daily_steps').upsert(rows, { onConflict: 'user_id,day' });
+  let { error } = await supabase.from('daily_steps').upsert(rows, { onConflict: 'user_id,day' });
+  // PGRST204: no timezone column yet (before migration 029). Save the steps without it.
+  if (error?.code === 'PGRST204') {
+    ({ error } = await supabase
+      .from('daily_steps')
+      .upsert(rows.map(({ timezone: _, ...row }) => row), { onConflict: 'user_id,day' }));
+  }
   if (error) throw new Error(error.message);
   return rows.map(({ day, steps }) => ({ day, steps }));
 }

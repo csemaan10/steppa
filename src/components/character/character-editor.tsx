@@ -12,6 +12,7 @@ import {
   EYE_COLORS,
   FACIAL_HAIR,
   GLASSES,
+  GLASSES_COLORS,
   HAIR_COLORS,
   HAIR_STYLES,
   IDLE_GROUPS,
@@ -22,6 +23,7 @@ import {
   PETS,
   SHOE_COLORS,
   SKINS,
+  TINTED_GLASSES,
   TOP_COLORS,
   TOPS,
   WATCHES,
@@ -96,6 +98,44 @@ export function CharacterEditor({ look, userId, onChange: change, onSectionOpen,
     </View>
   );
 
+  /** Swatches with a first chip for no colour of its own (null), e.g. sleeves that match the top. */
+  const optionalSwatchRow = (
+    title: string,
+    key: 'sleeveColor' | 'glassesColor',
+    values: readonly string[],
+    noneLabel: string
+  ) => (
+    <View style={styles.group}>
+      <Text variant="labelLarge">{title}</Text>
+      <View style={styles.wrap}>
+        <Chip
+          compact
+          selected={look[key] === null}
+          showSelectedCheck={false}
+          mode={look[key] === null ? 'flat' : 'outlined'}
+          onPress={() => change({ [key]: null })}>
+          {noneLabel}
+        </Chip>
+        {values.map((c) => {
+          const selected = look[key] === c;
+          return (
+            <Pressable
+              key={c}
+              onPress={() => change({ [key]: c })}
+              accessibilityLabel={`${title} ${c}`}
+              accessibilityState={{ selected }}
+              style={[
+                styles.swatch,
+                { backgroundColor: c, borderColor: selected ? theme.colors.onSurface : theme.colors.outlineVariant },
+                selected && styles.swatchSelected,
+              ]}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
+
   const pets = look.pets.map((p) => LABELS[p]);
   const ownFace = OWN_FACE_IDLES.includes(look.idle);
 
@@ -147,6 +187,14 @@ export function CharacterEditor({ look, userId, onChange: change, onSectionOpen,
           )}
           {swatchRow('Eye colour', 'eyeColor', EYE_COLORS)}
           {chipRow('Glasses', 'glasses', GLASSES)}
+          {look.glasses !== 'none'
+            ? optionalSwatchRow(
+                TINTED_GLASSES.includes(look.glasses) ? 'Lens colour' : 'Frame colour',
+                'glassesColor',
+                GLASSES_COLORS,
+                'Classic'
+              )
+            : null}
           {chipRow('Facial hair', 'facialHair', FACIAL_HAIR)}
           <View style={styles.wrap}>
             <Chip
@@ -170,37 +218,7 @@ export function CharacterEditor({ look, userId, onChange: change, onSectionOpen,
           {chipRow('Top', 'top', TOPS)}
           {chipRow('Top fit', 'topFit', FITS)}
           {swatchRow('Top colour', 'topColor', TOP_COLORS)}
-          {look.top !== 'tank' ? (
-            <View style={styles.group}>
-              <Text variant="labelLarge">Sleeves</Text>
-              <View style={styles.wrap}>
-                <Chip
-                  compact
-                  selected={look.sleeveColor === null}
-                  showSelectedCheck={false}
-                  mode={look.sleeveColor === null ? 'flat' : 'outlined'}
-                  onPress={() => change({ sleeveColor: null })}>
-                  Match top
-                </Chip>
-                {TOP_COLORS.map((c) => {
-                  const selected = look.sleeveColor === c;
-                  return (
-                    <Pressable
-                      key={c}
-                      onPress={() => change({ sleeveColor: c })}
-                      accessibilityLabel={`Sleeves ${c}`}
-                      accessibilityState={{ selected }}
-                      style={[
-                        styles.swatch,
-                        { backgroundColor: c, borderColor: selected ? theme.colors.onSurface : theme.colors.outlineVariant },
-                        selected && styles.swatchSelected,
-                      ]}
-                    />
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
+          {look.top !== 'tank' ? optionalSwatchRow('Sleeves', 'sleeveColor', TOP_COLORS, 'Match top') : null}
           {chipRow('Pattern', 'pattern', PATTERNS)}
           {chipRow('Bottoms', 'bottom', BOTTOMS)}
           {look.bottom !== 'skirt' ? chipRow('Bottoms fit', 'bottomFit', FITS) : null}

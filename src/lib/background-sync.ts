@@ -2,7 +2,7 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 
-import { syncSteps } from '@/lib/api';
+import { syncSteps, syncTimezone } from '@/lib/api';
 import {
   canReadHealthNow,
   disableStepChangeDelivery,
@@ -45,6 +45,8 @@ function syncRecentSteps(): Promise<boolean> {
       // iPhone locked: Apple Health would only report steps since it locked. Skip; the next
       // sync with the phone unlocked picks up everything.
       if (!canReadHealthNow()) return true;
+      // The zone first: the server uses it to decide when a day is over (and when to freeze it).
+      await syncTimezone(userId).catch(() => {});
       await syncSteps(userId, DAYS);
       await notifyPetMilestone(userId);
       return true;

@@ -11,7 +11,16 @@ export const HAIR_STYLES = [
 export const HAIR_COLORS = ['#1B1B1B', '#4E342E', '#8D6E63', '#E6C27A', '#C0532B', '#9E1B1B', '#9E9E9E'] as const;
 export const EYE_COLORS = ['#222222', '#5D3A1A', '#2E6DB4', '#3B8D4A', '#8E7A3A', '#6B7B8C'] as const;
 export const EXPRESSIONS = ['happy', 'grin', 'surprised', 'wink', 'angry'] as const;
-export const GLASSES = ['none', 'round', 'square', 'cateye', 'aviator', 'shades', 'heart'] as const;
+export const GLASSES = [
+  'none', 'round', 'wire', 'square', 'oversized', 'cateye', 'browline', 'aviator', 'shades', 'sport',
+  'visor', 'heart', 'star', 'monocle',
+] as const;
+/** Glasses whose colour is the lenses'; the others take it on the frame. */
+export const TINTED_GLASSES: readonly Glasses[] = ['shades', 'sport', 'visor', 'heart', 'star'];
+export const GLASSES_COLORS = [
+  '#1B1B1B', '#6D4C41', '#C9A227', '#B0BEC5', '#FAFAFA', '#E53935', '#FB8C00', '#FDD835', '#43A047',
+  '#00ACC1', '#1E88E5', '#8E24AA', '#EC407A',
+] as const;
 export const FACIAL_HAIR = ['none', 'stubble', 'moustache', 'goatee', 'disconnected', 'beard'] as const;
 export const TOPS = ['tee', 'hoodie', 'tank', 'longsleeve', 'jersey', 'jacket'] as const;
 export const TOP_COLORS = [
@@ -87,6 +96,8 @@ export type CharacterLook = {
   /** Resting face; moves with their own face (sleep, yoga, ...) keep that one. */
   expression: Expression;
   glasses: Glasses;
+  /** Frame colour (lens colour for tinted glasses); null is the style's own. */
+  glassesColor: string | null;
   facialHair: FacialHair;
   freckles: boolean;
   top: Top;
@@ -117,7 +128,8 @@ export const LABELS: Record<
   short: 'Short', buzz: 'Buzz cut', sidepart: 'Side part', quiff: 'Curly bun', mohawk: 'Mohawk', afro: 'Afro',
   long: 'Long', bun: 'Bun', curly: 'Curly', curtains: 'Curly curtains', longcurly: 'Long curly', spiky: 'Spiky', bald: 'Bald',
   happy: 'Happy', grin: 'Big grin', surprised: 'Surprised', wink: 'Wink', angry: 'Angry',
-  none: 'None', round: 'Round', square: 'Square', cateye: 'Cat-eye', aviator: 'Aviator', shades: 'Sunglasses',
+  none: 'None', round: 'Round', wire: 'Wire', square: 'Square', oversized: 'Oversized', cateye: 'Cat-eye',
+  browline: 'Browline', aviator: 'Aviator', shades: 'Sunglasses', sport: 'Sport wrap', visor: 'Visor', monocle: 'Monocle',
   stubble: 'Stubble', moustache: 'Moustache', goatee: 'Goatee', disconnected: 'Goatee 2', beard: 'Beard',
   tee: 'Tee', hoodie: 'Hoodie', tank: 'Tank', longsleeve: 'Long sleeve', jersey: 'Jersey', jacket: 'Jacket',
   stripes: 'Stripes', heart: 'Heart', bolt: 'Lightning', star: 'Star',
@@ -163,6 +175,7 @@ export function defaultLook(userId: string): CharacterLook {
     eyeColor: EYE_COLORS[0],
     expression: 'happy',
     glasses: 'none',
+    glassesColor: null,
     facialHair: 'none',
     freckles: false,
     top: pick(TOPS.slice(0, 3), 9),
@@ -207,6 +220,7 @@ export function normalizeLook(raw: unknown, userId: string): CharacterLook {
     eyeColor: color(r.eyeColor, d.eyeColor),
     expression: oneOf(EXPRESSIONS, r.expression, d.expression),
     glasses: oneOf(GLASSES, r.glasses, d.glasses),
+    glassesColor: isColor(r.glassesColor) ? r.glassesColor : null,
     facialHair: oneOf(FACIAL_HAIR, r.facialHair, d.facialHair),
     freckles: r.freckles === true,
     top: oneOf(TOPS, r.top, d.top),
