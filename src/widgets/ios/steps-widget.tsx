@@ -136,7 +136,7 @@ const StepsWidget = (props: StepsWidgetProps, env: WidgetEnvironment) => {
     );
     return (
       <ZStack modifiers={[frame({ width: size, height: size })]}>
-        <Circle modifiers={[strokeBorder({ content: c.track, style: { lineWidth: stroke } }), frame({ width: size, height: size })]} />
+        <Circle modifiers={[strokeBorder({ content: c.trackAlpha < 1 ? `${c.track}${Math.round(c.trackAlpha * 255).toString(16).padStart(2, '0')}` : c.track, style: { lineWidth: stroke } }), frame({ width: size, height: size })]} />
         {arc(share, ringColor)}
         {arc(Math.min(1, Math.max(0, props.progress - 1)), c.over)}
       </ZStack>

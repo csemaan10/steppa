@@ -6,7 +6,7 @@
 import { CAT_COATS, shade } from '@/components/character/scene-common';
 import { THICKNESS_SCALE, type RingSettings } from '@/lib/ring-style';
 
-export type RingColors = { primary: string; over: string; track: string };
+export type RingColors = { primary: string; over: string; track: string; trackAlpha?: number };
 
 /** The app's Home ring is 176 across with a 14 stroke; widget rings keep that proportion. */
 const STROKE_SHARE = 14 / 176;
@@ -205,8 +205,10 @@ function trailRing(kind: Trail, size: number, stroke: number, p1: number, p2: nu
     const a = -Math.PI / 2 + ((i + 0.5) / count) * 2 * Math.PI;
     const rr = r + (i % 2 ? -1 : 1) * paw * layout.stagger;
     const share = (i + 0.5) / count;
+    const todo = share > p1 && share > p2;
     const fill = share <= p2 ? colors.over : share <= p1 ? color : colors.track;
-    body += `<g fill="${fill}" transform="translate(${n(c + rr * Math.cos(a))} ${n(c + rr * Math.sin(a))}) rotate(${n(((a + Math.PI / 2) * 180) / Math.PI)})">${shape}</g>`;
+    const faint = todo && (colors.trackAlpha ?? 1) < 1 ? ` fill-opacity="${n(colors.trackAlpha ?? 1)}"` : '';
+    body += `<g fill="${fill}"${faint} transform="translate(${n(c + rr * Math.cos(a))} ${n(c + rr * Math.sin(a))}) rotate(${n(((a + Math.PI / 2) * 180) / Math.PI)})">${shape}</g>`;
   }
   const tip = p2 > 0 ? p2 : p1;
   if ((kind === 'cat' || kind === 'dog' || kind === 'horse') && tip > 0.001) {
@@ -316,7 +318,7 @@ export function styledRingSvg(progress: number, size: number, look: RingSettings
     const dash = style === 'segments' ? [lap / 30 - width * 0.45, width * 0.45] : style === 'dots' ? [0.01, lap / 40] : undefined;
     const cap = style === 'segments' ? 'butt' : 'round';
     const line = { width, cap, dash } as const;
-    let body = strokePath(arc(c, r, 0, 1), colors.track, line);
+    let body = strokePath(arc(c, r, 0, 1), colors.track, { ...line, opacity: colors.trackAlpha });
     if (style === 'glow' && p1 > 0) body += halo(arc(c, r, 0, p1), color, width * 1.6, 0.55, width * 0.7);
     if (p1 > 0) {
       if (style === 'gradient') body += sweepArc(c, r, p1, width, [shade(color, -0.35), color, shade(color, 0.45), colors.over]);

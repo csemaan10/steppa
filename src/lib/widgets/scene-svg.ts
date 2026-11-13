@@ -111,7 +111,7 @@ export function sceneSvg(art: WorldArt, crop: Crop, width: number, height: numbe
  * The step ring as an SVG, matching the Today ring: the goal's share in `primary`, and past the goal
  * a full ring with the extra lap over it in `over`. `size` is the drawn width in pixels.
  */
-export function ringSvg(progress: number, size: number, colors: { primary: string; over: string; track: string }, stroke = 0.1): string {
+export function ringSvg(progress: number, size: number, colors: { primary: string; over: string; track: string; trackAlpha?: number }, stroke = 0.1): string {
   const width = size * stroke;
   const r = (size - width) / 2;
   const c = size / 2;
@@ -127,7 +127,7 @@ export function ringSvg(progress: number, size: number, colors: { primary: strin
   const first = progress >= 1 ? `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${colors.primary}" stroke-width="${width}"/>` : arc(progress, colors.primary);
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">` +
-    `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${colors.track}" stroke-width="${width}"/>` +
+    `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${colors.track}" stroke-opacity="${colors.trackAlpha ?? 1}" stroke-width="${width}"/>` +
     first +
     (progress > 1 ? arc(progress - 1, colors.over) : '') +
     `</svg>`

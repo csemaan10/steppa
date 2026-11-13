@@ -75,6 +75,8 @@ export type WidgetColors = {
   overText: string;
   /** The ring's empty part. */
   track: string;
+  /** How much of the track shows: see-through in light mode, so it darkens the glows under it too. */
+  trackAlpha: number;
   /** The app's background glows (screenBackground): colour, strength, centre and reach (shares of the widget). */
   glows: Glow[];
 };
@@ -169,8 +171,10 @@ function colorsFor(name: ThemeName, dark: boolean): WidgetColors {
     primary: hex(scheme.primary),
     over: dark ? palette.accent.dark : palette.accent.light,
     overText: dark ? palette.accent.dark : palette.accent.text,
-    // As the app's ring track (ringTrack), made solid: some widget hosts drop the alpha.
-    track: dark ? hex(scheme.surfaceVariant) : mix(background, text, 0.12),
+    // As the app's ring track (ringTrack): in light mode the text colour, see-through, so it shows over the
+    // glows as well as the plain background; a touch stronger than the app's 12%, as widgets are small.
+    track: dark ? hex(scheme.surfaceVariant) : text,
+    trackAlpha: dark ? 1 : 0.16,
   };
 }
 
