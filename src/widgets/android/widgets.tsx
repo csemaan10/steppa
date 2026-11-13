@@ -140,7 +140,9 @@ function PetWidget({ v, c, size, petted }: { v: WidgetView; c: WidgetColors; siz
       clickActionData={{ uri: 'steppa://pet' }}
       style={{ width: 'match_parent', height: 'match_parent', borderRadius: 24, backgroundColor: hexColor(c.background), overflow: 'hidden' }}>
       <SvgWidget svg={sceneSvg(art, crop, width, height, petted > 0)} style={{ width: 'match_parent', height: 'match_parent' }} />
-      {/* Tapping the pet plays with it, as on the Pet tab; anywhere else opens the Pet tab. */}
+      {/* Tapping the pet plays with it, as on the Pet tab; anywhere else opens the Pet tab. Android
+          flashes its press highlight over the tap area, so it's fully rounded: a soft glow around
+          the pet rather than a square. */}
       {spot ? (
         <FlexWidget
           clickAction={PET_TAP}
@@ -149,6 +151,7 @@ function PetWidget({ v, c, size, petted }: { v: WidgetView; c: WidgetColors; siz
             marginTop: Math.round(spot.box.y * height),
             width: Math.max(1, Math.round(spot.box.w * width)),
             height: Math.max(1, Math.round(spot.box.h * height)),
+            borderRadius: Math.max(1, Math.round(Math.min(spot.box.w * width, spot.box.h * height) / 2)),
             backgroundColor: '#00000000',
           }}
         />
