@@ -48,6 +48,8 @@ export type PetWidgetProps = {
   /** Today's steps, for the little tag in the corner, and the share of the goal for its ring. */
   stepsText: string;
   progress: number;
+  /** The app's ring colour (Settings), or null for the theme's. */
+  ringColor: string | null;
   /** What it says when tapped, in turn. */
   says: string[];
   /** Taps since the app last updated the widget: 0 for none, then it smiles and says something. */
@@ -122,7 +124,7 @@ const PetWidget = (props: PetWidgetProps, env: WidgetEnvironment) => {
     return (
       <ZStack modifiers={[frame({ width: size, height: size })]}>
         <Circle modifiers={[strokeBorder({ content: c.track, style: { lineWidth: stroke } }), frame({ width: size, height: size })]} />
-        {arc(Math.min(1, props.progress), c.primary)}
+        {arc(Math.min(1, props.progress), props.ringColor ?? c.primary)}
         {arc(Math.min(1, Math.max(0, props.progress - 1)), c.over)}
       </ZStack>
     );

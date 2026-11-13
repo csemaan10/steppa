@@ -2,8 +2,10 @@ import { Skia } from '@shopify/react-native-skia';
 import { Directory, File } from 'expo-file-system';
 import { widgetsDirectory, type WidgetTimelineEntry } from 'expo-widgets';
 
+import { THICKNESS_SCALE } from '@/lib/ring-style';
 import { formatSteps } from '@/lib/dates';
 import { nextMidnight, nextSkyChange, readWidgetState, widgetView, type PetView, type WidgetView } from '@/lib/widgets/data';
+import { styledRingSvg } from '@/lib/widgets/ring-svg';
 import { cropAround, petSpot, sceneSvg } from '@/lib/widgets/scene-svg';
 import PetWidget, { type PetPicture, type PetWidgetProps } from '@/widgets/ios/pet-widget';
 import StepsWidget, { type StepsWidgetProps } from '@/widgets/ios/steps-widget';
@@ -11,6 +13,10 @@ import StepsWidget, { type StepsWidgetProps } from '@/widgets/ios/steps-widget';
 /** Pixel sizes of the pet pictures: a small widget (square) and a medium one, at 3x. */
 const SQUARE = { width: 510, height: 510 };
 const WIDE = { width: 1092, height: 510 };
+/** The Steps widget's ring picture: 112 points across, at 3x. */
+const RING = 336;
+/** What the widget pictures in the shared folder are named by. */
+const PREFIXES = ['pet-', 'ring-'];
 
 /** A short, stable name for a picture, so an unchanged one isn't drawn twice. */
 function hash(text: string): string {
@@ -20,9 +26,9 @@ function hash(text: string): string {
 }
 
 /** Draws an SVG as a PNG in the shared widgets folder; its file:// URI, or null. */
-function png(svg: string, size: { width: number; height: number }, keep: Set<string>): string | null {
+function png(svg: string, size: { width: number; height: number }, keep: Set<string>, prefix = 'pet-'): string | null {
   if (!widgetsDirectory) return null;
-  const file = new File(widgetsDirectory, `pet-${hash(svg)}.png`);
+  const file = new File(widgetsDirectory, `${prefix}${hash(svg)}.png`);
   keep.add(file.uri);
   if (file.exists) return file.uri;
   const dom = Skia.SVG.MakeFromString(svg);
@@ -49,7 +55,21 @@ function petPicture(pet: PetView, size: { width: number; height: number }, happy
   };
 }
 
-function stepsProps(v: WidgetView): StepsWidgetProps {
+/** The ring in the app's style, light and dark; null for Classic, which the widget draws itself. */
+function ringImage(v: WidgetView, keep: Set<string>): StepsWidgetProps['ringImage'] {
+  if (v.ring.style === 'classic') return null;
+  try {
+    const size = { width: RING, height: RING };
+    const light = png(styledRingSvg(v.progress, RING, v.ring, v.light), size, keep, 'ring-');
+    const dark = png(styledRingSvg(v.progress, RING, v.ring, v.dark), size, keep, 'ring-');
+    return light && dark ? { light, dark } : null;
+  } catch (e) {
+    console.warn('Could not draw the ring for its widget', e);
+    return null;
+  }
+}
+
+function stepsProps(v: WidgetView, keep: Set<string>): StepsWidgetProps {
   return {
     ready: v.ready,
     stepsText: v.stepsText,
@@ -59,6 +79,9 @@ function stepsProps(v: WidgetView): StepsWidgetProps {
     progress: v.progress,
     over: v.over,
     streak: v.streak,
+    ringColor: v.ring.color,
+    ringScale: THICKNESS_SCALE[v.ring.thickness],
+    ringImage: ringImage(v, keep),
     light: v.light,
     dark: v.dark,
   };
@@ -83,6 +106,7 @@ function petProps(v: WidgetView, keep: Set<string>, happy = false): PetWidgetPro
     line: v.pet?.line ?? '',
     stepsText: v.stepsText,
     progress: v.progress,
+    ringColor: v.ring.color,
     says: v.pet?.says ?? [],
     pets: 0,
     square,
@@ -107,19 +131,21 @@ export function refreshWidgets(): void {
     const now = new Date();
     const midnight = nextMidnight(now);
     const views = [widgetView(state, now), widgetView(state, midnight)] as const;
+    // Every picture an entry uses; any other in the folder is left over and goes.
+    const keep = new Set<string>();
 
     const steps: WidgetTimelineEntry<StepsWidgetProps>[] = [
-      { date: now, props: stepsProps(views[0]) },
-      { date: midnight, props: stepsProps(views[1]) },
+      { date: now, props: stepsProps(views[0], keep) },
+      { date: midnight, props: stepsProps(views[1], keep) },
     ];
     const stepsKey = JSON.stringify(steps.map((e) => e.props));
-    if (stepsKey !== lastSteps) {
+    const stepsChanged = stepsKey !== lastSteps;
+    if (stepsChanged) {
       StepsWidget.updateTimeline(steps);
       lastSteps = stepsKey;
     }
 
     // The pet's sky also turns with the hour (dusk, night...), so it gets the next change too.
-    const keep = new Set<string>();
     const sky = nextSkyChange(now);
     const pet: WidgetTimelineEntry<PetWidgetProps>[] = [
       { date: now, props: petProps(views[0], keep, true) },
@@ -127,14 +153,15 @@ export function refreshWidgets(): void {
       { date: midnight, props: petProps(views[1], keep) },
     ];
     const petKey = JSON.stringify(pet.map((e) => e.props));
-    if (petKey !== lastPet) {
+    const petChanged = petKey !== lastPet;
+    if (petChanged) {
       PetWidget.updateTimeline(pet);
       lastPet = petKey;
-      // Pictures no entry uses any more.
-      if (widgetsDirectory) {
-        for (const item of new Directory(widgetsDirectory).list()) {
-          if (item instanceof File && item.name.startsWith('pet-') && !keep.has(item.uri)) item.delete();
-        }
+    }
+    // Pictures no entry uses any more.
+    if ((stepsChanged || petChanged) && widgetsDirectory) {
+      for (const item of new Directory(widgetsDirectory).list()) {
+        if (item instanceof File && PREFIXES.some((p) => item.name.startsWith(p)) && !keep.has(item.uri)) item.delete();
       }
     }
   } catch (e) {

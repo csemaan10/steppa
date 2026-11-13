@@ -9,6 +9,7 @@ import { MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
 import { addDays, formatSteps, startOfDay, toDayKey } from '@/lib/dates';
 import { mix, timeOfDay } from '@/lib/scene-art';
 import { drawWorld, MOOD_SAYS, moodLine, moodOf, type KindPicks, type Mood, type WorldArt } from '@/lib/world';
+import { readRingSettings, type RingSettings } from '@/lib/ring-style';
 import { PALETTES, THEME_NAMES, type ThemeName } from '@/theme/palettes';
 
 const STATE_KEY = 'steppa:widgets';
@@ -109,6 +110,8 @@ export type WidgetView = {
   streak: number;
   /** Null without a pet. */
   pet: PetView | null;
+  /** The ring as the app draws it (Settings): style, colour, thickness. */
+  ring: RingSettings;
   light: WidgetColors;
   dark: WidgetColors;
 };
@@ -214,6 +217,7 @@ export function widgetView(state: WidgetState | null, now: Date = new Date()): W
     pet: art
       ? { name, mood, feeling: FEELING[mood], line: moodLine(mood, name, steps, goal), says: [...(art.pet?.sounds ?? []), ...MOOD_SAYS[mood]], art }
       : null,
+    ring: readRingSettings(),
     light: colorsFor(theme, false),
     dark: colorsFor(theme, true),
   };

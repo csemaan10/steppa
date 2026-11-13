@@ -13,7 +13,14 @@ import {
   type RingCat,
   type RingThickness,
 } from '@/lib/ring-style';
+import { refreshWidgets } from '@/lib/widgets';
 import { ringTrack, useAppTheme, withAlpha } from '@/theme';
+
+/** Saves a ring choice; the widgets wear the same ring, so they redraw too. */
+function setRing(patch: Parameters<typeof setRingSettings>[0]) {
+  setRingSettings(patch);
+  refreshWidgets();
+}
 
 const THICKNESS_LABELS: Record<RingThickness, string> = { slim: 'Slim', regular: 'Regular', bold: 'Bold' };
 
@@ -46,7 +53,7 @@ export function RingStylePicker() {
             return (
               <Pressable
                 key={s}
-                onPress={() => setRingSettings({ style: s })}
+                onPress={() => setRing({ style: s })}
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
                 accessibilityLabel={`${RING_STYLE_LABELS[s]} ring`}
@@ -79,7 +86,7 @@ export function RingStylePicker() {
             <Text variant="labelLarge">Cat colour</Text>
             <ButtonGroup<RingCat>
               value={settings.cat}
-              onChange={(cat) => setRingSettings({ cat })}
+              onChange={(cat) => setRing({ cat })}
               options={[
                 { value: 'gingercat', label: 'Ginger' },
                 { value: 'greycat', label: 'Grey' },
@@ -97,7 +104,7 @@ export function RingStylePicker() {
             return (
               <Pressable
                 key={c ?? 'theme'}
-                onPress={() => setRingSettings({ color: c })}
+                onPress={() => setRing({ color: c })}
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
                 accessibilityLabel={c ? `Ring colour ${c}` : 'Theme colour'}
@@ -118,7 +125,7 @@ export function RingStylePicker() {
         <Text variant="labelLarge">Thickness</Text>
         <ButtonGroup<RingThickness>
           value={settings.thickness}
-          onChange={(thickness) => setRingSettings({ thickness })}
+          onChange={(thickness) => setRing({ thickness })}
           options={[
             { value: 'slim', label: 'Slim' },
             { value: 'regular', label: 'Regular' },

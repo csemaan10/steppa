@@ -18,6 +18,7 @@ import {
 
 import { formatSteps } from '@/lib/dates';
 import { readWidgetState, widgetView, type WidgetColors, type WidgetView } from '@/lib/widgets/data';
+import { styledRingSvg } from '@/lib/widgets/ring-svg';
 import { backgroundSvg, cropAround, petSpot, ringSvg, sceneSvg } from '@/lib/widgets/scene-svg';
 
 /** The names in app.json's react-native-android-widget entry. */
@@ -90,7 +91,7 @@ function StepsWidget({ v, c, size }: { v: WidgetView; c: WidgetColors; size: Siz
   // The ring, with the count (or, beside the details, the percentage) in the middle.
   const dial = (
     <OverlapWidget style={{ width: ring, height: ring }}>
-      <SvgWidget svg={ringSvg(v.progress, ring, c)} style={{ width: ring, height: ring }} />
+      <SvgWidget svg={styledRingSvg(v.progress, ring, v.ring, c)} style={{ width: ring, height: ring }} />
       <FlexWidget style={{ width: ring, height: ring, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: ring * 0.14 }}>
         <TextWidget
           text={wide ? percent : v.stepsText}
@@ -200,7 +201,8 @@ function PetWidget({ v, c, size, petted }: { v: WidgetView; c: WidgetColors; siz
               paddingVertical: 4,
               flexGap: 4,
             }}>
-            <SvgWidget svg={ringSvg(v.progress, 13, c, 0.2)} style={{ width: 13, height: 13 }} />
+            {/* Too small for the ring's style to show, so a plain ring in its colour. */}
+            <SvgWidget svg={ringSvg(v.progress, 13, { ...c, primary: v.ring.color ?? c.primary }, 0.2)} style={{ width: 13, height: 13 }} />
             <TextWidget text={v.stepsText} maxLines={1} style={{ fontSize: 12, fontWeight: '600', color: hexColor(c.text) }} />
           </FlexWidget>
         </FlexWidget>

@@ -77,7 +77,8 @@ function get(key: string): string | null {
   }
 }
 
-function read(): RingSettings {
+/** The saved ring settings, read fresh (for the widgets, drawn without the app's screens). */
+export function readRingSettings(): RingSettings {
   const style = get(KEYS.style);
   const color = get(KEYS.color);
   const thickness = get(KEYS.thickness);
@@ -90,7 +91,7 @@ function read(): RingSettings {
   };
 }
 
-let current: RingSettings = read();
+let current: RingSettings = readRingSettings();
 
 /** Changes some of the ring settings and saves them. */
 export function setRingSettings(patch: Partial<RingSettings>) {
