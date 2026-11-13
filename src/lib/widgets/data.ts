@@ -7,7 +7,7 @@ import 'expo-sqlite/localStorage/install';
 import { MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
 
 import { addDays, formatSteps, startOfDay, toDayKey } from '@/lib/dates';
-import { mix, timeOfDay } from '@/lib/scene-art';
+import { timeOfDay } from '@/lib/scene-art';
 import { drawWorld, MOOD_SAYS, moodLine, moodOf, type KindPicks, type Mood, type WorldArt } from '@/lib/world';
 import { readRingSettings, type RingSettings } from '@/lib/ring-style';
 import { PALETTES, THEME_NAMES, type ThemeName } from '@/theme/palettes';
