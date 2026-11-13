@@ -144,10 +144,14 @@ async function readAndUpload(userId: string, dates: Date[]): Promise<DaySteps[]>
   // The zone these days were counted in: once a day is over, only a phone in the same zone can
   // update it (migration 029), so travelling never re-cuts finished days at a new midnight.
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
-  // Skip unreadable days so a failed read never overwrites real data with 0.
+  const today = toDayKey(new Date());
+  // Skip unreadable days so a failed read never overwrites real data with 0. A finished day that
+  // reads 0 is skipped too: a 0 saves nothing a missing day doesn't, and it's how a bad read shows
+  // (history not on the phone yet, Health locked or access off), which would wipe real steps.
   const rows = dates.flatMap((date, i) => {
     const count = counts[i];
     if (count === null || count === undefined) return [];
+    if (count <= 0 && toDayKey(date) < today) return [];
     return [
       {
         user_id: userId,

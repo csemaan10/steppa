@@ -55,6 +55,9 @@ export async function readDailySteps(days: Date[]): Promise<(number | null)[]> {
       { day: 1 },
       { filter: { date: { startDate: days[0]!, endDate: addDays(days[days.length - 1]!, 1) } } }
     );
+    // Locked while the query ran: iOS answers with only the steps since it locked (0 for earlier
+    // days), so the whole read is unreliable.
+    if (!canReadHealthNow()) return days.map(() => null);
     const byDay = new Map(
       buckets.flatMap((b) => (b.startDate ? [[toDayKey(b.startDate), Math.round(b.sumQuantity?.quantity ?? 0)]] : []))
     );
