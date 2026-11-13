@@ -17,6 +17,7 @@ import {
   frame,
   layoutPriority,
   lineLimit,
+  minimumScaleFactor,
   monospacedDigit,
   offset,
   opacity,
@@ -115,10 +116,12 @@ const PetWidget = (props: PetWidgetProps, env: WidgetEnvironment) => {
   const stepRing = (size: number, stroke: number) => {
     const lap = Math.PI * (size - stroke);
     const capTurn = (stroke / (size - stroke)) * (180 / Math.PI);
+    // Clear circles with circular outlines: @expo/ui's strokeBorder outlines a rectangle by default.
     const arc = (part: number, color: string) => (
       <Circle
         modifiers={[
-          strokeBorder({ content: color, style: { lineWidth: stroke, lineCap: 'round', dash: [lap, lap], dashPhase: lap - Math.max(0, part * lap - stroke) } }),
+          foregroundStyle('#00000000'),
+          strokeBorder({ shape: 'circle', content: color, style: { lineWidth: stroke, lineCap: 'round', dash: [lap, lap], dashPhase: lap - Math.max(0, part * lap - stroke) } }),
           rotationEffect(-90 + capTurn),
           opacity(part > 0 ? 1 : 0),
           frame({ width: size, height: size }),
@@ -127,7 +130,7 @@ const PetWidget = (props: PetWidgetProps, env: WidgetEnvironment) => {
     );
     return (
       <ZStack modifiers={[frame({ width: size, height: size })]}>
-        <Circle modifiers={[strokeBorder({ content: c.trackAlpha < 1 ? `${c.track}${Math.round(c.trackAlpha * 255).toString(16).padStart(2, '0')}` : c.track, style: { lineWidth: stroke } }), frame({ width: size, height: size })]} />
+        <Circle modifiers={[foregroundStyle('#00000000'), strokeBorder({ shape: 'circle', content: c.trackAlpha < 1 ? `${c.track}${Math.round(c.trackAlpha * 255).toString(16).padStart(2, '0')}` : c.track, style: { lineWidth: stroke } }), frame({ width: size, height: size })]} />
         {arc(Math.min(1, props.progress), props.ringColor ?? c.primary)}
         {arc(Math.min(1, Math.max(0, props.progress - 1)), c.over)}
       </ZStack>
@@ -156,14 +159,17 @@ const PetWidget = (props: PetWidgetProps, env: WidgetEnvironment) => {
         </Button>
       ) : null}
       {said && spot ? (
+        // The bubble hugs what's said: the text is capped (shrinking a little before it would cut off),
+        // then padded, then the capsule drawn round it, so it always sits inside.
         <Text
           modifiers={[
-            font({ size: 13, weight: 'semibold', design: 'rounded' }),
+            font({ size: 12, weight: 'semibold', design: 'rounded' }),
             foregroundStyle('#1C1B1F'),
             lineLimit(1),
+            minimumScaleFactor(0.75),
+            frame({ maxWidth: bubbleWidth - 20 }),
             padding({ horizontal: 10, vertical: 5 }),
             background('#FFFFFFEE', shapes.capsule()),
-            frame({ width: bubbleWidth }),
             offset({
               x: Math.min(width - bubbleWidth - 6, Math.max(6, spot.head.x * width - bubbleWidth / 2)),
               y: Math.max(54, spot.head.y * height - 44),
