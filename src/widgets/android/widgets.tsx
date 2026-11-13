@@ -1,5 +1,10 @@
 // Android widgets: the step ring and the pet, on the home screen and (Android 16 QPR2 and later)
 // the lock screen. Drawn from what src/lib/widgets/data.ts saved, so the app needn't be open.
+//
+// The library calls these components as plain functions rather than rendering them, so the React
+// Compiler must leave them alone: its memo cache is a hook, which throws there and leaves the widget
+// blank.
+'use no memo';
 
 import {
   FlexWidget,
