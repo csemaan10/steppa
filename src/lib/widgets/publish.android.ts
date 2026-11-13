@@ -40,11 +40,11 @@ let run = 0;
  */
 export function refreshWidgets(): void {
   const mine = ++run;
-  void draw('Pet');
   const v = widgetView(readWidgetState());
   const from = readDrawn();
   saveDrawn(v.progress, v.steps);
-  if (!from || Math.abs(from.progress - v.progress) < 0.005) {
+  if (!from || (Math.abs(from.progress - v.progress) < 0.005 && from.steps === v.steps)) {
+    void draw('Pet');
     void draw('Steps');
     return;
   }
@@ -52,12 +52,12 @@ export function refreshWidgets(): void {
     for (let i = 1; i <= FRAMES; i++) {
       if (run !== mine) return;
       const t = 1 - (1 - i / FRAMES) ** 3;
-      await draw(
-        'Steps',
+      const moment =
         i === FRAMES
           ? undefined
-          : { progress: from.progress + (v.progress - from.progress) * t, steps: Math.round(from.steps + (v.steps - from.steps) * t) }
-      );
+          : { progress: from.progress + (v.progress - from.progress) * t, steps: Math.round(from.steps + (v.steps - from.steps) * t) };
+      // The pet's step tag fills along too, at half the frames: each of its frames redraws the whole scene.
+      await Promise.all([draw('Steps', moment), i % 2 === 0 ? draw('Pet', moment) : null]);
       if (i < FRAMES) await new Promise((resolve) => setTimeout(resolve, FRAME_MS));
     }
   })();

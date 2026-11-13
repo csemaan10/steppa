@@ -7,6 +7,7 @@ import {
   Snackbar,
   Text,
 } from 'react-native-paper';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { Button } from '@/components/button';
 import { CharacterIntroCard, characterIntroSeen } from '@/components/character/character-intro-card';
@@ -23,6 +24,7 @@ import { ProgressRing } from '@/components/progress-ring';
 import { RecapPreview } from '@/components/recap/recap-preview';
 import { SectionHeader } from '@/components/section-header';
 import { WeekDetail, type WeekDetailKind } from '@/components/week-detail';
+import { useCountUp } from '@/hooks/use-count-up';
 import { useLoader } from '@/hooks/use-loader';
 import { registerBackgroundSync } from '@/lib/background-sync';
 import {
@@ -179,7 +181,6 @@ export default function TodayScreen() {
   const week = data?.history.slice(-7) ?? [];
   const stats = data ? summarize(week) : null;
   const ratio = stats ? stats.today / goal : 0;
-  const over = ratio > 1;
   const bestDay = week.reduce<(typeof week)[number] | null>(
     (best, d) => (d.steps > 0 && (!best || d.steps > best.steps) ? d : best),
     null
@@ -265,21 +266,7 @@ export default function TodayScreen() {
               color={theme.colors.primary}
               overflowColor={theme.colors.accent}
               trackColor={ringTrack(theme)}>
-              <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-                Steps today
-              </Text>
-              <Text
-                variant="displaySmall"
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                style={{ color: over ? theme.colors.accentText : theme.colors.primary, fontWeight: '700' }}>
-                {formatSteps(stats?.today ?? 0)}
-              </Text>
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                {over
-                  ? `+${formatSteps((stats?.today ?? 0) - goal)} over goal`
-                  : `${Math.round(ratio * 100)}% of ${formatSteps(goal)}`}
-              </Text>
+              <RingCount steps={stats?.today ?? 0} goal={goal} />
             </ProgressRing>
         </View>
 
@@ -396,6 +383,35 @@ export default function TodayScreen() {
         {snack}
       </Snackbar>
     </View>
+  );
+}
+
+/**
+ * The middle of the ring: today's steps and how they stand against the goal. They count up to a new
+ * total with the ring's own timing and curve (src/components/progress-ring.tsx), so the number and
+ * the arc arrive together; on their own, so the rest of the screen doesn't redraw every frame.
+ */
+function RingCount({ steps, goal }: { steps: number; goal: number }) {
+  const theme = useAppTheme();
+  const reduceMotion = useReducedMotion();
+  const shown = useCountUp(steps, reduceMotion ? 0 : 1100);
+  const over = shown > goal;
+  return (
+    <>
+      <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+        Steps today
+      </Text>
+      <Text
+        variant="displaySmall"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        style={{ color: over ? theme.colors.accentText : theme.colors.primary, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        {formatSteps(shown)}
+      </Text>
+      <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, fontVariant: ['tabular-nums'] }}>
+        {over ? `+${formatSteps(shown - goal)} over goal` : `${Math.round((shown / goal) * 100)}% of ${formatSteps(goal)}`}
+      </Text>
+    </>
   );
 }
 
