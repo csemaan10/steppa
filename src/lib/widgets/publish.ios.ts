@@ -59,10 +59,17 @@ function petPicture(pet: PetView, size: { width: number; height: number }, happy
 function ringImage(v: WidgetView, keep: Set<string>): StepsWidgetProps['ringImage'] {
   if (v.ring.style === 'classic') return null;
   try {
-    const size = { width: RING, height: RING };
-    const light = png(styledRingSvg(v.progress, RING, v.ring, v.light), size, keep, 'ring-');
-    const dark = png(styledRingSvg(v.progress, RING, v.ring, v.dark), size, keep, 'ring-');
-    return light && dark ? { light, dark } : null;
+    // A glow or a trail of prints spreads past the ring line; the SVG's viewBox takes that in. Drawn
+    // at its full span, the ring line stays RING across and the widget lets the rest spill over.
+    const draw = (colors: WidgetView['light']) => {
+      const svg = styledRingSvg(v.progress, RING, v.ring, colors);
+      const span = Number(/viewBox="\S+ \S+ (\S+)/.exec(svg)?.[1] ?? RING) || RING;
+      const px = Math.ceil(span);
+      return { span, file: png(svg.replace(`width="${RING}" height="${RING}"`, `width="${px}" height="${px}"`), { width: px, height: px }, keep, 'ring-') };
+    };
+    const light = draw(v.light);
+    const dark = draw(v.dark);
+    return light.file && dark.file ? { light: light.file, dark: dark.file, scale: Math.ceil(light.span) / RING } : null;
   } catch (e) {
     console.warn('Could not draw the ring for its widget', e);
     return null;

@@ -41,7 +41,7 @@ export type StepsWidgetProps = {
    * A picture of the ring in the app's style, in each scheme, for every style but Classic (which is
    * drawn here, so it can sweep). Null for Classic.
    */
-  ringImage: { light: string; dark: string } | null;
+  ringImage: { light: string; dark: string; scale: number } | null;
   light: WidgetColors;
   dark: WidgetColors;
 };
@@ -114,11 +114,16 @@ const StepsWidget = (props: StepsWidgetProps, env: WidgetEnvironment) => {
   const ringColor = props.ringColor ?? c.primary;
   const ring = (size: number) => {
     if (props.ringImage) {
+      // The picture is wider than the ring when a glow or prints spread past it (by `scale`): the
+      // ring line is `size` across and the rest spills into the padding around it.
+      const span = size * (props.ringImage.scale || 1);
       return (
-        <Image
-          uiImage={env.colorScheme === 'dark' ? props.ringImage.dark : props.ringImage.light}
-          modifiers={[resizable(), frame({ width: size, height: size })]}
-        />
+        <ZStack modifiers={[frame({ width: size, height: size })]}>
+          <Image
+            uiImage={env.colorScheme === 'dark' ? props.ringImage.dark : props.ringImage.light}
+            modifiers={[resizable(), frame({ width: span, height: span })]}
+          />
+        </ZStack>
       );
     }
     // The app's Home ring's proportions: a 14 stroke on 176.

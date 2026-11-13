@@ -159,24 +159,23 @@ const PetWidget = (props: PetWidgetProps, env: WidgetEnvironment) => {
         </Button>
       ) : null}
       {said && spot ? (
-        // The bubble hugs what's said: the text is capped (shrinking a little before it would cut off),
-        // then padded, then the capsule drawn round it, so it always sits inside.
-        <Text
+        // In a widget a Text's modifiers are applied twice (once by the Text, once by the view around
+        // it), so padding, backgrounds and offsets would double up. The Text only gets its font; a
+        // stack holds the capsule, hugging the words, and another places it, at most bubbleWidth wide.
+        <VStack
           modifiers={[
-            font({ size: 12, weight: 'semibold', design: 'rounded' }),
-            foregroundStyle('#1C1B1F'),
-            lineLimit(1),
-            minimumScaleFactor(0.75),
-            frame({ maxWidth: bubbleWidth - 20 }),
-            padding({ horizontal: 10, vertical: 5 }),
-            background('#FFFFFFEE', shapes.capsule()),
+            frame({ width: bubbleWidth }),
             offset({
               x: Math.min(width - bubbleWidth - 6, Math.max(6, spot.head.x * width - bubbleWidth / 2)),
               y: Math.max(54, spot.head.y * height - 44),
             }),
           ]}>
-          {said}
-        </Text>
+          <HStack modifiers={[padding({ horizontal: 10, vertical: 5 }), background('#FFFFFFEE', shapes.capsule())]}>
+            <Text modifiers={[font({ size: 12, weight: 'semibold', design: 'rounded' }), foregroundStyle('#1C1B1F'), lineLimit(1), minimumScaleFactor(0.75)]}>
+              {said}
+            </Text>
+          </HStack>
+        </VStack>
       ) : null}
       {/* Up in the sky: the name tag on the left, today's steps on the right. A small widget has
           room for just the name (its face shows how it feels); a long name gives way to the steps. */}
