@@ -116,6 +116,16 @@ function petProps(v: WidgetView, keep: Set<string>, happy = false): PetWidgetPro
   };
 }
 
+/**
+ * A timeline as iOS can keep it. Widget props are saved in the App Group's shared preferences, which
+ * take plain values only: one null and the whole timeline is turned down (with just a log line), and
+ * the widget, with no entries, draws nothing. So empty values are left out; the widgets read a missing
+ * one as null.
+ */
+function storable<P extends object>(entries: WidgetTimelineEntry<P>[]): WidgetTimelineEntry<P>[] {
+  return entries.map((e) => ({ date: e.date, props: JSON.parse(JSON.stringify(e.props, (_key, value) => (value === null ? undefined : value))) as P }));
+}
+
 /** What was last handed to each widget, so a sync that changed nothing doesn't reload them. */
 let lastSteps = '';
 let lastPet = '';
@@ -141,7 +151,7 @@ export function refreshWidgets(): void {
     const stepsKey = JSON.stringify(steps.map((e) => e.props));
     const stepsChanged = stepsKey !== lastSteps;
     if (stepsChanged) {
-      StepsWidget.updateTimeline(steps);
+      StepsWidget.updateTimeline(storable(steps));
       lastSteps = stepsKey;
     }
 
@@ -155,7 +165,7 @@ export function refreshWidgets(): void {
     const petKey = JSON.stringify(pet.map((e) => e.props));
     const petChanged = petKey !== lastPet;
     if (petChanged) {
-      PetWidget.updateTimeline(pet);
+      PetWidget.updateTimeline(storable(pet));
       lastPet = petKey;
     }
     // Pictures no entry uses any more.

@@ -50,6 +50,10 @@ const StepsWidget = (props: StepsWidgetProps, env: WidgetEnvironment) => {
   'widget';
   const c = env.colorScheme === 'dark' ? props.dark : props.light;
   const family = env.widgetFamily;
+  // No timeline yet (the widget gallery, or before Steppa first runs): just the name.
+  if (!c) {
+    return <Text modifiers={[containerBackground(env.colorScheme === 'dark' ? '#191C1A' : '#F6FBF6', 'widget'), widgetURL('steppa://')]}>Steppa</Text>;
+  }
   const share = Math.min(1, props.progress);
   const percent = `${Math.round(props.progress * 100)}%`;
   const numberColor = props.over ? c.overText : c.primary;

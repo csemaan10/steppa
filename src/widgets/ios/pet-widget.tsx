@@ -64,6 +64,10 @@ const PetWidget = (props: PetWidgetProps, env: WidgetEnvironment) => {
   'widget';
   const c = env.colorScheme === 'dark' ? props.dark : props.light;
   const family = env.widgetFamily;
+  // No timeline yet (the widget gallery, or before Steppa first runs): just the name.
+  if (!c) {
+    return <Text modifiers={[containerBackground(env.colorScheme === 'dark' ? '#191C1A' : '#F6FBF6', 'widget'), widgetURL('steppa://pet')]}>Steppa</Text>;
+  }
   const url = widgetURL('steppa://pet');
 
   if (family === 'accessoryInline') {
