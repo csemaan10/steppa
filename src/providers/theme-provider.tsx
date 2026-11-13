@@ -2,6 +2,7 @@ import 'expo-sqlite/localStorage/install';
 import { createContext, use, useState, type PropsWithChildren } from 'react';
 import { Appearance } from 'react-native';
 
+import { refreshWidgets } from '@/lib/widgets';
 import { THEME_NAMES, type ThemeName } from '@/theme';
 
 const STORAGE_KEY = 'steppa:theme';
@@ -51,6 +52,8 @@ export function ThemeChoiceProvider({ children }: PropsWithChildren) {
   function setThemeName(name: ThemeName) {
     localStorage.setItem(STORAGE_KEY, name);
     setName(name);
+    // The widgets wear the same colours.
+    refreshWidgets();
   }
 
   function setMode(next: AppearanceMode) {

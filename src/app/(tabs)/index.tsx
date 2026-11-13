@@ -33,6 +33,7 @@ import {
   getProfile,
   getProfileStats,
   getStepHistory,
+  getWorld,
   hasWorld,
   summarize,
   syncSteps,
@@ -48,6 +49,8 @@ import {
 import { syncPushToken } from '@/lib/notifications';
 import { notifyPetMilestone, syncPetPushSetting } from '@/lib/pet-milestones';
 import { firstUnseenGroup, isRecapShowing, loadRecap, markRecapSeen } from '@/lib/recap';
+import { updateWidgets } from '@/lib/widgets';
+import { readWidgetState } from '@/lib/widgets/data';
 import { useUserId } from '@/providers/auth-provider';
 import { glassCard, ringTrack, screenBackground, transparentHeader, useAppTheme } from '@/theme';
 
@@ -98,6 +101,25 @@ export default function TodayScreen() {
       // Likewise: if it can't tell, it doesn't invite them to adopt one.
       hasWorld(userId).catch(() => true),
     ]);
+    // The widgets' goal and streak. The server's streak counts today once its goal is met; the
+    // widgets add today themselves, so they keep the run up to yesterday.
+    const today = history[history.length - 1];
+    if (today) {
+      const met = today.steps >= profile.daily_goal ? 1 : 0;
+      updateWidgets({
+        day: today.day,
+        steps: today.steps,
+        goal: profile.daily_goal,
+        streakBefore: Math.max(0, lifetime.current_streak - met),
+      });
+    }
+    // The Pet widget learns the pet on the Pet tab; fetch it here if that hasn't been opened yet.
+    if (!hasPet) updateWidgets({ pet: null, away: null });
+    else if (!readWidgetState()?.pet) {
+      getWorld(userId)
+        .then((status) => status && updateWidgets({ pet: { steps: status.steps, saved: status.world.picks.pet } }))
+        .catch(() => {});
+    }
     const [previews, recap] = await Promise.all([
       Promise.all(
         groups.slice(0, 3).map(async (group) => {

@@ -49,12 +49,14 @@ import {
   type Treats,
   type World,
 } from '@/lib/api';
+import { toDayKey } from '@/lib/dates';
 import { askForPushOnce } from '@/lib/notifications';
 import { keepsakeNamed, passportPages } from '@/lib/passport';
 import { awayToday, type Place } from '@/lib/pet-adventures';
 import { markPetMilestoneShown } from '@/lib/pet-milestones';
 import { timeOfDay } from '@/lib/scene-art';
 import { freshParam } from '@/lib/shop';
+import { updateWidgets } from '@/lib/widgets';
 import {
   drawAway,
   drawVisit,
@@ -416,6 +418,18 @@ function PetHome({
   const guestPlay = usePetPlay(art.guest, { says: ['Hi!'] });
   const muted = { color: theme.colors.onSurfaceVariant };
 
+  // What the scene shows; it changes only when the picture does.
+  const sceneKey = `${level}:${time}:${mood}:${where?.key ?? company.out?.owner ?? 'home'}:${company.over?.name ?? ''}:${JSON.stringify(saved ?? {})}`;
+  // The Pet widget shows the same pet. At home alone it can redraw it itself as the day goes on; on a
+  // trip, at a friend's, or with a friend over, it keeps today's picture from here.
+  const toWidget = useEffectEvent(() =>
+    updateWidgets({
+      pet: { steps, saved },
+      away: away || company.out || company.over ? { day: toDayKey(new Date()), art } : null,
+    })
+  );
+  useEffect(() => toWidget(), [sceneKey, steps]);
+
   const lineRef = useRef<View>(null);
   const { fly, flights } = useCookieFlights();
   const { show, toast } = useGameToast(tabBarSpace + 12);
@@ -525,7 +539,7 @@ function PetHome({
             art={art}
             width={sceneWidth}
             animate={animate}
-            version={`${level}:${time}:${mood}:${where?.key ?? company.out?.owner ?? 'home'}:${company.over?.name ?? ''}:${JSON.stringify(saved ?? {})}`}
+            version={sceneKey}
             play={play}
             guestPlay={guestPlay}
             guestName={friend?.name}

@@ -3,6 +3,7 @@ import { addDays, lastNDays, startOfDay, toDayKey } from '@/lib/dates';
 import { healthSourceName, readDailySteps } from '@/lib/health';
 import { getRoute, progressOn, type Route } from '@/lib/journeys';
 import { supabase } from '@/lib/supabase';
+import { updateWidgets } from '@/lib/widgets';
 import type { SavedPicks, WorldKind } from '@/lib/world';
 
 export type Profile = {
@@ -112,6 +113,10 @@ export async function syncSteps(userId: string, days = 7): Promise<DaySteps[]> {
   const backfilled = localStorage.getItem(backfillKey(userId)) === '1';
   const rows = await uploadDays(userId, lastNDays(backfilled ? days : BACKFILL_DAYS));
   if (!backfilled) localStorage.setItem(backfillKey(userId), '1');
+  // Every sync (open app, background task, Apple Health's wake-up) brings the widgets up to date.
+  const day = toDayKey(new Date());
+  const today = rows.find((r) => r.day === day);
+  if (today) updateWidgets({ day, steps: today.steps });
   return rows;
 }
 

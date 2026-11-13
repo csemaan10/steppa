@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { createContext, use, useEffect, useState, type PropsWithChildren } from 'react';
 
 import { readStoredSession, supabase } from '@/lib/supabase';
+import { resetWidgets } from '@/lib/widgets';
 
 type AuthContextValue = {
   session: Session | null;
@@ -18,7 +19,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      setSession(next);
+      // Someone else may sign in on this phone next; the widgets mustn't keep showing your steps.
+      if (event === 'SIGNED_OUT') resetWidgets();
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 

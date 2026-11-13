@@ -2,7 +2,7 @@
   "expo": {
     "name": "Steppa",
     "slug": "steppa",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "steppa",
@@ -76,6 +76,75 @@
         {
           "icon": "./assets/images/notification-icon.png",
           "color": "#006C4C"
+        }
+      ],
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "StepsWidget",
+              "displayName": "Steps",
+              "description": "Today’s steps and your goal ring.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "accessoryCircular",
+                  "accessoryRectangular",
+                  "accessoryInline"
+                ],
+                "contentMarginsDisabled": true
+              }
+            },
+            {
+              "name": "PetWidget",
+              "displayName": "Pet",
+              "description": "Your pet, and how it’s feeling today.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "accessoryRectangular",
+                  "accessoryInline"
+                ],
+                "contentMarginsDisabled": true
+              }
+            }
+          ]
+        }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "Steps",
+              "label": "Steps",
+              "description": "Today’s steps and your goal ring",
+              "previewImage": "./assets/images/widgets/steps-preview.png",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetCategory": "home_screen|keyguard",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "Pet",
+              "label": "Pet",
+              "description": "Your pet, and how it’s feeling today",
+              "previewImage": "./assets/images/widgets/pet-preview.png",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetCategory": "home_screen|keyguard",
+              "updatePeriodMillis": 1800000
+            }
+          ]
         }
       ]
     ],
