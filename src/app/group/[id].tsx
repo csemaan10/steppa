@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Platform, RefreshControl, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Appbar, Chip, Menu, Text } from 'react-native-paper';
+import { Appbar, Menu, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   FadeIn,
@@ -370,23 +370,14 @@ export default function GroupScreen() {
                             podiumBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
                           }}
                         >
-                          {/* The group's details rise in once it loads, and the period switch below slides
-                              down to make room rather than jumping. */}
+                          {/* The group's description rises in once it loads, and the period switch below
+                              slides down to make room rather than jumping. (The invite code is shared from
+                              the share button in the top bar.) */}
                           {data?.group.description ? (
                             <Appear>
                               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                                 {data.group.description}
                               </Text>
-                            </Appear>
-                          ) : null}
-                          {data ? (
-                            <Appear index={1} style={styles.chip}>
-                              <Chip
-                                icon="ticket-confirmation-outline"
-                                onPress={() => Share.share({ message: data.group.invite_code })}
-                              >
-                                Invite code: {data.group.invite_code}
-                              </Chip>
                             </Appear>
                           ) : null}
                           <Animated.View layout={layoutMove}>
@@ -526,7 +517,6 @@ const styles = StyleSheet.create({
   titleText: { flexShrink: 1 },
   content: { padding: 16, paddingTop: 8, gap: 10 },
   header: { gap: 12, marginBottom: 12 },
-  chip: { alignSelf: 'flex-start' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
   rank: { width: 24, textAlign: 'center', fontWeight: '700' },
   nameColumn: { flex: 1, gap: 2 },
