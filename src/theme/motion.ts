@@ -56,6 +56,13 @@ export const motion = {
 
   /** Toggles, thumbs and other small UI moving to a new state: the same as `spatial`. */
   snappy: spatial,
+  /**
+   * A glass thumb gliding to a new option (the segmented controls): iOS's feel, a touch softer than
+   * `spatial`, settling with a hint of give (~2%). ~0.3 s.
+   */
+  glide: spring(500, 0.78),
+  /** That thumb lifting off the track while it's held or moving, and settling back down. */
+  lift: spring(700, 0.75),
   /** Content arriving or moving into place: entrances, neighbours sliding over. ~0.3 s, no visible bounce. */
   smooth: spring(220, 0.88),
   /** Celebrations only (a goal met): softer, with a ~3% overshoot. */

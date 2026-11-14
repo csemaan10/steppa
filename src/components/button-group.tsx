@@ -12,7 +12,6 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
-import { usePressed } from '@/hooks/use-pressed';
 import { withAlpha } from '@/theme';
 import { motion } from '@/theme/motion';
 
@@ -29,15 +28,15 @@ type Props<T extends string> = {
 const HEIGHT = 40;
 const PADDING = 3;
 const THUMB = HEIGHT - PADDING * 2;
-const RADIUS = 12;
 
 /**
- * A segmented control in the iOS style, so it reads as a filter rather than navigation and stays
- * distinct from the bottom tab bar (a glass capsule with a coloured pill that stretches as it
- * slides): a slightly recessed track with the options side by side, and a raised thumb under the
- * chosen one that glides over on a spring. The chosen label is in the full text colour and
- * semibold, crossfading as the thumb passes under it. Quick taps retarget from wherever the thumb
- * is. With reduced motion it fades in at the new choice instead of gliding.
+ * A segmented control in the iOS 26 manner, in the app's tonal colours: a capsule track faintly
+ * tinted with the theme colour, and a glass thumb in the tonal container colour (as on tonal
+ * buttons) under the chosen option. A finger landing lifts the thumb off the track; on a new choice
+ * it glides over, stretched and a little see-through while it travels, and settles back down on
+ * arrival. The chosen label crossfades in as the thumb passes under it. Quieter than the tab bar's
+ * solid pill, so it reads as a filter rather than navigation. Quick taps retarget from wherever the
+ * thumb is. With reduced motion it neither lifts nor glides: it fades in at the new choice.
  */
 export function ButtonGroup<T extends string>({ value, onChange, options }: Props<T>) {
   const theme = useTheme();
@@ -48,12 +47,19 @@ export function ButtonGroup<T extends string>({ value, onChange, options }: Prop
   const segment = rowWidth / options.length;
   const targetX = index * segment;
 
-  // The thumb's left edge, in points from the inside left of the track.
+  // Where the thumb is and where it's going (points from the inside left of the track), the option
+  // width, whether a finger is down, and how far it's lifted (0 resting, 1 up).
   const x = useSharedValue(targetX);
+  const goal = useSharedValue(targetX);
+  const width = useSharedValue(segment);
+  const held = useSharedValue(false);
+  const lift = useSharedValue(0);
   const fade = useSharedValue(1);
   const placed = useRef(false);
   useEffect(() => {
     if (!segment) return;
+    width.set(segment);
+    goal.set(targetX);
     // Its first place, or any with reduced motion: straight there (fading in, if it moved).
     if (!placed.current || reduceMotion) {
       const moved = placed.current && x.get() !== targetX;
@@ -65,18 +71,36 @@ export function ButtonGroup<T extends string>({ value, onChange, options }: Prop
       placed.current = true;
       return;
     }
-    x.set(withSpring(targetX, motion.spatial));
-  }, [x, fade, targetX, segment, reduceMotion]);
+    x.set(withSpring(targetX, motion.glide));
+  }, [x, goal, width, fade, targetX, segment, reduceMotion]);
 
-  const thumb = useAnimatedStyle(() => ({
-    opacity: segment ? fade.value : 0,
-    transform: [{ translateX: x.value }],
-  }));
+  // Up while a finger is down or it's still well short of where it's going; down as it arrives.
+  useAnimatedReaction(
+    () => !reduceMotion && (held.value || Math.abs(x.value - goal.value) > width.value * 0.15),
+    (up, wasUp) => {
+      if (up !== wasUp) lift.set(withSpring(up ? 1 : 0, motion.lift));
+    },
+    [reduceMotion]
+  );
+
+  const thumb = useAnimatedStyle(() => {
+    // Stretched along the way it's going, by how far it still has to travel, while it's up.
+    const away = width.value ? Math.min(1, Math.abs(x.value - goal.value) / width.value) : 0;
+    const stretch = 0.22 * away * lift.value;
+    return {
+      opacity: (width.value ? fade.value : 0) * (1 - 0.35 * lift.value),
+      transform: [
+        { translateX: x.value },
+        { scaleX: 1 + 0.08 * lift.value + stretch },
+        { scaleY: 1 + 0.12 * lift.value - stretch * 0.25 },
+      ],
+    };
+  });
 
   return (
     <View
       accessibilityRole="radiogroup"
-      style={[styles.track, { backgroundColor: withAlpha(theme.colors.onSurface, theme.dark ? 0.12 : 0.07) }]}
+      style={[styles.track, { backgroundColor: withAlpha(theme.colors.primary, theme.dark ? 0.1 : 0.08) }]}
       onLayout={(e: LayoutChangeEvent) => setRowWidth(e.nativeEvent.layout.width - PADDING * 2)}>
       <Animated.View
         pointerEvents="none"
@@ -84,8 +108,9 @@ export function ButtonGroup<T extends string>({ value, onChange, options }: Prop
           styles.thumb,
           {
             width: segment,
-            backgroundColor: theme.dark ? withAlpha(theme.colors.onSurface, 0.16) : theme.colors.surface,
-            boxShadow: theme.dark ? '0px 1px 3px rgba(0, 0, 0, 0.35)' : '0px 1px 2px rgba(0, 0, 0, 0.08), 0px 2px 8px rgba(0, 0, 0, 0.08)',
+            backgroundColor: theme.colors.secondaryContainer,
+            borderColor: withAlpha('#FFFFFF', theme.dark ? 0.12 : 0.5),
+            boxShadow: theme.dark ? '0px 1px 3px rgba(0, 0, 0, 0.35)' : '0px 1px 2px rgba(0, 0, 0, 0.06), 0px 3px 10px rgba(0, 0, 0, 0.1)',
           },
           thumb,
         ]}
@@ -98,6 +123,7 @@ export function ButtonGroup<T extends string>({ value, onChange, options }: Prop
           width={segment}
           thumbX={x}
           fade={fade}
+          held={held}
           selected={i === index}
           onPress={() => onChange(option.value)}
         />
@@ -113,15 +139,14 @@ type SegmentProps<T extends string> = {
   width: number;
   thumbX: SharedValue<number>;
   fade: SharedValue<number>;
+  /** Set while a finger is down on any option, which lifts the thumb. */
+  held: SharedValue<boolean>;
   selected: boolean;
   onPress: () => void;
 };
 
-function Segment<T extends string>({ option, x, width, thumbX, fade, selected, onPress }: SegmentProps<T>) {
+function Segment<T extends string>({ option, x, width, thumbX, fade, held, selected, onPress }: SegmentProps<T>) {
   const theme = useTheme();
-  // The label dips the moment a finger lands, so a tap shows before the thumb moves.
-  const { pressed, onPressIn, onPressOut } = usePressed();
-  const dip = useAnimatedStyle(() => ({ transform: [{ scale: 1 - pressed.value * 0.06 }] }));
   // How much of this option the thumb covers, 0 to 1: its label turns chosen by that much.
   const onThumb = useAnimatedStyle(() => {
     const covered = width ? Math.max(0, 1 - Math.abs(thumbX.value - x) / width) : 0;
@@ -147,12 +172,13 @@ function Segment<T extends string>({ option, x, width, thumbX, fade, selected, o
     <Pressable
       style={styles.flex}
       onPress={onPress}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
+      // The thumb lifts the moment a finger lands, so the touch shows before anything moves.
+      onPressIn={() => held.set(true)}
+      onPressOut={() => held.set(false)}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
       accessibilityLabel={option.label}>
-      <Animated.View style={[styles.segment, dip]}>
+      <View style={styles.segment}>
         {content(theme.colors.onSurfaceVariant, '500')}
         {/* The chosen look of the label, laid over and shown as the thumb passes under it. */}
         <Animated.View
@@ -160,9 +186,9 @@ function Segment<T extends string>({ option, x, width, thumbX, fade, selected, o
           importantForAccessibility="no-hide-descendants"
           accessibilityElementsHidden
           style={[StyleSheet.absoluteFill, styles.segment, onThumb]}>
-          {content(theme.colors.onSurface, '600')}
+          {content(theme.colors.onSecondaryContainer, '600')}
         </Animated.View>
-      </Animated.View>
+      </View>
     </Pressable>
   );
 }
@@ -235,8 +261,15 @@ export function useGlide(index: number) {
 }
 
 const styles = StyleSheet.create({
-  track: { flexDirection: 'row', height: HEIGHT, padding: PADDING, borderRadius: RADIUS },
-  thumb: { position: 'absolute', top: PADDING, left: PADDING, height: THUMB, borderRadius: RADIUS - PADDING },
+  track: { flexDirection: 'row', height: HEIGHT, padding: PADDING, borderRadius: HEIGHT / 2 },
+  thumb: {
+    position: 'absolute',
+    top: PADDING,
+    left: PADDING,
+    height: THUMB,
+    borderRadius: THUMB / 2,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   flex: { flex: 1 },
   segment: {
     height: THUMB,
