@@ -2,7 +2,7 @@
 
 import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
-import { useFrameCallback, useReducedMotion, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import { useAnimatedReaction, useFrameCallback, useReducedMotion, useSharedValue, type SharedValue } from 'react-native-reanimated';
 
 /**
  * Scene time in seconds. Runs only while `active` (e.g. the scene is on screen), the screen is
@@ -28,6 +28,26 @@ export function useSceneClock(active: boolean, fps: number): SharedValue<number>
     }, [clock, reduceMotion, active])
   );
   return time;
+}
+
+/**
+ * Another clock (an entrance's, which runs every display frame) stepped down to `fps`, for drawing:
+ * a scene redraws only when its step changes. Without it each podium character and its effects were
+ * re-recorded on every frame of an entrance (up to 120 a second), which made the leaderboard stutter
+ * while they played. Movement done with transforms can keep following the smooth clock.
+ */
+export function useSteppedClock(clock: SharedValue<number>, fps: number): SharedValue<number> {
+  const stepped = useSharedValue(clock.value);
+  useAnimatedReaction(
+    // Negative means not started yet; that stays as it is so nothing shows early.
+    () => (clock.value < 0 ? clock.value : Math.floor(clock.value * fps) / fps),
+    (next, previous) => {
+      if (next !== previous) stepped.value = next;
+    },
+    // The clock too: a canvas switches from its own clock to an entrance's and back.
+    [clock, fps]
+  );
+  return stepped;
 }
 
 /** Lighten (amount > 0) or darken a #RRGGBB colour. */

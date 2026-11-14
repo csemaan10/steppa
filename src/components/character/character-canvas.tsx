@@ -22,7 +22,7 @@ import {
 import { useMemo } from 'react';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 
-import { BIRD_COATS, CAT_COATS, DOG_COATS, HORSE_COAT, MEDAL_COLORS, shade, useSceneClock } from '@/components/character/scene-common';
+import { BIRD_COATS, CAT_COATS, DOG_COATS, HORSE_COAT, MEDAL_COLORS, shade, useSceneClock, useSteppedClock } from '@/components/character/scene-common';
 import {
   CAT_X,
   DOG_X,
@@ -242,7 +242,8 @@ type Props = {
 /** A player's animated character, ball or other move props, and pets, drawn with Skia as one picture per frame. */
 export function CharacterCanvas({ look, seed, width = 88, animate = true, fps = 60, motion, medal, clock }: Props) {
   const own = useSceneClock(animate && !clock, fps);
-  const time = clock ?? own;
+  // A clock passed in (an entrance) is held to the same frame rate as the character's own.
+  const time = useSteppedClock(clock ?? own, fps);
   const idle = motion ?? look.idle;
   // Pets wait until the entrance is over, then join in.
   const entering = idle.startsWith('e-');

@@ -47,7 +47,7 @@ import {
   type EntranceKind,
 } from '@/components/character/entrance';
 import { HORSE_BODY, HORSE_EYE, HORSE_HEAD_SHAPES, HORSE_NECK_PIVOT, HORSE_NOSTRIL } from '@/components/character/rig';
-import { HORSE_COAT } from '@/components/character/scene-common';
+import { HORSE_COAT, useSteppedClock } from '@/components/character/scene-common';
 
 /** The character sits half as tall as it is wide; its feet are this far down its box. */
 const FOOT = 0.975;
@@ -98,7 +98,11 @@ function faded(p: SkPaint, alpha: number, draw: () => void) {
 }
 
 /** Effects canvas for the entrance, positioned over the character's box. */
-export function EntranceFx({ kind, clock, width, ground }: Props) {
+/** The effects draw at the characters' frame rate (see useSteppedClock). */
+const FX_FPS = 30;
+
+export function EntranceFx({ kind, clock: smooth, width, ground }: Props) {
+  const clock = useSteppedClock(smooth, FX_FPS);
   const H = width / 2;
   const up = UP * H;
   const w = fxSide(kind) * H * 2;
