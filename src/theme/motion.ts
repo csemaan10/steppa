@@ -56,6 +56,11 @@ export const motion = {
 
   /** Toggles, thumbs and other small UI moving to a new state: the same as `spatial`. */
   snappy: spatial,
+  /**
+   * The back edge of a sliding pill, with `spatial` on the front edge: it lags, so the pill stretches
+   * mid-flight and settles to size as it lands (the tab bar's indicator).
+   */
+  trailing: spring(600, 0.9),
   /** Content arriving or moving into place: entrances, neighbours sliding over. ~0.3 s, no visible bounce. */
   smooth: spring(220, 0.88),
   /** Celebrations only (a goal met): softer, with a ~3% overshoot. */

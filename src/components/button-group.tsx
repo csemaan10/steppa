@@ -1,11 +1,10 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useEffect, type ComponentProps } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
-  useDerivedValue,
   useReducedMotion,
   useSharedValue,
   withSpring,
@@ -28,46 +27,74 @@ type Props<T extends string> = {
 };
 
 const HEIGHT = 44;
-const OUTER = HEIGHT / 2;
-const INNER = 8;
-const GAP = 2;
+const PADDING = 4;
+const PILL = HEIGHT - PADDING * 2;
 
 /**
- * Material 3 connected button group: the selected option becomes a full pill. The pill glides from
- * the old choice to the new one (through any in between) on a spring, and each label turns to the
- * pill's colour as it passes under it, so the change reads as one thing moving.
+ * A segmented control in the bottom tab bar's design: one frosted capsule with the options side by
+ * side, and a single primary pill under the chosen one. On a new choice the pill slides over like the
+ * tab bar's, its front edge leading and its back edge following, so it stretches mid-flight and
+ * settles to size as it lands. Each label turns to the pill's colour by how much of the pill is under
+ * it. Quick taps retarget from wherever the pill is. With reduced motion it fades in at the new
+ * choice instead of sliding.
  */
 export function ButtonGroup<T extends string>({ value, onChange, options }: Props<T>) {
+  const theme = useTheme();
   const reduceMotion = useReducedMotion();
-  const index = options.findIndex((o) => o.value === value);
-  // Where the pill is, in options: 1.5 is halfway between the second and third.
-  const at = useSharedValue(index);
-  // With reduced motion the pill doesn't travel; it fades in at its new place instead.
+  const index = Math.max(0, options.findIndex((o) => o.value === value));
+  // The options share the capsule's inside equally; known once it's laid out.
+  const [rowWidth, setRowWidth] = useState(0);
+  const segment = rowWidth / options.length;
+  const targetX = index * segment;
+
+  // The pill's two edges, in points from the inside left of the capsule.
+  const left = useSharedValue(targetX);
+  const right = useSharedValue(targetX + segment);
   const fade = useSharedValue(1);
+  const placed = useRef(false);
   useEffect(() => {
-    if (reduceMotion) {
-      if (at.get() === index) return;
-      at.set(index);
-      fade.set(0);
-      fade.set(withTiming(1, motion.fade));
-    } else {
-      // Retargets from wherever it is, so quick taps never make it jump.
-      at.set(withSpring(index, motion.spatial));
+    if (!segment) return;
+    // Its first place, or any with reduced motion: straight there (fading in, if it moved).
+    if (!placed.current || reduceMotion) {
+      const moved = placed.current && left.get() !== targetX;
+      left.set(targetX);
+      right.set(targetX + segment);
+      if (moved) {
+        fade.set(0);
+        fade.set(withTiming(1, motion.fade));
+      }
+      placed.current = true;
+      return;
     }
-  }, [at, fade, index, reduceMotion]);
+    const forward = targetX > left.get();
+    left.set(withSpring(targetX, forward ? motion.trailing : motion.spatial));
+    right.set(withSpring(targetX + segment, forward ? motion.spatial : motion.trailing));
+  }, [left, right, fade, targetX, segment, reduceMotion]);
+
+  // Width rather than a scale, as in the tab bar, so the round ends stay round while it stretches. The
+  // pill is absolutely placed with nothing laid out around it, so this lays out only the pill itself.
+  const pill = useAnimatedStyle(() => ({
+    opacity: segment ? fade.value : 0,
+    width: Math.max(PILL, right.value - left.value),
+    transform: [{ translateX: left.value }],
+  }));
 
   return (
-    <View style={styles.group} accessibilityRole="radiogroup">
+    <View
+      accessibilityRole="radiogroup"
+      style={[styles.track, glass(theme, 'small')]}
+      onLayout={(e: LayoutChangeEvent) => setRowWidth(e.nativeEvent.layout.width - PADDING * 2 - StyleSheet.hairlineWidth * 2)}>
+      <Animated.View pointerEvents="none" style={[styles.pill, { backgroundColor: theme.colors.primary }, pill]} />
       {options.map((option, i) => (
-        <GroupButton
+        <Segment
           key={option.value}
           option={option}
-          index={i}
-          at={at}
+          x={i * segment}
+          width={segment}
+          left={left}
+          right={right}
           fade={fade}
           selected={i === index}
-          first={i === 0}
-          last={i === options.length - 1}
           onPress={() => onChange(option.value)}
         />
       ))}
@@ -75,51 +102,33 @@ export function ButtonGroup<T extends string>({ value, onChange, options }: Prop
   );
 }
 
-type ButtonProps<T extends string> = {
+type SegmentProps<T extends string> = {
   option: ButtonGroupOption<T>;
-  index: number;
-  at: SharedValue<number>;
+  /** Where this option sits in the capsule, and how wide it is. */
+  x: number;
+  width: number;
+  left: SharedValue<number>;
+  right: SharedValue<number>;
   fade: SharedValue<number>;
   selected: boolean;
-  first: boolean;
-  last: boolean;
   onPress: () => void;
 };
 
-function GroupButton<T extends string>({ option, index, at, fade, selected, first, last, onPress }: ButtonProps<T>) {
+function Segment<T extends string>({ option, x, width, left, right, fade, selected, onPress }: SegmentProps<T>) {
   const theme = useTheme();
-  const left = first ? OUTER : INNER;
-  const right = last ? OUTER : INNER;
-
-  // Unselected options are frosted glass, so they stand off the screen's glows; the pill is primary.
-  // Each button holds its own slice of the pill, clipped to its shape and shifted by how far the pill
-  // is from it, so the slices line up as one pill sliding along the row. While held, the corners
-  // tighten and the button dips (M3 Expressive), so a tap shows before the selection changes.
+  // The label dips the moment a finger lands, so a tap shows before the pill moves.
   const { pressed, onPressIn, onPressOut } = usePressed();
-  const width = useSharedValue(0);
-  // 1 while the pill sits on this button, falling to 0 as it moves one place away.
-  const on = useDerivedValue(() => Math.max(0, 1 - Math.abs(at.value - index)));
-
-  const shape = useAnimatedStyle(() => {
-    const squeeze = 1 - pressed.value * 0.4;
-    const l = (left + (OUTER - left) * on.value) * squeeze;
-    const r = (right + (OUTER - right) * on.value) * squeeze;
-    return { borderTopLeftRadius: l, borderBottomLeftRadius: l, borderTopRightRadius: r, borderBottomRightRadius: r };
+  const dip = useAnimatedStyle(() => ({ transform: [{ scale: 1 - pressed.value * 0.06 }] }));
+  // How much of this option the pill covers, 0 to 1: its label takes the pill's colour by that much.
+  const onPill = useAnimatedStyle(() => {
+    const covered = width ? Math.max(0, Math.min(right.value, x + width) - Math.max(left.value, x)) / width : 0;
+    return { opacity: Math.min(1, covered) * fade.value };
   });
-  const dip = useAnimatedStyle(() => ({ transform: [{ scale: 1 - pressed.value * 0.03 }] }));
-  const pill = useAnimatedStyle(() => ({
-    // Tightens with the button while held, so its corners still fill the button's.
-    borderRadius: OUTER * (1 - pressed.value * 0.4),
-    // Only drawn while the pill overlaps this button (and so never before its width is known).
-    opacity: Math.abs(at.value - index) < 1 ? fade.value : 0,
-    transform: [{ translateX: (at.value - index) * (width.value + GAP) }],
-  }));
-  const onLabel = useAnimatedStyle(() => ({ opacity: on.value * fade.value }));
 
   const content = (color: string) => (
     <>
       {option.icon ? <MaterialCommunityIcons name={option.icon} size={18} color={color} /> : null}
-      {/* Shrink slightly rather than truncate when four or more options share the width. */}
+      {/* Shrinks slightly rather than truncating when four or more options share the width. */}
       <Text
         variant="labelLarge"
         numberOfLines={1}
@@ -137,23 +146,17 @@ function GroupButton<T extends string>({ option, index, at, fade, selected, firs
       onPress={onPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
-      onLayout={(e: LayoutChangeEvent) => width.set(e.nativeEvent.layout.width)}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
       accessibilityLabel={option.label}>
-      <Animated.View style={[styles.button, glass(theme, 'small'), shape, dip]}>
-        {/* Out over the glass rim, so no edge of it shows round the pill. A view of its own does the
-            clipping, so the glass's shadow isn't clipped with it. */}
-        <Animated.View pointerEvents="none" style={[styles.clip, shape]}>
-          <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.primary }, pill]} />
-        </Animated.View>
-        {content(theme.colors.onSurface)}
-        {/* The same label in the pill's colour, laid over and faded in as the pill arrives. */}
+      <Animated.View style={[styles.segment, dip]}>
+        {content(theme.colors.onSurfaceVariant)}
+        {/* The same label in the pill's colour, laid over and shown as the pill passes under it. */}
         <Animated.View
           pointerEvents="none"
           importantForAccessibility="no-hide-descendants"
           accessibilityElementsHidden
-          style={[StyleSheet.absoluteFill, styles.button, onLabel]}>
+          style={[StyleSheet.absoluteFill, styles.segment, onPill]}>
           {content(theme.colors.onPrimary)}
         </Animated.View>
       </Animated.View>
@@ -229,23 +232,15 @@ export function useGlide(index: number) {
 }
 
 const styles = StyleSheet.create({
-  group: { flexDirection: 'row', gap: GAP },
+  track: { flexDirection: 'row', height: HEIGHT, padding: PADDING, borderRadius: HEIGHT / 2 },
+  pill: { position: 'absolute', top: PADDING, left: PADDING, height: PILL, borderRadius: PILL / 2 },
   flex: { flex: 1 },
-  button: {
-    height: HEIGHT,
+  segment: {
+    height: PILL,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingHorizontal: 8,
-  },
-  // Out to the glass rim's outer edge (glass() draws it at two hairlines).
-  clip: {
-    position: 'absolute',
-    top: -StyleSheet.hairlineWidth * 2,
-    left: -StyleSheet.hairlineWidth * 2,
-    right: -StyleSheet.hairlineWidth * 2,
-    bottom: -StyleSheet.hairlineWidth * 2,
-    overflow: 'hidden',
   },
 });
