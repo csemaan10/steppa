@@ -73,7 +73,10 @@ export function ButtonGroup<T extends string>({ value, onChange, options, floati
   useEffect(() => {
     if (!segment) return;
     width.set(segment);
+    // Already heading here: it set off on the tap itself (see choose), so there's nothing to restart.
+    const underway = placed.current && !reduceMotion && goal.get() === targetX;
     goal.set(targetX);
+    if (underway) return;
     // Its first place, or any with reduced motion: straight there (fading in, if it moved).
     if (!placed.current || reduceMotion) {
       const moved = placed.current && x.get() !== targetX;
@@ -87,6 +90,17 @@ export function ButtonGroup<T extends string>({ value, onChange, options, floati
     }
     x.set(withSpring(targetX, motion.glide));
   }, [x, goal, width, fade, targetX, segment, reduceMotion]);
+
+  // The thumb sets off the moment an option is tapped, before the screen re-renders for the new
+  // choice (which can take a beat: a new leaderboard, the podium replaying). Its glide runs on the
+  // UI thread, so it carries on smoothly however busy that re-render is.
+  function choose(i: number) {
+    if (segment && placed.current && !reduceMotion && i !== index) {
+      goal.set(i * segment);
+      x.set(withSpring(i * segment, motion.glide));
+    }
+    onChange(options[i]!.value);
+  }
 
   // Up while a finger is down or it's still well short of where it's going; down as it arrives.
   useAnimatedReaction(
@@ -165,7 +179,7 @@ export function ButtonGroup<T extends string>({ value, onChange, options, floati
           fade={fade}
           held={held}
           selected={i === index}
-          onPress={() => onChange(option.value)}
+          onPress={() => choose(i)}
         />
       ))}
     </View>
