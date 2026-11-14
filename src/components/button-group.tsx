@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { usePressed } from '@/hooks/use-pressed';
-import { glass } from '@/theme';
+import { withAlpha } from '@/theme';
 import { motion } from '@/theme/motion';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -26,39 +26,38 @@ type Props<T extends string> = {
   options: ButtonGroupOption<T>[];
 };
 
-const HEIGHT = 44;
-const PADDING = 4;
-const PILL = HEIGHT - PADDING * 2;
+const HEIGHT = 40;
+const PADDING = 3;
+const THUMB = HEIGHT - PADDING * 2;
+const RADIUS = 12;
 
 /**
- * A segmented control in the bottom tab bar's design: one frosted capsule with the options side by
- * side, and a single primary pill under the chosen one. On a new choice the pill slides over like the
- * tab bar's, its front edge leading and its back edge following, so it stretches mid-flight and
- * settles to size as it lands. Each label turns to the pill's colour by how much of the pill is under
- * it. Quick taps retarget from wherever the pill is. With reduced motion it fades in at the new
- * choice instead of sliding.
+ * A segmented control in the iOS style, so it reads as a filter rather than navigation and stays
+ * distinct from the bottom tab bar (a glass capsule with a coloured pill that stretches as it
+ * slides): a slightly recessed track with the options side by side, and a raised thumb under the
+ * chosen one that glides over on a spring. The chosen label is in the full text colour and
+ * semibold, crossfading as the thumb passes under it. Quick taps retarget from wherever the thumb
+ * is. With reduced motion it fades in at the new choice instead of gliding.
  */
 export function ButtonGroup<T extends string>({ value, onChange, options }: Props<T>) {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const index = Math.max(0, options.findIndex((o) => o.value === value));
-  // The options share the capsule's inside equally; known once it's laid out.
+  // The options share the track's inside equally; known once it's laid out.
   const [rowWidth, setRowWidth] = useState(0);
   const segment = rowWidth / options.length;
   const targetX = index * segment;
 
-  // The pill's two edges, in points from the inside left of the capsule.
-  const left = useSharedValue(targetX);
-  const right = useSharedValue(targetX + segment);
+  // The thumb's left edge, in points from the inside left of the track.
+  const x = useSharedValue(targetX);
   const fade = useSharedValue(1);
   const placed = useRef(false);
   useEffect(() => {
     if (!segment) return;
     // Its first place, or any with reduced motion: straight there (fading in, if it moved).
     if (!placed.current || reduceMotion) {
-      const moved = placed.current && left.get() !== targetX;
-      left.set(targetX);
-      right.set(targetX + segment);
+      const moved = placed.current && x.get() !== targetX;
+      x.set(targetX);
       if (moved) {
         fade.set(0);
         fade.set(withTiming(1, motion.fade));
@@ -66,33 +65,38 @@ export function ButtonGroup<T extends string>({ value, onChange, options }: Prop
       placed.current = true;
       return;
     }
-    const forward = targetX > left.get();
-    left.set(withSpring(targetX, forward ? motion.trailing : motion.spatial));
-    right.set(withSpring(targetX + segment, forward ? motion.spatial : motion.trailing));
-  }, [left, right, fade, targetX, segment, reduceMotion]);
+    x.set(withSpring(targetX, motion.spatial));
+  }, [x, fade, targetX, segment, reduceMotion]);
 
-  // Width rather than a scale, as in the tab bar, so the round ends stay round while it stretches. The
-  // pill is absolutely placed with nothing laid out around it, so this lays out only the pill itself.
-  const pill = useAnimatedStyle(() => ({
+  const thumb = useAnimatedStyle(() => ({
     opacity: segment ? fade.value : 0,
-    width: Math.max(PILL, right.value - left.value),
-    transform: [{ translateX: left.value }],
+    transform: [{ translateX: x.value }],
   }));
 
   return (
     <View
       accessibilityRole="radiogroup"
-      style={[styles.track, glass(theme, 'small')]}
-      onLayout={(e: LayoutChangeEvent) => setRowWidth(e.nativeEvent.layout.width - PADDING * 2 - StyleSheet.hairlineWidth * 2)}>
-      <Animated.View pointerEvents="none" style={[styles.pill, { backgroundColor: theme.colors.primary }, pill]} />
+      style={[styles.track, { backgroundColor: withAlpha(theme.colors.onSurface, theme.dark ? 0.12 : 0.07) }]}
+      onLayout={(e: LayoutChangeEvent) => setRowWidth(e.nativeEvent.layout.width - PADDING * 2)}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.thumb,
+          {
+            width: segment,
+            backgroundColor: theme.dark ? withAlpha(theme.colors.onSurface, 0.16) : theme.colors.surface,
+            boxShadow: theme.dark ? '0px 1px 3px rgba(0, 0, 0, 0.35)' : '0px 1px 2px rgba(0, 0, 0, 0.08), 0px 2px 8px rgba(0, 0, 0, 0.08)',
+          },
+          thumb,
+        ]}
+      />
       {options.map((option, i) => (
         <Segment
           key={option.value}
           option={option}
           x={i * segment}
           width={segment}
-          left={left}
-          right={right}
+          thumbX={x}
           fade={fade}
           selected={i === index}
           onPress={() => onChange(option.value)}
@@ -104,28 +108,27 @@ export function ButtonGroup<T extends string>({ value, onChange, options }: Prop
 
 type SegmentProps<T extends string> = {
   option: ButtonGroupOption<T>;
-  /** Where this option sits in the capsule, and how wide it is. */
+  /** Where this option sits in the track, and how wide it is (the thumb is as wide). */
   x: number;
   width: number;
-  left: SharedValue<number>;
-  right: SharedValue<number>;
+  thumbX: SharedValue<number>;
   fade: SharedValue<number>;
   selected: boolean;
   onPress: () => void;
 };
 
-function Segment<T extends string>({ option, x, width, left, right, fade, selected, onPress }: SegmentProps<T>) {
+function Segment<T extends string>({ option, x, width, thumbX, fade, selected, onPress }: SegmentProps<T>) {
   const theme = useTheme();
-  // The label dips the moment a finger lands, so a tap shows before the pill moves.
+  // The label dips the moment a finger lands, so a tap shows before the thumb moves.
   const { pressed, onPressIn, onPressOut } = usePressed();
   const dip = useAnimatedStyle(() => ({ transform: [{ scale: 1 - pressed.value * 0.06 }] }));
-  // How much of this option the pill covers, 0 to 1: its label takes the pill's colour by that much.
-  const onPill = useAnimatedStyle(() => {
-    const covered = width ? Math.max(0, Math.min(right.value, x + width) - Math.max(left.value, x)) / width : 0;
-    return { opacity: Math.min(1, covered) * fade.value };
+  // How much of this option the thumb covers, 0 to 1: its label turns chosen by that much.
+  const onThumb = useAnimatedStyle(() => {
+    const covered = width ? Math.max(0, 1 - Math.abs(thumbX.value - x) / width) : 0;
+    return { opacity: covered * fade.value };
   });
 
-  const content = (color: string) => (
+  const content = (color: string, weight: '500' | '600') => (
     <>
       {option.icon ? <MaterialCommunityIcons name={option.icon} size={18} color={color} /> : null}
       {/* Shrinks slightly rather than truncating when four or more options share the width. */}
@@ -134,7 +137,7 @@ function Segment<T extends string>({ option, x, width, left, right, fade, select
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={0.8}
-        style={{ color, flexShrink: 1 }}>
+        style={{ color, fontWeight: weight, flexShrink: 1 }}>
         {option.label}
       </Text>
     </>
@@ -150,14 +153,14 @@ function Segment<T extends string>({ option, x, width, left, right, fade, select
       accessibilityState={{ selected }}
       accessibilityLabel={option.label}>
       <Animated.View style={[styles.segment, dip]}>
-        {content(theme.colors.onSurfaceVariant)}
-        {/* The same label in the pill's colour, laid over and shown as the pill passes under it. */}
+        {content(theme.colors.onSurfaceVariant, '500')}
+        {/* The chosen look of the label, laid over and shown as the thumb passes under it. */}
         <Animated.View
           pointerEvents="none"
           importantForAccessibility="no-hide-descendants"
           accessibilityElementsHidden
-          style={[StyleSheet.absoluteFill, styles.segment, onPill]}>
-          {content(theme.colors.onPrimary)}
+          style={[StyleSheet.absoluteFill, styles.segment, onThumb]}>
+          {content(theme.colors.onSurface, '600')}
         </Animated.View>
       </Animated.View>
     </Pressable>
@@ -232,11 +235,11 @@ export function useGlide(index: number) {
 }
 
 const styles = StyleSheet.create({
-  track: { flexDirection: 'row', height: HEIGHT, padding: PADDING, borderRadius: HEIGHT / 2 },
-  pill: { position: 'absolute', top: PADDING, left: PADDING, height: PILL, borderRadius: PILL / 2 },
+  track: { flexDirection: 'row', height: HEIGHT, padding: PADDING, borderRadius: RADIUS },
+  thumb: { position: 'absolute', top: PADDING, left: PADDING, height: THUMB, borderRadius: RADIUS - PADDING },
   flex: { flex: 1 },
   segment: {
-    height: PILL,
+    height: THUMB,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
