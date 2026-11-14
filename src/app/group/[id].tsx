@@ -181,8 +181,12 @@ export default function GroupScreen() {
   }, `${id}:${userId}`);
 
   // Each period's leaderboard is kept once loaded, so switching back shows it at once; it's still
-  // refetched in the background every time, since today's steps keep coming in.
-  const [boards, setBoards] = useState<Partial<Record<Period, LeaderboardRow[]>>>({});
+  // refetched in the background every time, since today's steps keep coming in. They're also kept for
+  // the session (boardCache), so reopening a group shows its boards straight away.
+  const [boards, setBoards] = useState<Partial<Record<Period, LeaderboardRow[]>>>(() => boardCache.get(id) ?? {});
+  useEffect(() => {
+    boardCache.set(id, boards);
+  }, [id, boards]);
   const {
     data: board,
     error: boardError,
@@ -193,13 +197,24 @@ export default function GroupScreen() {
     return { period, leaderboard };
   }, `${id}:${period}`);
 
-  // Yesterday is the likeliest next tap: fetch it once today is in.
+  // The other periods load in the background once today is in, all at once, so a tap on any of them
+  // shows straight away instead of waiting on the server (7 and 30 days took a noticeable beat). Each
+  // is fetched fresh once per visit.
+  const hasToday = !!boards.today;
   useEffect(() => {
-    if (!boards.today || boards.yesterday) return;
-    getLeaderboard(id, 'yesterday')
-      .then((leaderboard) => setBoards((b) => ({ yesterday: leaderboard, ...b })))
-      .catch(() => {});
-  }, [id, boards.today, boards.yesterday]);
+    if (!hasToday) return;
+    let cancelled = false;
+    for (const other of ['yesterday', 'week', 'month'] as const) {
+      getLeaderboard(id, other)
+        .then((leaderboard) => {
+          if (!cancelled) setBoards((b) => ({ ...b, [other]: leaderboard }));
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [id, hasToday]);
 
   // A period not loaded yet keeps showing the last one until it arrives.
   const cached = boards[period];
@@ -519,6 +534,9 @@ export default function GroupScreen() {
     </LayoutAnimationConfig>
   );
 }
+
+/** Each group's leaderboards by period, kept for the session so reopening a group shows them at once. */
+const boardCache = new Map<string, Partial<Record<Period, LeaderboardRow[]>>>();
 
 /** The leaderboard's periods, in the floating switch. */
 const PERIODS: { value: Period; label: string }[] = [
