@@ -40,13 +40,13 @@ export const FLOATING_HEIGHT = 48;
 const FLOATING_PADDING = 4;
 
 /**
- * A segmented control in the iOS 26 manner, in the app's tonal colours: a capsule track faintly
- * tinted with the theme colour, and a glass thumb in the tonal container colour (as on tonal
- * buttons) under the chosen option. A finger landing lifts the thumb off the track; on a new choice
- * it glides over, stretched and a little see-through while it travels, and settles back down on
- * arrival. The chosen label crossfades in as the thumb passes under it. Quieter than the tab bar's
- * solid pill, so it reads as a filter rather than navigation. Quick taps retarget from wherever the
- * thumb is. With reduced motion it neither lifts nor glides: it fades in at the new choice.
+ * A segmented control in the iOS 26 manner, in the app's colours: a capsule track faintly tinted
+ * with the theme colour, and a glass thumb in the theme colour itself under the chosen option (the
+ * softer tonal colour blended into the track and the screen's glows). A finger landing lifts the
+ * thumb off the track; on a new choice it glides over, stretched and a little see-through while it
+ * travels, and settles back down on arrival. The chosen label crossfades in as the thumb passes
+ * under it. Quick taps retarget from wherever the thumb is. With reduced motion it neither lifts nor
+ * glides: it fades in at the new choice.
  */
 export function ButtonGroup<T extends string>({ value, onChange, options, floating = false, blurTarget }: Props<T>) {
   const theme = useTheme();
@@ -147,7 +147,7 @@ export function ButtonGroup<T extends string>({ value, onChange, options, floati
             height: thumbHeight,
             borderRadius: thumbHeight / 2,
             width: segment,
-            backgroundColor: theme.colors.secondaryContainer,
+            backgroundColor: theme.colors.primary,
             borderColor: withAlpha('#FFFFFF', theme.dark ? 0.12 : 0.5),
             boxShadow: theme.dark ? '0px 1px 3px rgba(0, 0, 0, 0.35)' : '0px 1px 2px rgba(0, 0, 0, 0.06), 0px 3px 10px rgba(0, 0, 0, 0.1)',
           },
@@ -227,7 +227,7 @@ function Segment<T extends string>({ option, x, width, height, thumbX, fade, hel
           importantForAccessibility="no-hide-descendants"
           accessibilityElementsHidden
           style={[StyleSheet.absoluteFill, styles.segment, { height }, onThumb]}>
-          {content(theme.colors.onSecondaryContainer, '600')}
+          {content(theme.colors.onPrimary, '600')}
         </Animated.View>
       </View>
     </Pressable>
