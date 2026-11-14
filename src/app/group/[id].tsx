@@ -45,7 +45,7 @@ import { getLastRead } from '@/lib/chat-read';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
 import { liftedCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
-import { enter, layoutMove, leave, motion } from '@/theme/motion';
+import { enter, layoutMove, motion } from '@/theme/motion';
 
 type GroupView = 'board' | 'chat' | 'journey' | 'trophies';
 /** The tabs in page order, left to right. */
@@ -352,13 +352,13 @@ export default function GroupScreen() {
               <View style={styles.pager}>
                 <Animated.View style={[styles.pages, { width: pageWidth * VIEWS.length }, pagesStyle]}>
                   <View style={{ width: pageWidth }}>
-                    {/* Rows slide to their new places when the order changes (a period switch, someone
-                        overtaking), and ones that join or leave the list rise in or fade out. The group's
-                        list is short, so animating each row's layout stays cheap. */}
+                    {/* Rows rise in when they first show, but don't slide when the list above them
+                        changes: the header grows as the group's details and podium arrive, and a layout
+                        spring on every row at once, on top of the podium's intro, dropped frames on
+                        Android. A period switch simply redraws the rows in their new order. */}
                     <Animated.FlatList
                       data={data?.leaderboard.slice(3) ?? []}
                       keyExtractor={(row) => row.user_id}
-                      itemLayoutAnimation={layoutMove}
                       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
                       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
                       onScroll={(e) => setPodiumInView(e.nativeEvent.contentOffset.y < podiumBottom.current)}
@@ -428,10 +428,7 @@ export default function GroupScreen() {
                         return (
                           // The first load arrives in a quick stagger under the podium; after a period
                           // switch, rows new to the list just rise in.
-                          <Animated.View
-                            entering={enter(switched ? 0 : index + 1, reduceMotion)}
-                            exiting={leave(reduceMotion)}
-                          >
+                          <Animated.View entering={enter(switched ? 0 : index + 1, reduceMotion)}>
                             <TapCard
                               mode="contained"
                               style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
