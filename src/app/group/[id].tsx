@@ -16,7 +16,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { Appear } from '@/components/appear';
-import { ButtonGroup } from '@/components/button-group';
+import { ButtonGroup, FLOATING_HEIGHT } from '@/components/button-group';
 import { useExpandTransition } from '@/components/expand-transition';
 import { GlassAction, GlassBackAction } from '@/components/glass-action';
 import { GroupAvatar } from '@/components/group-avatar';
@@ -155,6 +155,11 @@ export default function GroupScreen() {
   const pagesStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -page.value * pageWidth }],
   }));
+  // The floating period switch: gone by halfway to the next page. With reduced motion it only fades.
+  const floatStyle = useAnimatedStyle(() => {
+    const away = Math.min(1, Math.abs(page.value) * 2);
+    return { opacity: 1 - away, transform: [{ translateY: reduceMotion ? 0 : away * 80 }] };
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   // Once the period has been switched, the leaderboard's rows stop staggering in.
@@ -359,7 +364,8 @@ export default function GroupScreen() {
                       data={data?.leaderboard.slice(3) ?? []}
                       keyExtractor={(row) => row.user_id}
                       itemLayoutAnimation={layoutMove}
-                      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
+                      // Room at the end for the floating period switch, so the last row scrolls clear of it.
+                      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + FLOAT_GAP + FLOATING_HEIGHT + 16 }]}
                       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
                       onScroll={(e) => setPodiumInView(e.nativeEvent.contentOffset.y < podiumBottom.current)}
                       scrollEventThrottle={100}
@@ -370,9 +376,9 @@ export default function GroupScreen() {
                             podiumBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
                           }}
                         >
-                          {/* The group's description rises in once it loads, and the period switch below
-                              slides down to make room rather than jumping. (The invite code is shared from
-                              the share button in the top bar.) */}
+                          {/* The group's description rises in once it loads, and the podium below slides down
+                              to make room rather than jumping. (The invite code is shared from the share
+                              button in the top bar, and the period floats at the bottom of the screen.) */}
                           {data?.group.description ? (
                             <Appear>
                               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -380,21 +386,6 @@ export default function GroupScreen() {
                               </Text>
                             </Appear>
                           ) : null}
-                          <Animated.View layout={layoutMove}>
-                            <ButtonGroup
-                              value={period}
-                              onChange={(next) => {
-                                setSwitched(true);
-                                setPeriod(next);
-                              }}
-                              options={[
-                                { value: 'today', label: 'Today' },
-                                { value: 'yesterday', label: 'Yesterday' },
-                                { value: 'week', label: '7 days' },
-                                { value: 'month', label: '30 days' },
-                              ]}
-                            />
-                          </Animated.View>
                           {error ? (
                             <Appear exits>
                               <Text style={{ color: theme.colors.error }}>{error}</Text>
@@ -497,6 +488,25 @@ export default function GroupScreen() {
                 </Animated.View>
               </View>
             </GestureDetector>
+
+            {/* The period floats at the bottom, under the thumb, where the tab bar sits on the main
+                tabs (this screen covers them). It only applies to the leaderboard, so it slides away
+                as the pages move off it, following the finger, and back as they return. */}
+            <Animated.View
+              pointerEvents={view === 'board' ? 'box-none' : 'none'}
+              style={[styles.floating, { bottom: insets.bottom + FLOAT_GAP }, floatStyle]}>
+              <View style={styles.floatingBar}>
+                <ButtonGroup
+                  floating
+                  value={period}
+                  onChange={(next) => {
+                    setSwitched(true);
+                    setPeriod(next);
+                  }}
+                  options={PERIODS}
+                />
+              </View>
+            </Animated.View>
           </Animated.View>
         </Animated.View>
       </View>
@@ -504,8 +514,20 @@ export default function GroupScreen() {
   );
 }
 
+/** The leaderboard's periods, in the floating switch. */
+const PERIODS: { value: Period; label: string }[] = [
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'week', label: '7 days' },
+  { value: 'month', label: '30 days' },
+];
+/** Space between the floating period switch and the bottom of the screen. */
+const FLOAT_GAP = 12;
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  floating: { position: 'absolute', left: 16, right: 16, alignItems: 'center' },
+  floatingBar: { width: '100%', maxWidth: 340 },
   // The share glyph has two dots on the right and one on the left, so centred by its box it looks
   // pushed right inside the round button; this sets it where it looks centred.
   shareIcon: { transform: [{ translateX: -1.5 }] },
