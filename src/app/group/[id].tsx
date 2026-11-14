@@ -1,3 +1,4 @@
+import { BlurTargetView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Platform, RefreshControl, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -155,6 +156,7 @@ export default function GroupScreen() {
   const pagesStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -page.value * pageWidth }],
   }));
+  const blurTarget = useRef<View>(null);
   // The floating period switch: gone by halfway to the next page. With reduced motion it only fades.
   const floatStyle = useAnimatedStyle(() => {
     const away = Math.min(1, Math.abs(page.value) * 2);
@@ -353,141 +355,144 @@ export default function GroupScreen() {
               />
             </View>
 
-            <GestureDetector gesture={swipe}>
-              <View style={styles.pager}>
-                <Animated.View style={[styles.pages, { width: pageWidth * VIEWS.length }, pagesStyle]}>
-                  <View style={{ width: pageWidth }}>
-                    {/* Rows slide to their new places when the order changes (a period switch, someone
-                        overtaking), and ones that join or leave the list rise in or fade out. The group's
-                        list is short, so animating each row's layout stays cheap. */}
-                    <Animated.FlatList
-                      data={data?.leaderboard.slice(3) ?? []}
-                      keyExtractor={(row) => row.user_id}
-                      itemLayoutAnimation={layoutMove}
-                      // Room at the end for the floating period switch, so the last row scrolls clear of it.
-                      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + FLOAT_GAP + FLOATING_HEIGHT + 16 }]}
-                      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-                      onScroll={(e) => setPodiumInView(e.nativeEvent.contentOffset.y < podiumBottom.current)}
-                      scrollEventThrottle={100}
-                      ListHeaderComponent={
-                        <View
-                          style={styles.header}
-                          onLayout={(e) => {
-                            podiumBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
-                          }}
-                        >
-                          {/* The group's description rises in once it loads, and the podium below slides down
-                              to make room rather than jumping. (The invite code is shared from the share
-                              button in the top bar, and the period floats at the bottom of the screen.) */}
-                          {data?.group.description ? (
-                            <Appear>
-                              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                                {data.group.description}
-                              </Text>
-                            </Appear>
-                          ) : null}
-                          {error ? (
-                            <Appear exits>
-                              <Text style={{ color: theme.colors.error }}>{error}</Text>
-                            </Appear>
-                          ) : null}
-                          {data?.leaderboard.length ? (
-                            <Animated.View layout={layoutMove}>
-                              <Podium
-                                replayKey={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
-                                animate={activeView === 'board' && podiumInView}
-                                rows={data.leaderboard}
-                                userId={userId}
-                                showAverage={!singleDay}
-                                onPressUser={openUser}
-                              />
-                            </Animated.View>
-                          ) : null}
-                        </View>
-                      }
-                      renderItem={({ item, index }) => {
-                        const isMe = item.user_id === userId;
-                        return (
-                          // The first load arrives in a quick stagger under the podium; after a period
-                          // switch, rows new to the list just rise in.
-                          <Animated.View
-                            entering={enter(switched ? 0 : index + 1, reduceMotion)}
-                            exiting={leave(reduceMotion)}
+            {/* Android blurs only what's inside a target: the pages, for the floating period switch over them. */}
+            <BlurTargetView ref={blurTarget} style={styles.flex}>
+              <GestureDetector gesture={swipe}>
+                <View style={styles.pager}>
+                  <Animated.View style={[styles.pages, { width: pageWidth * VIEWS.length }, pagesStyle]}>
+                    <View style={{ width: pageWidth }}>
+                      {/* Rows slide to their new places when the order changes (a period switch, someone
+                          overtaking), and ones that join or leave the list rise in or fade out. The group's
+                          list is short, so animating each row's layout stays cheap. */}
+                      <Animated.FlatList
+                        data={data?.leaderboard.slice(3) ?? []}
+                        keyExtractor={(row) => row.user_id}
+                        itemLayoutAnimation={layoutMove}
+                        // Room at the end for the floating period switch, so the last row scrolls clear of it.
+                        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + FLOAT_GAP + FLOATING_HEIGHT + 16 }]}
+                        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+                        onScroll={(e) => setPodiumInView(e.nativeEvent.contentOffset.y < podiumBottom.current)}
+                        scrollEventThrottle={100}
+                        ListHeaderComponent={
+                          <View
+                            style={styles.header}
+                            onLayout={(e) => {
+                              podiumBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
+                            }}
                           >
-                            <TapCard
-                              mode="contained"
-                              style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
-                              onPress={() => openUser(item.user_id)}
-                            >
-                              <View style={styles.row}>
-                                <Text variant="titleMedium" style={styles.rank}>
-                                  {item.rank}
+                            {/* The group's description rises in once it loads, and the podium below slides down
+                                to make room rather than jumping. (The invite code is shared from the share
+                                button in the top bar, and the period floats at the bottom of the screen.) */}
+                            {data?.group.description ? (
+                              <Appear>
+                                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                                  {data.group.description}
                                 </Text>
-                                <UserAvatar name={item.display_name} color={item.avatar_color} icon={item.avatar_icon} />
-                                <View style={styles.nameColumn}>
-                                  <View style={styles.nameLine}>
-                                    <Text variant="titleSmall" numberOfLines={1} style={styles.nameText}>
-                                      {isMe ? `${item.display_name} (you)` : item.display_name}
-                                    </Text>
+                              </Appear>
+                            ) : null}
+                            {error ? (
+                              <Appear exits>
+                                <Text style={{ color: theme.colors.error }}>{error}</Text>
+                              </Appear>
+                            ) : null}
+                            {data?.leaderboard.length ? (
+                              <Animated.View layout={layoutMove}>
+                                <Podium
+                                  replayKey={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
+                                  animate={activeView === 'board' && podiumInView}
+                                  rows={data.leaderboard}
+                                  userId={userId}
+                                  showAverage={!singleDay}
+                                  onPressUser={openUser}
+                                />
+                              </Animated.View>
+                            ) : null}
+                          </View>
+                        }
+                        renderItem={({ item, index }) => {
+                          const isMe = item.user_id === userId;
+                          return (
+                            // The first load arrives in a quick stagger under the podium; after a period
+                            // switch, rows new to the list just rise in.
+                            <Animated.View
+                              entering={enter(switched ? 0 : index + 1, reduceMotion)}
+                              exiting={leave(reduceMotion)}
+                            >
+                              <TapCard
+                                mode="contained"
+                                style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
+                                onPress={() => openUser(item.user_id)}
+                              >
+                                <View style={styles.row}>
+                                  <Text variant="titleMedium" style={styles.rank}>
+                                    {item.rank}
+                                  </Text>
+                                  <UserAvatar name={item.display_name} color={item.avatar_color} icon={item.avatar_icon} />
+                                  <View style={styles.nameColumn}>
+                                    <View style={styles.nameLine}>
+                                      <Text variant="titleSmall" numberOfLines={1} style={styles.nameText}>
+                                        {isMe ? `${item.display_name} (you)` : item.display_name}
+                                      </Text>
+                                    </View>
+                                    <PlayerBadges row={item} />
                                   </View>
-                                  <PlayerBadges row={item} />
+                                  <View style={styles.right}>
+                                    <SwapText variant="titleMedium">{formatSteps(item.total_steps)}</SwapText>
+                                    {!singleDay ? (
+                                      <Text
+                                        variant="labelSmall"
+                                        style={{
+                                          color: theme.colors.onSurfaceVariant,
+                                        }}
+                                      >
+                                        avg {formatSteps(activeAverage(item.total_steps, item.active_days))}
+                                        /day
+                                      </Text>
+                                    ) : null}
+                                    <RankDelta rank={item.rank} prevRank={item.prev_rank} />
+                                  </View>
                                 </View>
-                                <View style={styles.right}>
-                                  <SwapText variant="titleMedium">{formatSteps(item.total_steps)}</SwapText>
-                                  {!singleDay ? (
-                                    <Text
-                                      variant="labelSmall"
-                                      style={{
-                                        color: theme.colors.onSurfaceVariant,
-                                      }}
-                                    >
-                                      avg {formatSteps(activeAverage(item.total_steps, item.active_days))}
-                                      /day
-                                    </Text>
-                                  ) : null}
-                                  <RankDelta rank={item.rank} prevRank={item.prev_rank} />
-                                </View>
-                              </View>
-                            </TapCard>
-                          </Animated.View>
-                        );
-                      }}
-                    />
-                  </View>
-                  <View style={{ width: pageWidth }}>
-                    {visited.has('chat') ? (
-                      <GroupChat
-                        groupId={id}
-                        userId={userId}
-                        members={members}
-                        onRead={onChatRead}
-                        active={activeView === 'chat'}
+                              </TapCard>
+                            </Animated.View>
+                          );
+                        }}
                       />
-                    ) : null}
-                  </View>
-                  <View style={{ width: pageWidth }}>
-                    {visited.has('journey') && data ? (
-                      <GroupJourney
-                        group={data.group}
-                        userId={userId}
-                        members={data.leaderboard}
-                        active={activeView === 'journey'}
-                      />
-                    ) : null}
-                  </View>
-                  <View style={{ width: pageWidth }}>
-                    {visited.has('trophies') ? (
-                      <TrophyCabinet
-                        rows={data?.leaderboard ?? []}
-                        userId={userId}
-                        onPressUser={openUser}
-                        active={activeView === 'trophies'}
-                      />
-                    ) : null}
-                  </View>
-                </Animated.View>
-              </View>
-            </GestureDetector>
+                    </View>
+                    <View style={{ width: pageWidth }}>
+                      {visited.has('chat') ? (
+                        <GroupChat
+                          groupId={id}
+                          userId={userId}
+                          members={members}
+                          onRead={onChatRead}
+                          active={activeView === 'chat'}
+                        />
+                      ) : null}
+                    </View>
+                    <View style={{ width: pageWidth }}>
+                      {visited.has('journey') && data ? (
+                        <GroupJourney
+                          group={data.group}
+                          userId={userId}
+                          members={data.leaderboard}
+                          active={activeView === 'journey'}
+                        />
+                      ) : null}
+                    </View>
+                    <View style={{ width: pageWidth }}>
+                      {visited.has('trophies') ? (
+                        <TrophyCabinet
+                          rows={data?.leaderboard ?? []}
+                          userId={userId}
+                          onPressUser={openUser}
+                          active={activeView === 'trophies'}
+                        />
+                      ) : null}
+                    </View>
+                  </Animated.View>
+                </View>
+              </GestureDetector>
+            </BlurTargetView>
 
             {/* The period floats at the bottom, under the thumb, where the tab bar sits on the main
                 tabs (this screen covers them). It only applies to the leaderboard, so it slides away
@@ -498,6 +503,7 @@ export default function GroupScreen() {
               <View style={styles.floatingBar}>
                 <ButtonGroup
                   floating
+                  blurTarget={blurTarget}
                   value={period}
                   onChange={(next) => {
                     setSwitched(true);

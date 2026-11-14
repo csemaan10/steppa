@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type RefObject } from 'react';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Animated, {
@@ -12,6 +12,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 
+import { Frost } from '@/components/frost';
 import { withAlpha } from '@/theme';
 import { motion } from '@/theme/motion';
 
@@ -28,6 +29,8 @@ type Props<T extends string> = {
    * on frosted glass with a shadow so it stands off the content scrolling under it.
    */
   floating?: boolean;
+  /** Floating: what's behind it, for Android's blur (a BlurTargetView). */
+  blurTarget?: RefObject<View | null>;
 };
 
 const HEIGHT = 40;
@@ -45,7 +48,7 @@ const FLOATING_PADDING = 4;
  * solid pill, so it reads as a filter rather than navigation. Quick taps retarget from wherever the
  * thumb is. With reduced motion it neither lifts nor glides: it fades in at the new choice.
  */
-export function ButtonGroup<T extends string>({ value, onChange, options, floating = false }: Props<T>) {
+export function ButtonGroup<T extends string>({ value, onChange, options, floating = false, blurTarget }: Props<T>) {
   const theme = useTheme();
   const height = floating ? FLOATING_HEIGHT : HEIGHT;
   const pad = floating ? FLOATING_PADDING : PADDING;
@@ -109,13 +112,10 @@ export function ButtonGroup<T extends string>({ value, onChange, options, floati
   });
 
   const tint = withAlpha(theme.colors.primary, theme.dark ? 0.1 : 0.08);
-  // Floating, the tint sits on frosted glass (nearly opaque, as content scrolls under it) with a rim
-  // and a soft drop shadow; inline, it's the tint alone.
-  const frost = theme.dark ? withAlpha(theme.colors.background, 0.8) : 'rgba(255, 255, 255, 0.8)';
+  // Floating, the tint sits on the tab bar's frosted blur (see the clip below) with a rim and a soft
+  // drop shadow; inline, it's the tint alone.
   const track = floating
     ? {
-        backgroundColor: 'transparent',
-        experimental_backgroundImage: `linear-gradient(${tint}, ${tint}), linear-gradient(${frost}, ${frost})`,
         borderWidth: rim,
         borderColor: theme.colors.outlineVariant,
         boxShadow: theme.dark
@@ -129,6 +129,14 @@ export function ButtonGroup<T extends string>({ value, onChange, options, floati
       accessibilityRole="radiogroup"
       style={[styles.track, { height, padding: pad, borderRadius: height / 2 }, track]}
       onLayout={(e: LayoutChangeEvent) => setRowWidth(e.nativeEvent.layout.width - pad * 2 - rim * 2)}>
+      {floating ? (
+        // Its own clip, as Android's blur ignores rounded corners: the track itself doesn't clip, so
+        // the thumb can swell past its padding while it's lifted.
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: height / 2, overflow: 'hidden' }]}>
+          <Frost target={blurTarget} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
+        </View>
+      ) : null}
       <Animated.View
         pointerEvents="none"
         style={[
