@@ -51,15 +51,23 @@ export function Chip({ text }: { text: string }) {
 export function ProgressBar({ fraction }: { fraction: number }) {
   const theme = useAppTheme();
   const fill = useSharedValue(0);
+  const trackWidth = useSharedValue(0);
 
   useEffect(() => {
     fill.set(withDelay(250, withTiming(fraction, { duration: 1400, easing: Easing.out(Easing.cubic) })));
   }, [fill, fraction]);
 
-  const style = useAnimatedStyle(() => ({ width: `${Math.max(fill.value, 0.02) * 100}%` }));
+  // A full-width bar slid in from the left rather than a growing width, so filling moves it instead
+  // of laying it out again every frame. Hidden until the track has been measured.
+  const style = useAnimatedStyle(() => ({
+    opacity: trackWidth.value ? 1 : 0,
+    transform: [{ translateX: -(1 - Math.max(fill.value, 0.02)) * trackWidth.value }],
+  }));
 
   return (
-    <View style={[styles.track, { backgroundColor: theme.colors.surfaceVariant }]}>
+    <View
+      onLayout={(e) => trackWidth.set(e.nativeEvent.layout.width)}
+      style={[styles.track, { backgroundColor: theme.colors.surfaceVariant }]}>
       <Animated.View style={[styles.fill, { backgroundColor: theme.colors.primary }, style]} />
     </View>
   );

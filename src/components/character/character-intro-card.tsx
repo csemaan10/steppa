@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
 
+import { Appear } from '@/components/appear';
 import { Button } from '@/components/button';
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import type { Profile } from '@/lib/api';
@@ -53,23 +54,26 @@ export function CharacterIntroCard({ profile, onDone }: { profile: Profile; onDo
   }
 
   return (
-    <Card mode="contained" style={glassCard(theme)}>
-      <Card.Content style={styles.row}>
-        <CharacterCanvas look={look} seed={seed} width={112} />
-        <View style={styles.text}>
-          <Text variant="titleMedium">Meet your podium character</Text>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Pick their hair, clothes, pets and podium move in Settings.
-          </Text>
-        </View>
-      </Card.Content>
-      <Card.Actions>
-        <Button onPress={dismiss}>Not now</Button>
-        <Button mode="contained" onPress={customize}>
-          Customize
-        </Button>
-      </Card.Actions>
-    </Card>
+    // Rises in when Today loads, and fades away when it's dismissed or opened.
+    <Appear exits>
+      <Card mode="contained" style={glassCard(theme)}>
+        <Card.Content style={styles.row}>
+          <CharacterCanvas look={look} seed={seed} width={112} />
+          <View style={styles.text}>
+            <Text variant="titleMedium">Meet your podium character</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Pick their hair, clothes, pets and podium move in Settings.
+            </Text>
+          </View>
+        </Card.Content>
+        <Card.Actions>
+          <Button onPress={dismiss}>Not now</Button>
+          <Button mode="contained" onPress={customize}>
+            Customize
+          </Button>
+        </Card.Actions>
+      </Card>
+    </Appear>
   );
 }
 

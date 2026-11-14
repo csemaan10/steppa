@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Appbar, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Appear } from '@/components/appear';
 import { SouvenirReveal } from '@/components/game/souvenir-reveal';
 import { GlassBackAction } from '@/components/glass-action';
 import { PassportPage } from '@/components/passport';
@@ -60,7 +61,9 @@ export default function PassportScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
-          <View style={styles.intro}>
+          {/* The intro and pages rise in once, in a short stagger, when the passport loads; the pages
+              slide along as one above opens or shuts. */}
+          <Appear style={styles.intro}>
             <Text variant="titleMedium" style={styles.bold}>
               {stamped} of {places} places · {full} {full === 1 ? 'keepsake' : 'keepsakes'}
             </Text>
@@ -68,15 +71,16 @@ export default function PassportScreen() {
               Every place {name} goes on a trip gets a stamp. Fill a country&apos;s page and {name} brings
               home a keepsake for the yard.
             </Text>
-          </View>
-          {pages.map((page) => (
-            <PassportPage
-              key={page.country.flag}
-              page={page}
-              name={name}
-              expanded={open === page.country.flag}
-              onToggle={() => setOpen(open === page.country.flag ? null : page.country.flag)}
-            />
+          </Appear>
+          {pages.map((page, i) => (
+            <Appear key={page.country.flag} index={i + 1}>
+              <PassportPage
+                page={page}
+                name={name}
+                expanded={open === page.country.flag}
+                onToggle={() => setOpen(open === page.country.flag ? null : page.country.flag)}
+              />
+            </Appear>
           ))}
         </ScrollView>
       )}

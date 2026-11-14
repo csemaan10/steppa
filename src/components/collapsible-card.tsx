@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 
 import { Collapsible } from '@/components/collapsible';
 import { Chevron } from '@/components/collapsible-section';
+import { PressableScale } from '@/components/pressable-scale';
+import { SwapText } from '@/components/swap-text';
 import { glassCard, useAppTheme } from '@/theme';
 
 type Props = {
@@ -15,14 +17,17 @@ type Props = {
   children: ReactNode;
 };
 
-/** A settings card that folds down to its title and a preview of the current choice. Starts closed. */
+/**
+ * A settings card that folds down to its title and a preview of the current choice. Starts closed.
+ * The header dips while held, and the summary crossfades as the choice changes.
+ */
 export function CollapsibleCard({ title, preview, summary, children }: Props) {
   const theme = useAppTheme();
   const [expanded, setExpanded] = useState(false);
 
   return (
     <Card mode="contained" style={glassCard(theme)}>
-      <Pressable
+      <PressableScale
         onPress={() => setExpanded((e) => !e)}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
@@ -31,14 +36,14 @@ export function CollapsibleCard({ title, preview, summary, children }: Props) {
         <View style={styles.text}>
           <Text variant="titleMedium">{title}</Text>
           {summary ? (
-            <Text variant="bodyMedium" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+            <SwapText variant="bodyMedium" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
               {summary}
-            </Text>
+            </SwapText>
           ) : null}
         </View>
         {preview}
         <Chevron expanded={expanded} color={theme.colors.onSurfaceVariant} size={24} />
-      </Pressable>
+      </PressableScale>
       <Collapsible expanded={expanded} style={styles.body}>
         {children}
       </Collapsible>

@@ -9,6 +9,7 @@ import Animated, {
   useSharedValue,
   withDelay,
   withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -17,9 +18,13 @@ import { CharacterCanvas } from '@/components/character/character-canvas';
 import { ENTRANCE_HEADS_OFF, ENTRANCE_POSE, ENTRANCE_SECONDS } from '@/components/character/entrance';
 import { EntranceStage, bringToFront } from '@/components/character/entrance-stage';
 import { useCountUp } from '@/hooks/use-count-up';
+import { usePressed } from '@/hooks/use-pressed';
 import { activeAverage, type LeaderboardRow } from '@/lib/api';
 import { hashString, normalizeLook } from '@/lib/character';
 import { formatSteps } from '@/lib/dates';
+import { motion } from '@/theme/motion';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const HEIGHTS = [112, 84, 64];
 /** Width of the character stage above each block (the character is half as tall). */
@@ -28,9 +33,8 @@ const CHARACTER_WIDTH = 88;
 const CHARACTER_FPS = 30;
 // 3rd rises first, then 2nd, then 1st.
 const DELAYS = [30, 15, 0];
-/** How long the block takes to rise (no bounce), so entrances start once it's up. */
+/** About how long the block takes to rise (the `smooth` spring, no visible bounce), so entrances start once it's up. */
 const RISE_MS = 300;
-const ease = Easing.out(Easing.cubic);
 // Entrances: 3rd goes first, then 2nd, then 1st.
 const ENTRANCE_DELAYS = [500, 250, 0];
 
@@ -100,10 +104,11 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
   // With an entrance the block rises empty, then they make their entrance and go straight into
   // their own move.
   useEffect(() => {
-    height.set(0);
+    // With reduced motion the blocks are simply there and the podium fades in.
+    height.set(reduceMotion ? HEIGHTS[place]! : 0);
     reveal.set(0);
-    height.set(withDelay(delay, withTiming(HEIGHTS[place]!, { duration: RISE_MS, easing: ease })));
-    reveal.set(withDelay(delay, withTiming(1, { duration: 80 })));
+    if (!reduceMotion) height.set(withDelay(delay, withSpring(HEIGHTS[place]!, motion.smooth)));
+    reveal.set(withDelay(reduceMotion ? 0 : delay, withTiming(1, reduceMotion ? motion.fade : { duration: 80 })));
     if (!entrance) return;
     const start = delay + RISE_MS + ENTRANCE_DELAYS[place]!;
     const length = ENTRANCE_SECONDS[entrance] * 1000;
@@ -132,7 +137,7 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
       clock.set(ENTRANCE_SECONDS[entrance]);
       setEntering(false);
     };
-  }, [height, reveal, clock, delay, place, entrance, replayKey]);
+  }, [height, reveal, clock, delay, place, entrance, replayKey, reduceMotion]);
 
   // The rise is drawn with transforms over a block laid out at full height, so the podium keeps
   // one size and the list it heads isn't laid out again every frame. The block slides up out of
@@ -146,6 +151,10 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
     ],
   }));
 
+  // The whole spot dips while held, like the app's cards.
+  const press = usePressed();
+  const dip = useAnimatedStyle(() => ({ transform: [{ scale: 1 - press.pressed.value * 0.03 }] }));
+
   const seed = (hashString(row.user_id) % 1000) / 1000;
 
   const blockColors = [
@@ -155,9 +164,11 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
   ][place]!;
 
   return (
-    <Pressable
-      style={[styles.spot, { zIndex: z }]}
+    <AnimatedPressable
+      style={[styles.spot, { zIndex: z }, dip]}
       onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       accessibilityLabel={`${place + 1}: ${row.display_name}, ${formatSteps(row.total_steps)} steps`}>
       <Animated.View style={[styles.head, headStyle]}>
         {place === 0 ? <MaterialCommunityIcons name="crown" size={28} color="#E3B341" /> : null}
@@ -210,7 +221,7 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
           </Text>
         </Animated.View>
       </View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

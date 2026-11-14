@@ -2,12 +2,14 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, Card, Text } from 'react-native-paper';
-import Animated, { BounceIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Appear } from '@/components/appear';
 import { TrophyIcon } from '@/components/award-icons';
 import { Button } from '@/components/button';
 import { FlagIcon } from '@/components/flag-icon';
+import { popIn } from '@/components/game/game-motion';
 import { GlassBackAction } from '@/components/glass-action';
 import { Chip, PostcardCollection, ProgressBar } from '@/components/journey-parts';
 import { JourneyScene } from '@/components/journey-scene';
@@ -45,6 +47,7 @@ import {
 } from '@/lib/journeys';
 import { useUserId } from '@/providers/auth-provider';
 import { glassCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
+import { enter } from '@/theme/motion';
 
 type PostcardView = { stops: Stop[]; title: string; open: boolean };
 
@@ -239,7 +242,8 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
 
   return (
     <>
-      <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.hero}>
+      {/* The page's main blocks rise in one after another; the map draws itself in instead. */}
+      <Appear style={styles.hero}>
         <FlagIcon flag={route.flag} size={44} />
         <View style={styles.flex}>
           <Text variant="titleMedium" style={styles.bold}>
@@ -249,11 +253,11 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
             Day {day} · {formatSteps(steps)} steps so far
           </Text>
         </View>
-      </Animated.View>
+      </Appear>
 
-      <Animated.View entering={FadeInDown.delay(80).springify().damping(18)}>
+      <Appear index={1}>
         <JourneyScene people={[profile]} stop={sceneStop} greeting={greeting} />
-      </Animated.View>
+      </Appear>
 
       <RouteMap
         route={route}
@@ -263,26 +267,28 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
         detailed
       />
 
-      <Card mode="contained" style={glassCard(theme)}>
-        <Card.Content style={styles.progressCard}>
-          <View style={styles.kmRow}>
-            <Text variant="displaySmall" style={[styles.bold, { color: theme.colors.primary }]}>
-              {formatKm(kmShown)}
+      <Appear index={2}>
+        <Card mode="contained" style={glassCard(theme)}>
+          <Card.Content style={styles.progressCard}>
+            <View style={styles.kmRow}>
+              <Text variant="displaySmall" style={[styles.bold, { color: theme.colors.primary }]}>
+                {formatKm(kmShown)}
+              </Text>
+              <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                of {formatKm(route.totalKm)} km
+              </Text>
+            </View>
+            <ProgressBar fraction={progress.fraction} />
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              {Math.floor(progress.fraction * 100)}% of the way · {progress.reached} of {route.stops.length} stops
             </Text>
-            <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              of {formatKm(route.totalKm)} km
-            </Text>
-          </View>
-          <ProgressBar fraction={progress.fraction} />
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            {Math.floor(progress.fraction * 100)}% of the way · {progress.reached} of {route.stops.length} stops
-          </Text>
-        </Card.Content>
-      </Card>
+          </Card.Content>
+        </Card>
+      </Appear>
 
       <View style={styles.tiles}>
         {next ? (
-          <Animated.View entering={FadeInDown.delay(150).springify().damping(18)} style={styles.flex}>
+          <Appear index={3} style={styles.flex}>
             <Card mode="contained" style={[glassCard(theme), styles.tile]}>
               <Card.Content style={styles.tileContent}>
                 <View style={[styles.stopBadge, { experimental_backgroundImage: skyGradient(next) }]}>
@@ -299,9 +305,9 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
                 </Text>
               </Card.Content>
             </Card>
-          </Animated.View>
+          </Appear>
         ) : null}
-        <Animated.View entering={FadeInDown.delay(250).springify().damping(18)} style={styles.flex}>
+        <Appear index={4} style={styles.flex}>
           <Card mode="contained" style={[glassCard(theme), styles.tile]}>
             <Card.Content style={styles.tileContent}>
               <View style={[styles.stopBadge, { backgroundColor: theme.colors.tertiaryContainer }]}>
@@ -322,7 +328,7 @@ function ActiveJourney({ current, progress, profile, traveller, dailySteps, onOp
               </Text>
             </Card.Content>
           </Card>
-        </Animated.View>
+        </Appear>
       </View>
 
       <PostcardCollection route={route} progress={progress} onOpen={onOpenPostcard} />
@@ -355,7 +361,8 @@ function FinishedJourney({
     <>
       <Card mode="contained" style={glassCard(theme)}>
         <Card.Content style={styles.finished}>
-          <Animated.View entering={BounceIn.delay(150)}>
+          {/* A trophy is a game moment: one pop past its size, then still (it used to bounce three times). */}
+          <Animated.View entering={popIn(150)}>
             <TrophyIcon size={68} />
           </Animated.View>
           <Text variant="headlineSmall" style={[styles.bold, styles.centerText]}>
@@ -390,6 +397,7 @@ type PickerProps = {
 function RoutePicker({ title, dailySteps, completed, busy, onStart }: PickerProps) {
   const theme = useAppTheme();
   const { width } = useWindowDimensions();
+  const reduceMotion = useReducedMotion();
   const done = new Set(completed.map((j) => j.route));
 
   return (
@@ -402,7 +410,7 @@ function RoutePicker({ title, dailySteps, completed, busy, onStart }: PickerProp
         stop sends you a postcard.
       </Text>
       {ROUTES.map((route, i) => (
-        <Animated.View key={route.key} entering={FadeInDown.delay(i * 120).springify().damping(18)}>
+        <Animated.View key={route.key} entering={enter(i, reduceMotion)}>
           <Card mode="contained" style={glassCard(theme)}>
             <View style={styles.pickerMap}>
               {/* No traveller: the whole route draws itself in, one card after another. */}
@@ -445,6 +453,7 @@ function RoutePicker({ title, dailySteps, completed, busy, onStart }: PickerProp
 /** Finished journeys, like stamps in a passport. */
 function Passport({ journeys }: { journeys: Journey[] }) {
   const theme = useAppTheme();
+  const reduceMotion = useReducedMotion();
 
   return (
     <View style={styles.section}>
@@ -461,7 +470,7 @@ function Passport({ journeys }: { journeys: Journey[] }) {
               year: 'numeric',
             });
             return (
-              <Animated.View key={j.id} entering={FadeInDown.delay(i * 80)} style={styles.passportRow}>
+              <Animated.View key={j.id} entering={enter(i, reduceMotion)} style={styles.passportRow}>
                 <View
                   style={[
                     styles.passportStamp,

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
 import { TREAT } from '@/components/game/colors';
 import { gameMotion } from '@/components/game/game-motion';
+import { PressableScale } from '@/components/pressable-scale';
 import { STEPS_PER_TREAT } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { glass, useAppTheme, withAlpha } from '@/theme';
@@ -73,9 +74,11 @@ export function TreatCounter({ count, toNext, onPress, targetRef }: Props) {
   const walked = toNext === undefined ? 0 : Math.min(1, Math.max(0.04, 1 - toNext / STEPS_PER_TREAT));
 
   return (
-    <Pressable
+    // Dips while held, like the other small buttons in the header.
+    <PressableScale
       onPress={onPress}
       disabled={!onPress}
+      pressedScale={0.95}
       accessibilityRole={onPress ? 'button' : 'text'}
       accessibilityLabel={`${count} ${count === 1 ? 'treat' : 'treats'}${
         toNext === undefined ? '' : `, another in ${formatSteps(toNext)} steps`
@@ -126,7 +129,7 @@ export function TreatCounter({ count, toNext, onPress, targetRef }: Props) {
           </View>
         ) : null}
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

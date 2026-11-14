@@ -164,12 +164,19 @@ function TrickCard({
 /** Treats given toward the trick, in cookie colours. */
 function TreatBar({ fraction }: { fraction: number }) {
   const fill = useSharedValue(0);
+  const trackWidth = useSharedValue(0);
   useEffect(() => {
     fill.set(withTiming(fraction, { duration: 700, easing: Easing.out(Easing.cubic) }));
   }, [fill, fraction]);
-  const style = useAnimatedStyle(() => ({ width: `${Math.max(fill.value, 0.03) * 100}%` }));
+  // Slides a full-width bar in rather than growing its width, so it isn't laid out again every frame.
+  const style = useAnimatedStyle(() => ({
+    opacity: trackWidth.value ? 1 : 0,
+    transform: [{ translateX: -(1 - Math.max(fill.value, 0.03)) * trackWidth.value }],
+  }));
   return (
-    <View style={[styles.track, { backgroundColor: withAlpha(TREAT.face, 0.22) }]}>
+    <View
+      onLayout={(e) => trackWidth.set(e.nativeEvent.layout.width)}
+      style={[styles.track, { backgroundColor: withAlpha(TREAT.face, 0.22) }]}>
       <Animated.View style={[styles.fill, style]} />
     </View>
   );

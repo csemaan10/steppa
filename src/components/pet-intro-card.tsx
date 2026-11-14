@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 
+import { Appear } from '@/components/appear';
 import { Button } from '@/components/button';
 import { usePetPlay } from '@/components/pet-play';
 import { WorldScene } from '@/components/world-scene';
@@ -63,24 +64,27 @@ export function PetIntroCard({ profile }: { profile: Profile }) {
   const sceneWidth = width - 48;
 
   return (
-    <Card mode="contained" style={glassCard(theme)}>
-      <View style={styles.scene}>
-        <WorldScene art={art} width={sceneWidth} cropTo={SCENE_HEIGHT} animate={focused} play={play} radius={18} />
-      </View>
-      <Card.Content style={styles.text}>
-        <Text variant="titleMedium">Adopt a pet</Text>
-        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-          A little buddy that grows up with every step you take. Pick a cat, a dog, a dragon, even a tiger, and unlock
-          hats, toys and more as you walk.
-        </Text>
-      </Card.Content>
-      <Card.Actions>
-        <Button onPress={dismiss}>Not now</Button>
-        <Button mode="contained" onPress={open}>
-          Adopt
-        </Button>
-      </Card.Actions>
-    </Card>
+    // Rises in when Today loads, and fades away when it's dismissed or opened.
+    <Appear exits>
+      <Card mode="contained" style={glassCard(theme)}>
+        <View style={styles.scene}>
+          <WorldScene art={art} width={sceneWidth} cropTo={SCENE_HEIGHT} animate={focused} play={play} radius={18} />
+        </View>
+        <Card.Content style={styles.text}>
+          <Text variant="titleMedium">Adopt a pet</Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            A little buddy that grows up with every step you take. Pick a cat, a dog, a dragon, even a tiger, and unlock
+            hats, toys and more as you walk.
+          </Text>
+        </Card.Content>
+        <Card.Actions>
+          <Button onPress={dismiss}>Not now</Button>
+          <Button mode="contained" onPress={open}>
+            Adopt
+          </Button>
+        </Card.Actions>
+      </Card>
+    </Appear>
   );
 }
 

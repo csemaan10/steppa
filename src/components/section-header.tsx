@@ -1,7 +1,11 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Icon, Text } from 'react-native-paper';
+import Animated, { interpolate, useAnimatedStyle } from 'react-native-reanimated';
 
+import { usePressed } from '@/hooks/use-pressed';
 import { useAppTheme, withAlpha } from '@/theme';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type Props = {
   title: string;
@@ -14,6 +18,12 @@ type Props = {
 /** Splits a page into sections: a rule across it, then a bold title and a small caps note. */
 export function SectionHeader({ title, note, onPress }: Props) {
   const theme = useAppTheme();
+  // The link dims and dips while held, like a button.
+  const press = usePressed();
+  const held = useAnimatedStyle(() => ({
+    opacity: interpolate(press.pressed.value, [0, 1], [1, 0.55]),
+    transform: [{ scale: interpolate(press.pressed.value, [0, 1], [1, 0.96]) }],
+  }));
   const noteText = note ? (
     <Text
       variant="labelMedium"
@@ -30,10 +40,16 @@ export function SectionHeader({ title, note, onPress }: Props) {
           {title}
         </Text>
         {onPress ? (
-          <Pressable onPress={onPress} hitSlop={12} accessibilityRole="button" style={styles.link}>
+          <AnimatedPressable
+            onPress={onPress}
+            onPressIn={press.onPressIn}
+            onPressOut={press.onPressOut}
+            hitSlop={12}
+            accessibilityRole="button"
+            style={[styles.link, held]}>
             {noteText}
             <Icon source="chevron-right" size={16} color={theme.colors.primary} />
-          </Pressable>
+          </AnimatedPressable>
         ) : (
           noteText
         )}

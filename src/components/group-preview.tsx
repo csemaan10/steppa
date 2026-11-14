@@ -6,12 +6,14 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { openGroupFrom } from '@/components/expand-transition';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { GroupAvatar } from '@/components/group-avatar';
+import { SwapText } from '@/components/swap-text';
 import { UserAvatar } from '@/components/user-avatar';
 import { usePressed } from '@/hooks/use-pressed';
 import type { GroupWithCount, LeaderboardRow } from '@/lib/api';
 import { getLastRead } from '@/lib/chat-read';
 import { formatSteps } from '@/lib/dates';
 import { glassCard, withAlpha } from '@/theme';
+import { layoutMove } from '@/theme/motion';
 
 const MEDALS = ['#E3B341', '#A8B0B8', '#C3834C'];
 const TOP = 3;
@@ -102,12 +104,14 @@ export function GroupPreview({ group, rows, userId, latestMessageId, showOwner }
   );
 }
 
+/** One person on the card. When the order changes on a refresh, rows slide to their new places and the counts crossfade. */
 function Row({ row, isMe }: { row: LeaderboardRow; isMe: boolean }) {
   const theme = useTheme();
   const medal = MEDALS[row.rank - 1];
 
   return (
-    <View
+    <Animated.View
+      layout={layoutMove}
       style={[
         styles.row,
         isMe && {
@@ -139,12 +143,12 @@ function Row({ row, isMe }: { row: LeaderboardRow; isMe: boolean }) {
         <PlayerBadges row={row} />
       </View>
       <View style={styles.right}>
-        <Text variant="titleSmall" style={styles.steps}>
+        <SwapText variant="titleSmall" style={styles.steps}>
           {formatSteps(row.total_steps)}
-        </Text>
+        </SwapText>
         <RankDelta rank={row.rank} prevRank={row.prev_rank} />
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

@@ -4,6 +4,7 @@ import { ProgressBar, Text } from 'react-native-paper';
 
 import type { Rect } from '@/components/expanding-card';
 import { PressableScale } from '@/components/pressable-scale';
+import { SwapText } from '@/components/swap-text';
 import { glassCard, useAppTheme } from '@/theme';
 
 type Props = {
@@ -35,9 +36,10 @@ export function InsightTile({ label, value, supporting, progress, onPress, minHe
       <Text variant="labelMedium" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
         {label}
       </Text>
-      <Text variant="titleLarge" numberOfLines={1} adjustsFontSizeToFit style={[styles.value, { color: theme.colors.onSurface }]}>
+      {/* A new value (after a sync) crossfades in rather than flickering over. */}
+      <SwapText variant="titleLarge" numberOfLines={1} adjustsFontSizeToFit style={[styles.value, { color: theme.colors.onSurface }]}>
         {value}
-      </Text>
+      </SwapText>
       {progress !== undefined ? (
         <ProgressBar
           progress={Math.min(Math.max(progress, 0), 1)}

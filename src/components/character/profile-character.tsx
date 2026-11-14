@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { Easing, useReducedMotion, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import { ENTRANCE_POSE, ENTRANCE_SECONDS } from '@/components/character/entrance';
 import { EntranceStage } from '@/components/character/entrance-stage';
+import { PressableScale } from '@/components/pressable-scale';
 import { CHEER_HOP } from '@/components/character/rig';
 import type { Profile } from '@/lib/api';
 import { hashString, normalizeLook } from '@/lib/character';
@@ -75,7 +76,8 @@ export function ProfileCharacter({ profile }: { profile: Profile }) {
   );
 
   return (
-    <Pressable
+    // Dips on touch-down like the app's other cards, so the tap shows before the replay starts.
+    <PressableScale
       onPress={() => setRun((n) => n + 1)}
       style={[styles.stage, glassCard(theme)]}
       accessibilityRole="button"
@@ -93,7 +95,7 @@ export function ProfileCharacter({ profile }: { profile: Profile }) {
         </View>
         <View style={[styles.block, { backgroundColor: theme.colors.primaryContainer }]} />
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

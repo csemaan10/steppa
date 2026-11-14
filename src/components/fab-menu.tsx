@@ -7,7 +7,9 @@ import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useDerivedValue,
+  useReducedMotion,
   withSpring,
+  withTiming,
   type DerivedValue,
 } from 'react-native-reanimated';
 
@@ -26,7 +28,13 @@ type Props = { actions: FabMenuAction[]; bottom: number };
 export function FabMenu({ actions, bottom }: Props) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
-  const progress = useDerivedValue<number>(() => withSpring(open ? 1 : 0, motion.spatial));
+  const reduceMotion = useReducedMotion();
+  // With reduced motion the menu fades in and out (quicker out) instead of unfolding.
+  const progress = useDerivedValue<number>(() =>
+    reduceMotion
+      ? withTiming(open ? 1 : 0, open ? motion.fade : motion.fadeOut)
+      : withSpring(open ? 1 : 0, motion.spatial)
+  );
   // Held, the FAB tightens its corners and dips (M3 Expressive), on top of the open/close morph.
   const { pressed, onPressIn, onPressOut } = usePressed();
 
@@ -64,8 +72,9 @@ export function FabMenu({ actions, bottom }: Props) {
               key={action.label}
               action={action}
               progress={progress}
-              // Items nearest the FAB appear first.
-              order={actions.length - 1 - i}
+              // Items nearest the FAB appear first (all together with reduced motion).
+              order={reduceMotion ? 0 : actions.length - 1 - i}
+              still={reduceMotion}
               onPress={() => select(action)}
             />
           ))}
@@ -97,18 +106,21 @@ type ItemProps = {
   action: FabMenuAction;
   progress: DerivedValue<number>;
   order: number;
+  /** Reduced motion: fades in place, without the rise and grow. */
+  still: boolean;
   onPress: () => void;
 };
 
-function FabMenuItem({ action, progress, order, onPress }: ItemProps) {
+function FabMenuItem({ action, progress, order, still, onPress }: ItemProps) {
   const theme = useTheme();
   const { pressed, onPressIn, onPressOut } = usePressed();
   const style = useAnimatedStyle(() => {
     const start = order * 0.15;
     const t = interpolate(progress.value, [start, Math.min(1, start + 0.7)], [0, 1], 'clamp');
+    const m = still ? 1 : t;
     return {
       opacity: t,
-      transform: [{ translateY: (1 - t) * 16 }, { scale: (0.9 + t * 0.1) * (1 - pressed.value * 0.04) }],
+      transform: [{ translateY: (1 - m) * 16 }, { scale: (0.9 + m * 0.1) * (1 - pressed.value * 0.03) }],
     };
   });
   const shape = useAnimatedStyle(() => ({ borderRadius: 28 - pressed.value * 10 }));

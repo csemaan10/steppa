@@ -1,26 +1,25 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, TextInput, View } from 'react-native';
 import { Icon, IconButton, Text, useTheme } from 'react-native-paper';
 import Animated, {
-  FadeInDown,
-  FadeOutDown,
-  Keyframe,
+  FadeIn,
+  FadeOut,
   LayoutAnimationConfig,
-  LinearTransition,
   useAnimatedKeyboard,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
-  withDelay,
-  withSequence,
   withSpring,
   withTiming,
+  type EntryExitAnimationFunction,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatPodiumCard } from '@/components/chat-podium-card';
 import { MessageActions, type MessageAction } from '@/components/message-actions';
 import { ReactionChips } from '@/components/message-reactions';
+import { PressableScale } from '@/components/pressable-scale';
 import { UserAvatar } from '@/components/user-avatar';
 import {
   blockUser,
@@ -43,6 +42,7 @@ import {
 } from '@/lib/api';
 import { markRead } from '@/lib/chat-read';
 import { addDays, startOfDay, toDayKey } from '@/lib/dates';
+import { enter, layoutMove, leave, motion } from '@/theme/motion';
 
 type Member = { display_name: string; avatar_color: string; avatar_icon: string | null };
 
@@ -74,26 +74,43 @@ function dayLabel(day: string, today: Date): string {
   });
 }
 
-// Rows close gaps and make room with a spring (deletes, new messages, reactions changing height).
-const ROW_MOVE = LinearTransition.springify().damping(20).stiffness(200);
-// New messages animate in. Only sideways moves and scaling: the list is inverted (flipped
-// vertically), so an up or down slide would run backwards.
-const POP_IN_MINE = new Keyframe({
-  0: { opacity: 0, transform: [{ translateX: 36 }, { scale: 0.6 }] },
-  60: { opacity: 1, transform: [{ translateX: -3 }, { scale: 1.04 }] },
-  100: { opacity: 1, transform: [{ translateX: 0 }, { scale: 1 }] },
-}).duration(320);
-const SLIDE_IN_THEIRS = new Keyframe({
-  0: { opacity: 0, transform: [{ translateX: -24 }] },
-  100: { opacity: 1, transform: [{ translateX: 0 }] },
-}).duration(260);
-// Deleted, reported or blocked: the bubble shrinks toward its side and fades.
-const MESSAGE_OUT = new Keyframe({
-  0: { opacity: 1, transform: [{ scale: 1 }] },
-  100: { opacity: 0, transform: [{ scale: 0.6 }] },
-}).duration(220);
-const BANNER_IN = FadeInDown.duration(160);
-const BANNER_OUT = FadeOutDown.duration(120);
+/**
+ * A new message arriving: fades in as it slides in from its side and grows the last bit to full size
+ * (from its bottom corner; see the row's transformOrigin). Only sideways moves and scaling: the list
+ * is inverted (flipped vertically), so an up or down slide would run backwards. With reduced motion it
+ * only fades.
+ */
+function messageIn(fromX: number, reduceMotion: boolean): EntryExitAnimationFunction {
+  const x = reduceMotion ? 0 : fromX;
+  const scale = reduceMotion ? 1 : 0.92;
+  const { fade, smooth } = motion;
+  return () => {
+    'worklet';
+    return {
+      initialValues: { opacity: 0, transform: [{ translateX: x }, { scale }] },
+      animations: {
+        opacity: withTiming(1, fade),
+        transform: [{ translateX: withSpring(0, smooth) }, { scale: withSpring(1, smooth) }],
+      },
+    };
+  };
+}
+
+/** Deleted, reported or blocked: the bubble shrinks a little toward its side as it fades, quicker than it came. */
+function messageOut(reduceMotion: boolean): EntryExitAnimationFunction {
+  const scale = reduceMotion ? 1 : 0.9;
+  const { fadeOut, press } = motion;
+  return () => {
+    'worklet';
+    return {
+      initialValues: { opacity: 1, transform: [{ scale: 1 }] },
+      animations: { opacity: withTiming(0, fadeOut), transform: [{ scale: withSpring(scale, press) }] },
+    };
+  };
+}
+
+const EMPTY_IN = FadeIn.duration(motion.fade.duration!);
+const EMPTY_OUT = FadeOut.duration(motion.fadeOut.duration!);
 
 /** Inserts in place (newest first); a no-op if it's already there. */
 function addMessage(list: ChatMessage[], message: ChatMessage): ChatMessage[] {
@@ -130,6 +147,12 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
   // Messages that arrived while the chat is open, so they animate in (history doesn't).
   const [fresh, setFresh] = useState<ReadonlySet<number>>(new Set());
   const markFresh = (id: number) => setFresh((s) => new Set(s).add(id));
+  // Until the first load lands, so "No messages yet" doesn't flash up before the history arrives.
+  const [loaded, setLoaded] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const mineIn = messageIn(28, reduceMotion);
+  const theirsIn = messageIn(-24, reduceMotion);
+  const messageGone = messageOut(reduceMotion);
   const fly = useSharedValue(0);
   const pop = useSharedValue(1);
   const sendIconStyle = useAnimatedStyle(() => ({
@@ -161,8 +184,13 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
           return [...byId.values()].sort((a, b) => b.id - a.id);
         });
         setReactions((current) => initialReactions.reduce(upsertReaction, current));
+        setLoaded(true);
       })
-      .catch((e) => active && setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => {
+        if (!active) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setLoaded(true);
+      });
     const onInsert = (m: ChatMessage) => {
       setMessages((list) => addMessage(list, m));
       markFresh(m.id);
@@ -335,9 +363,18 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
         setEditing(null);
         setDraft('');
       } else {
-        // The send icon flies off like a paper plane, then springs back in.
-        fly.set(withSequence(withTiming(1, { duration: 200 }), withTiming(0, { duration: 0 })));
-        pop.set(withDelay(200, withSequence(withTiming(0.3, { duration: 0 }), withSpring(1, { damping: 10, stiffness: 220 }))));
+        // The send icon flies off like a paper plane, then grows back in place once it's gone. Both
+        // start from wherever they are, so a quick second send just sends it off again.
+        if (!reduceMotion) {
+          fly.set(
+            withSpring(1, motion.spatial, (done) => {
+              if (!done) return;
+              fly.set(0);
+              pop.set(0.5);
+              pop.set(withSpring(1, motion.release));
+            })
+          );
+        }
         const message = await sendMessage(groupId, userId, body);
         setDraft('');
         markFresh(message.id);
@@ -354,16 +391,20 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
     // Leaving the chat (switching views) shouldn't play every bubble's exit animation.
     <LayoutAnimationConfig skipExiting>
       <Animated.View style={[styles.flex, keyboardPadding]}>
-        {messages.length === 0 && !podium.length ? (
-          <Text variant="bodyMedium" style={[styles.empty, { color: theme.colors.onSurfaceVariant }]}>
-            No messages yet. Say hi 👋
-          </Text>
+        {loaded && messages.length === 0 && !podium.length ? (
+          <Animated.View entering={EMPTY_IN} exiting={EMPTY_OUT}>
+            <Text variant="bodyMedium" style={[styles.empty, { color: theme.colors.onSurfaceVariant }]}>
+              No messages yet. Say hi 👋
+            </Text>
+          </Animated.View>
         ) : null}
         <Animated.FlatList
           inverted
           data={items}
           keyExtractor={(i) => (i.kind === 'podium' ? 'podium' : i.kind === 'day' ? `day:${i.day}` : String(i.message.id))}
-          itemLayoutAnimation={ROW_MOVE}
+          // Rows close gaps and make room on the app's settle spring (deletes, new messages,
+          // reactions changing a row's height).
+          itemLayoutAnimation={layoutMove}
           contentContainerStyle={styles.list}
           renderItem={({ item: row, index }) => {
             if (row.kind === 'podium') return <ChatPodiumCard rows={podium} day={yesterday} userId={userId} />;
@@ -387,8 +428,8 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
             const firstOfRun = above?.kind !== 'message' || above.message.user_id !== item.user_id;
             return (
               <Animated.View
-                entering={fresh.has(item.id) ? (mine ? POP_IN_MINE : SLIDE_IN_THEIRS) : undefined}
-                exiting={MESSAGE_OUT}
+                entering={fresh.has(item.id) ? (mine ? mineIn : theirsIn) : undefined}
+                exiting={messageGone}
                 style={[
                   styles.messageRow,
                   mine && styles.mineRow,
@@ -416,7 +457,9 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
                         {member?.display_name ?? 'Member'}
                       </Text>
                     ) : null}
-                    <Pressable
+                    {/* Dips while held, so the long press shows it's taking. */}
+                    <PressableScale
+                      pressedScale={0.97}
                       onLongPress={() => setMenu({ message: item, open: true })}
                       accessibilityHint={mine ? 'Long press to react, edit or delete' : 'Long press to react, report or block'}
                       style={[
@@ -439,7 +482,7 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
                         {item.edited_at ? 'edited · ' : ''}
                         {formatTime(item.created_at)}
                       </Text>
-                    </Pressable>
+                    </PressableScale>
                     <ReactionChips
                       reactions={reactions.filter((r) => r.message_id === item.id)}
                       userId={userId}
@@ -462,8 +505,8 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
 
         {editing ? (
           <Animated.View
-            entering={BANNER_IN}
-            exiting={BANNER_OUT}
+            entering={enter(0, reduceMotion)}
+            exiting={leave(reduceMotion)}
             style={[styles.editBanner, { borderColor: theme.colors.primary }]}>
             <Icon source="pencil-outline" size={18} color={theme.colors.primary} />
             <View style={styles.flex}>

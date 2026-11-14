@@ -1,10 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { BlurTargetView } from 'expo-blur';
-import { createRef, useDeferredValue, useEffect, useRef, useState, type RefObject } from 'react';
+import { createRef, useDeferredValue, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, Text } from 'react-native-paper';
 import Animated, {
-  FadeIn,
   FadeOutDown,
   interpolate,
   useAnimatedStyle,
@@ -85,6 +84,7 @@ import {
 } from '@/lib/world';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader, useAppTheme } from '@/theme';
+import { motion } from '@/theme/motion';
 
 /** The pet's stage stays pinned above the shelves, taking at most this share of the screen's height. */
 const SCENE_SHARE = 0.28;
@@ -579,20 +579,15 @@ function Shop({
       <View style={styles.flex}>
         {TABS.map(({ value }) =>
           opened.has(value) ? (
-            <View
-              key={value}
-              style={[StyleSheet.absoluteFill, value !== page && styles.hidden]}
-              pointerEvents={value === page ? 'auto' : 'none'}
-              importantForAccessibility={value === page ? 'auto' : 'no-hide-descendants'}
-              accessibilityElementsHidden={value !== page}>
+            <ShopPage key={value} visible={value === page}>
               <ScrollView
                 contentContainerStyle={[
                   styles.content,
                   { paddingBottom: insets.bottom + 32 + (buyCardShown && value === 'looks' ? BUY_CARD_ROOM : 0) },
                 ]}>
-                <Animated.View entering={FadeIn.duration(180)}>{renderTab(value)}</Animated.View>
+                {renderTab(value)}
               </ScrollView>
-            </View>
+            </ShopPage>
           ) : null
         )}
       </View>
@@ -670,6 +665,30 @@ function Shop({
   );
 }
 
+/**
+ * One of the shop's tabs, kept built while hidden. The tab coming in fades up every time it's
+ * chosen, not only the first time, so a switch reads as a swap rather than a cut; the one going
+ * hides at once, so two heavy pages are never blended on screen together. Picking a tab again
+ * mid-fade carries on from where the fade had got to.
+ */
+function ShopPage({ visible, children }: { visible: boolean; children: ReactNode }) {
+  const shown = useSharedValue(0);
+  useEffect(() => {
+    shown.set(visible ? withTiming(1, motion.fade) : 0);
+  }, [visible, shown]);
+  const fade = useAnimatedStyle(() => ({ opacity: shown.value }));
+
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, fade]}
+      pointerEvents={visible ? 'auto' : 'none'}
+      importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
+      accessibilityElementsHidden={!visible}>
+      {children}
+    </Animated.View>
+  );
+}
+
 /** Room kept at the bottom for the floating buy card: its height and a gap. */
 const BUY_CARD_ROOM = 112;
 
@@ -681,6 +700,5 @@ const styles = StyleSheet.create({
   stageScale: { transformOrigin: 'top' },
   mouth: { position: 'absolute', width: 4, height: 4 },
   content: { padding: 16, paddingTop: 12 },
-  hidden: { opacity: 0 },
   message: { textAlign: 'center', marginTop: 24 },
 });

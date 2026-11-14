@@ -15,6 +15,7 @@ import { TREAT } from '@/components/game/colors';
 import { NewBadge, SparkleBurst } from '@/components/game/game-fx';
 import { gameMotion } from '@/components/game/game-motion';
 import { SpendButton } from '@/components/game/spend-button';
+import { PressableScale } from '@/components/pressable-scale';
 import { TreatIcon } from '@/components/treat-icon';
 import { shortSteps } from '@/components/world-parts';
 import { usePressed } from '@/hooks/use-pressed';
@@ -467,17 +468,14 @@ function Swatch({
 }) {
   const theme = useAppTheme();
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
       accessibilityLabel={label}
       hitSlop={4}
-      style={({ pressed }) => [
-        styles.swatchRing,
-        { borderColor: selected ? theme.colors.primary : 'transparent' },
-        pressed && styles.swatchPressed,
-      ]}>
+      pressedScale={0.92}
+      style={[styles.swatchRing, { borderColor: selected ? theme.colors.primary : 'transparent' }]}>
       <View
         style={[
           styles.colourSwatch,
@@ -485,7 +483,7 @@ function Swatch({
         ]}>
         {children}
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -687,7 +685,6 @@ const styles = StyleSheet.create({
   colours: { gap: 8, paddingHorizontal: 14, paddingTop: 6, paddingBottom: 14, borderRadius: 20 },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   swatchRing: { width: 42, height: 42, borderRadius: 21, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center' },
-  swatchPressed: { transform: [{ scale: 0.9 }] },
   colourSwatch: {
     width: 32,
     height: 32,

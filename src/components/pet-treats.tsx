@@ -1,7 +1,7 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Card, Modal, Portal, Text } from 'react-native-paper';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { Button } from '@/components/button';
 import { Frost, frostPane } from '@/components/frost';
@@ -9,6 +9,7 @@ import { getTreatBonuses, type TreatBonus } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { describeBonus, EARN_NOTES, waysToEarn } from '@/lib/treats';
 import { glassCard, useAppTheme } from '@/theme';
+import { motion } from '@/theme/motion';
 
 /**
  * How treats work, opened from the treat count: what you have, every way to earn more and what each
@@ -48,65 +49,77 @@ export function TreatsSheet({
     };
   }, [open]);
 
+  // As the modal fades in, the sheet grows the last few percent out of the top right, where the treat
+  // count you tapped sits. Closing is just the modal's fade.
+  const rise = useSharedValue(1);
+  useEffect(() => {
+    if (!open) return;
+    rise.set(0);
+    rise.set(withSpring(1, motion.smooth));
+  }, [open, rise]);
+  const riseStyle = useAnimatedStyle(() => ({ transform: [{ scale: 0.94 + 0.06 * rise.value }] }));
+
   return (
     <Portal>
       <Modal visible={open} onDismiss={onClose} contentContainerStyle={styles.modal}>
-        <Card
-          mode="contained"
-          style={[frostPane(theme), { borderRadius: glassCard(theme).borderRadius, maxHeight: height * 0.8 }]}>
-          <Frost target={blurTarget} />
-          <ScrollView contentContainerStyle={styles.sheet}>
-            <View style={styles.head}>
-              <Text variant="headlineSmall" style={styles.bold}>
-                {available} {available === 1 ? 'treat' : 'treats'}
-              </Text>
-              <Text variant="bodyMedium" style={muted}>
-                Another in {formatSteps(toNext)} steps
-              </Text>
-            </View>
-
-            <View style={styles.group}>
-              <Text variant="titleSmall" style={styles.bold}>
-                How to earn
-              </Text>
-              {waysToEarn(name).map((way) => (
-                <View key={way.what} style={styles.row}>
-                  <Text variant="bodyMedium" style={styles.what}>
-                    {way.what}
-                  </Text>
-                  <Text variant="bodyMedium" style={[styles.pays, muted]}>
-                    {way.pays}
-                  </Text>
-                </View>
-              ))}
-              {EARN_NOTES.map((note) => (
-                <Text key={note} variant="bodySmall" style={muted}>
-                  {note}
+        <Animated.View style={[styles.fromCounter, riseStyle]}>
+          <Card
+            mode="contained"
+            style={[frostPane(theme), { borderRadius: glassCard(theme).borderRadius, maxHeight: height * 0.8 }]}>
+            <Frost target={blurTarget} />
+            <ScrollView contentContainerStyle={styles.sheet}>
+              <View style={styles.head}>
+                <Text variant="headlineSmall" style={styles.bold}>
+                  {available} {available === 1 ? 'treat' : 'treats'}
                 </Text>
-              ))}
-            </View>
+                <Text variant="bodyMedium" style={muted}>
+                  Another in {formatSteps(toNext)} steps
+                </Text>
+              </View>
 
-            {lately?.length ? (
-              <Animated.View entering={FadeIn.duration(200)} style={styles.group}>
+              <View style={styles.group}>
                 <Text variant="titleSmall" style={styles.bold}>
-                  Lately
+                  How to earn
                 </Text>
-                {lately.map((bonus) => (
-                  <BonusRow key={bonus.id} bonus={bonus} name={name} />
+                {waysToEarn(name).map((way) => (
+                  <View key={way.what} style={styles.row}>
+                    <Text variant="bodyMedium" style={styles.what}>
+                      {way.what}
+                    </Text>
+                    <Text variant="bodyMedium" style={[styles.pays, muted]}>
+                      {way.pays}
+                    </Text>
+                  </View>
                 ))}
-              </Animated.View>
-            ) : null}
+                {EARN_NOTES.map((note) => (
+                  <Text key={note} variant="bodySmall" style={muted}>
+                    {note}
+                  </Text>
+                ))}
+              </View>
 
-            <View style={styles.actions}>
-              <Button onPress={onClose}>Close</Button>
-              {onShop ? (
-                <Button mode="contained" onPress={onShop}>
-                  Shop
-                </Button>
+              {lately?.length ? (
+                <Animated.View entering={FadeIn.duration(200)} style={styles.group}>
+                  <Text variant="titleSmall" style={styles.bold}>
+                    Lately
+                  </Text>
+                  {lately.map((bonus) => (
+                    <BonusRow key={bonus.id} bonus={bonus} name={name} />
+                  ))}
+                </Animated.View>
               ) : null}
-            </View>
-          </ScrollView>
-        </Card>
+
+              <View style={styles.actions}>
+                <Button onPress={onClose}>Close</Button>
+                {onShop ? (
+                  <Button mode="contained" onPress={onShop}>
+                    Shop
+                  </Button>
+                ) : null}
+              </View>
+            </ScrollView>
+          </Card>
+        </Animated.View>
       </Modal>
     </Portal>
   );
@@ -142,33 +155,33 @@ export function NewTreatsCard({
   // The few biggest, then a count of the rest.
   const shown = [...bonuses].sort((a, b) => b.treats - a.treats).slice(0, 4);
   const rest = bonuses.length - shown.length;
+  // It rises in and leaves through the Appear the pet page puts it in.
   return (
-    <Animated.View entering={FadeIn.duration(250)}>
-      <Card mode="contained" style={glassCard(theme)}>
-        <Card.Content style={styles.receipt}>
-          <Text variant="titleMedium" style={styles.bold}>
-            {total} bonus {total === 1 ? 'treat' : 'treats'}
+    <Card mode="contained" style={glassCard(theme)}>
+      <Card.Content style={styles.receipt}>
+        <Text variant="titleMedium" style={styles.bold}>
+          {total} bonus {total === 1 ? 'treat' : 'treats'}
+        </Text>
+        {shown.map((bonus) => (
+          <BonusRow key={bonus.id} bonus={bonus} name={name} />
+        ))}
+        {rest > 0 ? (
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            And {rest} more
           </Text>
-          {shown.map((bonus) => (
-            <BonusRow key={bonus.id} bonus={bonus} name={name} />
-          ))}
-          {rest > 0 ? (
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              And {rest} more
-            </Text>
-          ) : null}
-          <Button compact onPress={onDone} style={styles.ok}>
-            OK
-          </Button>
-        </Card.Content>
-      </Card>
-    </Animated.View>
+        ) : null}
+        <Button compact onPress={onDone} style={styles.ok}>
+          OK
+        </Button>
+      </Card.Content>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   bold: { fontWeight: '700' },
   modal: { padding: 16 },
+  fromCounter: { transformOrigin: 'top right' },
   sheet: { padding: 20, gap: 20 },
   head: { gap: 2 },
   group: { gap: 10 },

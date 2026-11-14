@@ -4,6 +4,7 @@ import { StyleSheet } from 'react-native';
 
 import { FloatingTabBar, TabButton } from '@/components/floating-tab-bar';
 import { tabsBlurTarget } from '@/components/frost';
+import { Pane } from '@/components/pane';
 
 export default function TabLayout() {
   // Android blurs only what's inside this target, so the screens live in it and the bar (and anything
@@ -13,7 +14,17 @@ export default function TabLayout() {
   return (
     <Tabs style={styles.flex}>
       <BlurTargetView ref={blurTarget} style={styles.flex}>
-        <TabSlot />
+        {/* Visited tabs stay mounted in a hidden Pane, so coming back never replays their animations. */}
+        <TabSlot
+          detachInactiveScreens={false}
+          renderFn={(descriptor, { isFocused, loaded }) =>
+            loaded || isFocused ? (
+              <Pane key={descriptor.route.key} visible={isFocused}>
+                {descriptor.render()}
+              </Pane>
+            ) : null
+          }
+        />
       </BlurTargetView>
 
       <FloatingTabBar blurTarget={blurTarget} tabs={['index', 'groups', 'pet', 'profile']}>

@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 
 import type { DaySteps } from '@/lib/api';
+import { Dimmable } from '@/components/week-chart';
 import { formatSteps } from '@/lib/dates';
+import { enter, leave } from '@/theme/motion';
 
 const LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const NAMES = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
@@ -21,8 +24,10 @@ export function weekdayAverages(history: DaySteps[]): number[] {
   return sums.map((s, i) => (counts[i] ? Math.round(s / counts[i]) : 0));
 }
 
+/** Picking a weekday fades the others down and raises its average over its bar, as in the week chart. */
 export function WeekdayChart({ history }: { history: DaySteps[] }) {
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
   const averages = weekdayAverages(history);
   const max = Math.max(1, ...averages);
   const bestIndex = averages.indexOf(Math.max(...averages));
@@ -48,22 +53,23 @@ export function WeekdayChart({ history }: { history: DaySteps[] }) {
               onPress={() => setSelected(isSelected ? null : i)}
               accessibilityLabel={`${NAMES[i]}: average ${formatSteps(avg)} steps`}>
               {isSelected ? (
-                <View pointerEvents="none" style={[styles.tooltipWrap, { bottom: barHeight + 22 }]}>
+                <Animated.View
+                  entering={enter(0, reduceMotion)}
+                  exiting={leave(reduceMotion)}
+                  pointerEvents="none"
+                  style={[styles.tooltipWrap, { bottom: barHeight + 22 }]}>
                   <View style={[styles.tooltip, { backgroundColor: theme.colors.inverseSurface }]}>
                     <Text variant="labelMedium" style={{ color: theme.colors.inverseOnSurface }}>
                       {formatSteps(avg)}
                     </Text>
                   </View>
-                </View>
+                </Animated.View>
               ) : null}
-              <View
+              <Dimmable
+                dim={selected !== null && !isSelected ? 0.4 : 1}
                 style={[
                   styles.bar,
-                  {
-                    height: barHeight,
-                    backgroundColor: i === bestIndex ? theme.colors.primary : theme.colors.secondaryContainer,
-                    opacity: selected === null || isSelected ? 1 : 0.4,
-                  },
+                  { height: barHeight, backgroundColor: i === bestIndex ? theme.colors.primary : theme.colors.secondaryContainer },
                 ]}
               />
               <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>

@@ -1,8 +1,10 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useState, type ComponentProps } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
-import Animated, { interpolate, useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
+
+import { motion } from '@/theme/motion';
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -25,18 +27,24 @@ type Props<T extends string> = {
 
 type Box = { x: number; width: number };
 
-/** Material 3 primary tabs: icon over label, with an indicator that slides under the active tab's content. */
+/**
+ * Material 3 primary tabs: icon over label, with an indicator that slides under the active tab's content.
+ * The indicator and the tab colours both follow one position, so they move together: a pager's live
+ * position while swiping, or otherwise one of the tabs' own that springs to the chosen tab.
+ */
 export function PrimaryTabs<T extends string>({ value, onChange, tabs, position }: Props<T>) {
   const theme = useTheme();
   const [tabBoxes, setTabBoxes] = useState<Partial<Record<T, Box>>>({});
   const [contentBoxes, setContentBoxes] = useState<Partial<Record<T, Box>>>({});
 
-  const tab = tabBoxes[value];
-  const content = contentBoxes[value];
-  const x = (tab?.x ?? 0) + (content?.x ?? 0);
-  const width = content?.width ?? 0;
+  const index = Math.max(0, tabs.findIndex((t) => t.value === value));
+  const own = useSharedValue(index);
+  useEffect(() => {
+    own.set(withSpring(index, motion.spatial));
+  }, [own, index]);
+  const live = position ?? own;
 
-  // Every tab's indicator spot, once all are measured, so a live position can slide between them.
+  // Every tab's indicator spot, once all are measured, so the position can slide between them.
   const spots = tabs.map((t) => {
     const tb = tabBoxes[t.value];
     const cb = contentBoxes[t.value];
@@ -46,58 +54,98 @@ export function PrimaryTabs<T extends string>({ value, onChange, tabs, position 
   const steps = tabs.map((_, i) => i);
   const xs = spots.map((s) => s?.x ?? 0);
   const widths = spots.map((s) => s?.width ?? 0);
+  // The bar is drawn at the widest tab's width and scaled down to each, so it only ever moves by
+  // transform (no layout per frame).
+  const base = Math.max(1, ...widths);
 
   const indicatorStyle = useAnimatedStyle(() => {
-    if (position && measured) {
-      return {
-        transform: [{ translateX: interpolate(position.value, steps, xs, 'clamp') }],
-        width: interpolate(position.value, steps, widths, 'clamp'),
-      };
-    }
-    return {
-      transform: [{ translateX: withTiming(x, { duration: 220 }) }],
-      width: withTiming(width, { duration: 220 }),
-    };
+    const x = interpolate(live.value, steps, xs, 'clamp');
+    const w = interpolate(live.value, steps, widths, 'clamp');
+    return { transform: [{ translateX: x + (w - base) / 2 }, { scaleX: w / base }] };
   });
 
   return (
     <View style={[styles.bar, { borderBottomColor: theme.colors.outlineVariant }]} accessibilityRole="tablist">
-      {tabs.map((t) => {
-        const active = t.value === value;
-        const color = active ? theme.colors.primary : theme.colors.onSurfaceVariant;
-        return (
-          <Pressable
-            key={t.value}
-            style={styles.tab}
-            onPress={() => onChange(t.value)}
-            onLayout={(e) => {
-              const { x: tx, width: tw } = e.nativeEvent.layout;
-              setTabBoxes((b) => ({ ...b, [t.value]: { x: tx, width: tw } }));
-            }}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={t.badge ? `${t.label}, new activity` : t.label}>
-            <View
-              style={styles.content}
-              onLayout={(e) => {
-                const { x: cx, width: cw } = e.nativeEvent.layout;
-                setContentBoxes((b) => ({ ...b, [t.value]: { x: cx, width: cw } }));
-              }}>
-              <View>
-                <MaterialCommunityIcons name={active ? (t.activeIcon ?? t.icon) : t.icon} size={24} color={color} />
-                {t.badge ? <View style={[styles.badge, { backgroundColor: theme.colors.error }]} /> : null}
-              </View>
-              <Text variant="titleSmall" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ color }}>
-                {t.label}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
-      {width > 0 ? (
-        <Animated.View style={[styles.indicator, { backgroundColor: theme.colors.primary }, indicatorStyle]} />
+      {tabs.map((t, i) => (
+        <Tab
+          key={t.value}
+          tab={t}
+          index={i}
+          live={live}
+          active={t.value === value}
+          onPress={() => onChange(t.value)}
+          onTabLayout={(box) => setTabBoxes((b) => ({ ...b, [t.value]: box }))}
+          onContentLayout={(box) => setContentBoxes((b) => ({ ...b, [t.value]: box }))}
+        />
+      ))}
+      {measured ? (
+        <Animated.View
+          style={[styles.indicator, { width: base, backgroundColor: theme.colors.primary }, indicatorStyle]}
+        />
       ) : null}
     </View>
+  );
+}
+
+type TabProps<T extends string> = {
+  tab: PrimaryTab<T>;
+  index: number;
+  live: SharedValue<number>;
+  active: boolean;
+  onPress: () => void;
+  onTabLayout: (box: Box) => void;
+  onContentLayout: (box: Box) => void;
+};
+
+/**
+ * One tab. Its active colours sit over the inactive ones and fade in as the position reaches it, so
+ * the colour moves in step with the indicator instead of switching when the tap lands.
+ */
+function Tab<T extends string>({ tab: t, index, live, active, onPress, onTabLayout, onContentLayout }: TabProps<T>) {
+  const theme = useTheme();
+  const on = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(live.value - index)) }));
+  const label = (color: string) => (
+    <Text variant="titleSmall" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ color }}>
+      {t.label}
+    </Text>
+  );
+
+  return (
+    <Pressable
+      style={styles.tab}
+      onPress={onPress}
+      onLayout={(e) => {
+        const { x, width } = e.nativeEvent.layout;
+        onTabLayout({ x, width });
+      }}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={t.badge ? `${t.label}, new activity` : t.label}>
+      <View
+        style={styles.content}
+        onLayout={(e) => {
+          const { x, width } = e.nativeEvent.layout;
+          onContentLayout({ x, width });
+        }}>
+        <View>
+          <MaterialCommunityIcons name={t.icon} size={24} color={theme.colors.onSurfaceVariant} />
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, on]}>
+            <MaterialCommunityIcons name={t.activeIcon ?? t.icon} size={24} color={theme.colors.primary} />
+          </Animated.View>
+          {t.badge ? <View style={[styles.badge, { backgroundColor: theme.colors.error }]} /> : null}
+        </View>
+        <View>
+          {label(theme.colors.onSurfaceVariant)}
+          <Animated.View
+            pointerEvents="none"
+            importantForAccessibility="no-hide-descendants"
+            accessibilityElementsHidden
+            style={[StyleSheet.absoluteFill, on]}>
+            {label(theme.colors.primary)}
+          </Animated.View>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 

@@ -1,17 +1,17 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { List, Modal, Portal, Text } from 'react-native-paper';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, interpolate, useAnimatedStyle, useReducedMotion, ZoomIn } from 'react-native-reanimated';
 
 import { REACTION_EMOJI, REACTION_KEYS } from '@/components/message-reactions';
+import { usePressed } from '@/hooks/use-pressed';
 import type { ReactionKey } from '@/lib/api';
 import { useAppTheme } from '@/theme';
-import { motion } from '@/theme/motion';
+import { enter, motion } from '@/theme/motion';
 
 export type MessageAction = { icon: string; label: string; destructive?: boolean; onPress: () => void };
 
 /** Kept short, so the last of the fifteen is in place in about a quarter of a second. */
 const STAGGER_MS = 8;
-const MENU_IN = FadeInDown.duration(200);
 const COLUMNS = 5;
 const BUTTON = 42;
 const PADDING = 6;
@@ -24,6 +24,9 @@ const popIn = (i: number) =>
     .stiffness(release.stiffness!)
     .damping(release.damping!)
     .energyThreshold(release.energyThreshold!);
+// With reduced motion the picker just fades in, all at once.
+const FADE_IN = FadeIn.duration(motion.fade.duration!);
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type Props = {
   visible: boolean;
@@ -39,6 +42,7 @@ type Props = {
 /** Long-press menu for a chat message: a reaction picker above a list of actions. */
 export function MessageActions({ visible, body, current, actions, onReact, onDismiss }: Props) {
   const theme = useAppTheme();
+  const reduceMotion = useReducedMotion();
 
   // Close first so any follow-up alert isn't stacked on the modal.
   function run(fn: () => void) {
@@ -51,24 +55,19 @@ export function MessageActions({ visible, body, current, actions, onReact, onDis
       <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.wrapper}>
         <View style={[styles.picker, { backgroundColor: theme.colors.elevation.level3 }]}>
           {REACTION_KEYS.map((key, i) => (
-            <Animated.View key={key} entering={popIn(i)}>
-              <Pressable
+            <Animated.View key={key} entering={reduceMotion ? FADE_IN : popIn(i)}>
+              <EmojiButton
+                emoji={REACTION_EMOJI[key]}
+                selected={current === key}
+                selectedColor={theme.colors.primaryContainer}
                 onPress={() => run(() => onReact(key))}
-                accessibilityRole="button"
-                accessibilityState={{ selected: current === key }}
-                accessibilityLabel={`React ${REACTION_EMOJI[key]}`}
-                style={({ pressed }) => [
-                  styles.emojiButton,
-                  current === key && { backgroundColor: theme.colors.primaryContainer },
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.emoji}>{REACTION_EMOJI[key]}</Text>
-              </Pressable>
+              />
             </Animated.View>
           ))}
         </View>
 
-        <Animated.View entering={MENU_IN} style={[styles.menu, { backgroundColor: theme.colors.elevation.level3 }]}>
+        {/* Rises in under the picker; Paper's modal fades the backdrop behind both. */}
+        <Animated.View entering={enter(0, reduceMotion)} style={[styles.menu, { backgroundColor: theme.colors.elevation.level3 }]}>
           <Text
             variant="bodyMedium"
             numberOfLines={3}
@@ -94,6 +93,26 @@ export function MessageActions({ visible, body, current, actions, onReact, onDis
   );
 }
 
+type EmojiProps = { emoji: string; selected: boolean; selectedColor: string; onPress: () => void };
+
+/** One emoji in the picker: grows while held (the picker's magnifier), on the press springs. */
+function EmojiButton({ emoji, selected, selectedColor, onPress }: EmojiProps) {
+  const press = usePressed();
+  const grow = useAnimatedStyle(() => ({ transform: [{ scale: interpolate(press.pressed.value, [0, 1], [1, 1.2]) }] }));
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`React ${emoji}`}
+      style={[styles.emojiButton, selected && { backgroundColor: selectedColor }, grow]}>
+      <Text style={styles.emoji}>{emoji}</Text>
+    </AnimatedPressable>
+  );
+}
+
 const styles = StyleSheet.create({
   wrapper: { marginHorizontal: 24, gap: 12 },
   // Three rows of five.
@@ -113,7 +132,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { transform: [{ scale: 1.2 }] },
   emoji: { fontSize: 26 },
   menu: { borderRadius: 24, paddingVertical: 8, overflow: 'hidden' },
   preview: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },

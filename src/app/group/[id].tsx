@@ -1,12 +1,21 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Platform, RefreshControl, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Alert, Platform, RefreshControl, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Appbar, Card, Chip, Menu, Text } from 'react-native-paper';
+import { Appbar, Chip, Menu, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  LayoutAnimationConfig,
+  ReduceMotion,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { Appear } from '@/components/appear';
 import { ButtonGroup } from '@/components/button-group';
 import { useExpandTransition } from '@/components/expand-transition';
 import { GlassAction, GlassBackAction } from '@/components/glass-action';
@@ -18,6 +27,8 @@ import { TrophyCabinet } from '@/components/trophy-cabinet';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { Podium } from '@/components/podium';
 import { PrimaryTabs } from '@/components/primary-tabs';
+import { SwapText } from '@/components/swap-text';
+import { TapCard } from '@/components/tap-card';
 import { useLoader } from '@/hooks/use-loader';
 import {
   activeAverage,
@@ -34,11 +45,17 @@ import { getLastRead } from '@/lib/chat-read';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
 import { liftedCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
+import { enter, layoutMove, leave, motion } from '@/theme/motion';
 
 type GroupView = 'board' | 'chat' | 'journey' | 'trophies';
 /** The tabs in page order, left to right. */
 const VIEWS: GroupView[] = ['board', 'chat', 'journey', 'trophies'];
-const PAGE_MS = 240;
+/** About when a page turn has landed (the `smooth` spring), for starting the new page's animations. */
+const PAGE_MS = 300;
+/** Dragged past the first or last page, the pages follow the finger at this fraction. */
+const RUBBER_BAND = 0.25;
+/** The group name crossfades in over the placeholder title once the group loads. */
+const TITLE_IN = FadeIn.duration(motion.fade.duration!);
 
 export default function GroupScreen() {
   const theme = useAppTheme();
@@ -63,7 +80,8 @@ export default function GroupScreen() {
   function openView(next: GroupView) {
     setView(next);
     markVisited(next);
-    page.value = withTiming(VIEWS.indexOf(next), { duration: PAGE_MS });
+    // From wherever the pages are, so a tap mid-turn just changes where they're heading.
+    page.set(withSpring(VIEWS.indexOf(next), motion.smooth));
   }
   // A swipe has started from page i: build the pages either side so they slide in with content.
   // Usually they're built already (see below); this covers a swipe before that.
@@ -97,26 +115,39 @@ export default function GroupScreen() {
   // mid-swipe); the pages and the tab indicator both follow it.
   const { width: pageWidth } = useWindowDimensions();
   const page = useSharedValue(0);
-  const swipeStart = useSharedValue(0);
+  // Where the pages were when the drag took hold (exact, so catching them mid-turn doesn't jump),
+  // the finger's offset at that moment, and the page the swipe counts from.
+  const swipeFrom = useSharedValue(0);
+  const swipeX = useSharedValue(0);
+  const swipeHome = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
   const last = VIEWS.length - 1;
   let swipe = Gesture.Pan()
     // Horizontal drags only, so the lists still scroll and pull to refresh.
     .activeOffsetX([-16, 16])
     .failOffsetY([-12, 12])
-    .onStart(() => {
-      swipeStart.value = Math.round(page.value);
-      scheduleOnRN(prepareNeighbours, swipeStart.value);
+    .onStart((e) => {
+      const at = page.get();
+      // Undo the rubber band, so a drag caught while springing back from an edge picks up where it is.
+      swipeFrom.set(at < 0 ? at / RUBBER_BAND : at > last ? last + (at - last) / RUBBER_BAND : at);
+      swipeX.set(e.translationX);
+      swipeHome.set(Math.min(Math.max(Math.round(at), 0), last));
+      scheduleOnRN(prepareNeighbours, swipeHome.get());
     })
     .onUpdate((e) => {
-      const raw = swipeStart.value - e.translationX / pageWidth;
+      const raw = swipeFrom.get() - (e.translationX - swipeX.get()) / pageWidth;
       // Past the first or last page it stretches a little, then springs back.
-      page.value = raw < 0 ? raw * 0.25 : raw > last ? last + (raw - last) * 0.25 : raw;
+      page.set(raw < 0 ? raw * RUBBER_BAND : raw > last ? last + (raw - last) * RUBBER_BAND : raw);
     })
     .onEnd((e) => {
+      const home = swipeHome.get();
       // A flick turns the page even after a short drag; at most one page per swipe.
-      let target = Math.abs(e.velocityX) > 500 ? swipeStart.value + (e.velocityX < 0 ? 1 : -1) : Math.round(page.value);
-      target = Math.min(Math.max(target, swipeStart.value - 1, 0), swipeStart.value + 1, last);
-      page.value = withTiming(target, { duration: PAGE_MS });
+      let target = Math.abs(e.velocityX) > 500 ? home + (e.velocityX < 0 ? 1 : -1) : Math.round(page.get());
+      target = Math.min(Math.max(target, home - 1, 0), home + 1, last);
+      // The finger's speed carries into the spring (in pages a second), so a flick lands without a hitch.
+      // With reduced motion it still finishes the move the finger started, just without the fling.
+      const velocity = reduceMotion ? 0 : -e.velocityX / pageWidth;
+      page.set(withSpring(target, { ...motion.smooth, velocity, reduceMotion: ReduceMotion.Never }));
       scheduleOnRN(settle, target);
     });
   // Leave the screen's left edge to the iOS swipe-back gesture.
@@ -126,6 +157,8 @@ export default function GroupScreen() {
   }));
   const [menuOpen, setMenuOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Once the period has been switched, the leaderboard's rows stop staggering in.
+  const [switched, setSwitched] = useState(false);
   // The podium's characters pause once it's scrolled out of view (it's the bottom of the list header).
   const podiumBottom = useRef(Infinity);
   const [podiumInView, setPodiumInView] = useState(true);
@@ -230,223 +263,253 @@ export default function GroupScreen() {
   }
 
   return (
-    <View style={styles.flex} pointerEvents={pointerEvents}>
-      <Animated.View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.scrim }, backdropStyle]}
-      />
-      <Animated.View style={[screenBackground(theme), containerStyle]}>
-        <Animated.View style={contentStyle}>
-          <Appbar.Header mode="small" style={transparentHeader}>
-            <GlassBackAction onPress={close} />
-            <Appbar.Content
-              title={
-                data ? (
-                  <View style={styles.title}>
-                    <GroupAvatar name={data.group.name} color={data.group.color} icon={data.group.icon} size={34} />
-                    <Text variant="titleLarge" numberOfLines={1} style={styles.titleText}>
-                      {data.group.name}
-                    </Text>
-                  </View>
-                ) : (
-                  'Group'
-                )
-              }
-            />
-            <GlassAction
-              icon="share-variant"
-              onPress={shareInvite}
-              disabled={!data}
-              accessibilityLabel="Share invite"
-              contentStyle={styles.shareIcon}
-            />
-            <Menu
-              visible={menuOpen}
-              onDismiss={() => setMenuOpen(false)}
-              anchor={
-                <GlassAction icon="dots-vertical" onPress={() => setMenuOpen(true)} accessibilityLabel="More" />
-              }
-            >
-              {isOwner ? (
-                <Menu.Item
-                  leadingIcon="cog-outline"
-                  title="Group settings"
-                  onPress={() => {
-                    setMenuOpen(false);
-                    router.push({
-                      pathname: '/group-settings/[id]',
-                      params: { id },
-                    });
-                  }}
-                />
-              ) : null}
-              <Menu.Item
-                leadingIcon={isOwner ? 'delete-outline' : 'exit-to-app'}
-                title={isOwner ? 'Delete group' : 'Leave group'}
-                onPress={confirmLeave}
+    // Closing the group shouldn't play every row's exit on the way out.
+    <LayoutAnimationConfig skipExiting>
+      <View style={styles.flex} pointerEvents={pointerEvents}>
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.scrim }, backdropStyle]}
+        />
+        <Animated.View style={[screenBackground(theme), containerStyle]}>
+          <Animated.View style={contentStyle}>
+            <Appbar.Header mode="small" style={transparentHeader}>
+              <GlassBackAction onPress={close} />
+              <Appbar.Content
+                title={
+                  data ? (
+                    <Animated.View entering={TITLE_IN} style={styles.title}>
+                      <GroupAvatar name={data.group.name} color={data.group.color} icon={data.group.icon} size={34} />
+                      <Text variant="titleLarge" numberOfLines={1} style={styles.titleText}>
+                        {data.group.name}
+                      </Text>
+                    </Animated.View>
+                  ) : (
+                    'Group'
+                  )
+                }
               />
-            </Menu>
-          </Appbar.Header>
-
-          <View style={styles.viewSwitch}>
-            <PrimaryTabs
-              value={view}
-              onChange={openView}
-              position={page}
-              tabs={[
-                { value: 'board', label: 'Leaderboard', icon: 'podium' },
-                {
-                  value: 'chat',
-                  label: 'Chat',
-                  icon: 'chat-outline',
-                  activeIcon: 'chat',
-                  badge: unreadChat,
-                },
-                { value: 'journey', label: 'Journey', icon: 'map-marker-path' },
-                {
-                  value: 'trophies',
-                  label: 'Trophies',
-                  icon: 'trophy-outline',
-                  activeIcon: 'trophy',
-                },
-              ]}
-            />
-          </View>
-
-          <GestureDetector gesture={swipe}>
-            <View style={styles.pager}>
-              <Animated.View style={[styles.pages, { width: pageWidth * VIEWS.length }, pagesStyle]}>
-                <View style={{ width: pageWidth }}>
-                  <FlatList
-                    data={data?.leaderboard.slice(3) ?? []}
-                    keyExtractor={(row) => row.user_id}
-                    contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-                    onScroll={(e) => setPodiumInView(e.nativeEvent.contentOffset.y < podiumBottom.current)}
-                    scrollEventThrottle={100}
-                    ListHeaderComponent={
-                      <View
-                        style={styles.header}
-                        onLayout={(e) => {
-                          podiumBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
-                        }}
-                      >
-                        {data?.group.description ? (
-                          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                            {data.group.description}
-                          </Text>
-                        ) : null}
-                        {data ? (
-                          <Chip
-                            icon="ticket-confirmation-outline"
-                            onPress={() => Share.share({ message: data.group.invite_code })}
-                            style={styles.chip}
-                          >
-                            Invite code: {data.group.invite_code}
-                          </Chip>
-                        ) : null}
-                        <ButtonGroup
-                          value={period}
-                          onChange={setPeriod}
-                          options={[
-                            { value: 'today', label: 'Today' },
-                            { value: 'yesterday', label: 'Yesterday' },
-                            { value: 'week', label: '7 days' },
-                            { value: 'month', label: '30 days' },
-                          ]}
-                        />
-                        {error ? <Text style={{ color: theme.colors.error }}>{error}</Text> : null}
-                        {data?.leaderboard.length ? (
-                          <Podium
-                            replayKey={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
-                            animate={activeView === 'board' && podiumInView}
-                            rows={data.leaderboard}
-                            userId={userId}
-                            showAverage={!singleDay}
-                            onPressUser={openUser}
-                          />
-                        ) : null}
-                      </View>
-                    }
-                    renderItem={({ item }) => {
-                      const isMe = item.user_id === userId;
-                      return (
-                        <Card
-                          mode="contained"
-                          style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
-                          onPress={() => openUser(item.user_id)}
-                        >
-                          <View style={styles.row}>
-                            <Text variant="titleMedium" style={styles.rank}>
-                              {item.rank}
-                            </Text>
-                            <UserAvatar name={item.display_name} color={item.avatar_color} icon={item.avatar_icon} />
-                            <View style={styles.nameColumn}>
-                              <View style={styles.nameLine}>
-                                <Text variant="titleSmall" numberOfLines={1} style={styles.nameText}>
-                                  {isMe ? `${item.display_name} (you)` : item.display_name}
-                                </Text>
-                              </View>
-                              <PlayerBadges row={item} />
-                            </View>
-                            <View style={styles.right}>
-                              <Text variant="titleMedium">{formatSteps(item.total_steps)}</Text>
-                              {!singleDay ? (
-                                <Text
-                                  variant="labelSmall"
-                                  style={{
-                                    color: theme.colors.onSurfaceVariant,
-                                  }}
-                                >
-                                  avg {formatSteps(activeAverage(item.total_steps, item.active_days))}
-                                  /day
-                                </Text>
-                              ) : null}
-                              <RankDelta rank={item.rank} prevRank={item.prev_rank} />
-                            </View>
-                          </View>
-                        </Card>
-                      );
+              <GlassAction
+                icon="share-variant"
+                onPress={shareInvite}
+                disabled={!data}
+                accessibilityLabel="Share invite"
+                contentStyle={styles.shareIcon}
+              />
+              <Menu
+                visible={menuOpen}
+                onDismiss={() => setMenuOpen(false)}
+                anchor={
+                  <GlassAction icon="dots-vertical" onPress={() => setMenuOpen(true)} accessibilityLabel="More" />
+                }
+              >
+                {isOwner ? (
+                  <Menu.Item
+                    leadingIcon="cog-outline"
+                    title="Group settings"
+                    onPress={() => {
+                      setMenuOpen(false);
+                      router.push({
+                        pathname: '/group-settings/[id]',
+                        params: { id },
+                      });
                     }}
                   />
-                </View>
-                <View style={{ width: pageWidth }}>
-                  {visited.has('chat') ? (
-                    <GroupChat
-                      groupId={id}
-                      userId={userId}
-                      members={members}
-                      onRead={onChatRead}
-                      active={activeView === 'chat'}
-                    />
-                  ) : null}
-                </View>
-                <View style={{ width: pageWidth }}>
-                  {visited.has('journey') && data ? (
-                    <GroupJourney
-                      group={data.group}
-                      userId={userId}
-                      members={data.leaderboard}
-                      active={activeView === 'journey'}
-                    />
-                  ) : null}
-                </View>
-                <View style={{ width: pageWidth }}>
-                  {visited.has('trophies') ? (
-                    <TrophyCabinet
-                      rows={data?.leaderboard ?? []}
-                      userId={userId}
-                      onPressUser={openUser}
-                      active={activeView === 'trophies'}
-                    />
-                  ) : null}
-                </View>
-              </Animated.View>
+                ) : null}
+                <Menu.Item
+                  leadingIcon={isOwner ? 'delete-outline' : 'exit-to-app'}
+                  title={isOwner ? 'Delete group' : 'Leave group'}
+                  onPress={confirmLeave}
+                />
+              </Menu>
+            </Appbar.Header>
+
+            <View style={styles.viewSwitch}>
+              <PrimaryTabs
+                value={view}
+                onChange={openView}
+                position={page}
+                tabs={[
+                  { value: 'board', label: 'Leaderboard', icon: 'podium' },
+                  {
+                    value: 'chat',
+                    label: 'Chat',
+                    icon: 'chat-outline',
+                    activeIcon: 'chat',
+                    badge: unreadChat,
+                  },
+                  { value: 'journey', label: 'Journey', icon: 'map-marker-path' },
+                  {
+                    value: 'trophies',
+                    label: 'Trophies',
+                    icon: 'trophy-outline',
+                    activeIcon: 'trophy',
+                  },
+                ]}
+              />
             </View>
-          </GestureDetector>
+
+            <GestureDetector gesture={swipe}>
+              <View style={styles.pager}>
+                <Animated.View style={[styles.pages, { width: pageWidth * VIEWS.length }, pagesStyle]}>
+                  <View style={{ width: pageWidth }}>
+                    {/* Rows slide to their new places when the order changes (a period switch, someone
+                        overtaking), and ones that join or leave the list rise in or fade out. The group's
+                        list is short, so animating each row's layout stays cheap. */}
+                    <Animated.FlatList
+                      data={data?.leaderboard.slice(3) ?? []}
+                      keyExtractor={(row) => row.user_id}
+                      itemLayoutAnimation={layoutMove}
+                      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
+                      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+                      onScroll={(e) => setPodiumInView(e.nativeEvent.contentOffset.y < podiumBottom.current)}
+                      scrollEventThrottle={100}
+                      ListHeaderComponent={
+                        <View
+                          style={styles.header}
+                          onLayout={(e) => {
+                            podiumBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
+                          }}
+                        >
+                          {/* The group's details rise in once it loads, and the period switch below slides
+                              down to make room rather than jumping. */}
+                          {data?.group.description ? (
+                            <Appear>
+                              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                                {data.group.description}
+                              </Text>
+                            </Appear>
+                          ) : null}
+                          {data ? (
+                            <Appear index={1} style={styles.chip}>
+                              <Chip
+                                icon="ticket-confirmation-outline"
+                                onPress={() => Share.share({ message: data.group.invite_code })}
+                              >
+                                Invite code: {data.group.invite_code}
+                              </Chip>
+                            </Appear>
+                          ) : null}
+                          <Animated.View layout={layoutMove}>
+                            <ButtonGroup
+                              value={period}
+                              onChange={(next) => {
+                                setSwitched(true);
+                                setPeriod(next);
+                              }}
+                              options={[
+                                { value: 'today', label: 'Today' },
+                                { value: 'yesterday', label: 'Yesterday' },
+                                { value: 'week', label: '7 days' },
+                                { value: 'month', label: '30 days' },
+                              ]}
+                            />
+                          </Animated.View>
+                          {error ? (
+                            <Appear exits>
+                              <Text style={{ color: theme.colors.error }}>{error}</Text>
+                            </Appear>
+                          ) : null}
+                          {data?.leaderboard.length ? (
+                            <Animated.View layout={layoutMove}>
+                              <Podium
+                                replayKey={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
+                                animate={activeView === 'board' && podiumInView}
+                                rows={data.leaderboard}
+                                userId={userId}
+                                showAverage={!singleDay}
+                                onPressUser={openUser}
+                              />
+                            </Animated.View>
+                          ) : null}
+                        </View>
+                      }
+                      renderItem={({ item, index }) => {
+                        const isMe = item.user_id === userId;
+                        return (
+                          // The first load arrives in a quick stagger under the podium; after a period
+                          // switch, rows new to the list just rise in.
+                          <Animated.View
+                            entering={enter(switched ? 0 : index + 1, reduceMotion)}
+                            exiting={leave(reduceMotion)}
+                          >
+                            <TapCard
+                              mode="contained"
+                              style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
+                              onPress={() => openUser(item.user_id)}
+                            >
+                              <View style={styles.row}>
+                                <Text variant="titleMedium" style={styles.rank}>
+                                  {item.rank}
+                                </Text>
+                                <UserAvatar name={item.display_name} color={item.avatar_color} icon={item.avatar_icon} />
+                                <View style={styles.nameColumn}>
+                                  <View style={styles.nameLine}>
+                                    <Text variant="titleSmall" numberOfLines={1} style={styles.nameText}>
+                                      {isMe ? `${item.display_name} (you)` : item.display_name}
+                                    </Text>
+                                  </View>
+                                  <PlayerBadges row={item} />
+                                </View>
+                                <View style={styles.right}>
+                                  <SwapText variant="titleMedium">{formatSteps(item.total_steps)}</SwapText>
+                                  {!singleDay ? (
+                                    <Text
+                                      variant="labelSmall"
+                                      style={{
+                                        color: theme.colors.onSurfaceVariant,
+                                      }}
+                                    >
+                                      avg {formatSteps(activeAverage(item.total_steps, item.active_days))}
+                                      /day
+                                    </Text>
+                                  ) : null}
+                                  <RankDelta rank={item.rank} prevRank={item.prev_rank} />
+                                </View>
+                              </View>
+                            </TapCard>
+                          </Animated.View>
+                        );
+                      }}
+                    />
+                  </View>
+                  <View style={{ width: pageWidth }}>
+                    {visited.has('chat') ? (
+                      <GroupChat
+                        groupId={id}
+                        userId={userId}
+                        members={members}
+                        onRead={onChatRead}
+                        active={activeView === 'chat'}
+                      />
+                    ) : null}
+                  </View>
+                  <View style={{ width: pageWidth }}>
+                    {visited.has('journey') && data ? (
+                      <GroupJourney
+                        group={data.group}
+                        userId={userId}
+                        members={data.leaderboard}
+                        active={activeView === 'journey'}
+                      />
+                    ) : null}
+                  </View>
+                  <View style={{ width: pageWidth }}>
+                    {visited.has('trophies') ? (
+                      <TrophyCabinet
+                        rows={data?.leaderboard ?? []}
+                        userId={userId}
+                        onPressUser={openUser}
+                        active={activeView === 'trophies'}
+                      />
+                    ) : null}
+                  </View>
+                </Animated.View>
+              </View>
+            </GestureDetector>
+          </Animated.View>
         </Animated.View>
-      </Animated.View>
-    </View>
+      </View>
+    </LayoutAnimationConfig>
   );
 }
 

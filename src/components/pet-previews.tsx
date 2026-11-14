@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Card, Icon, Text } from 'react-native-paper';
 
 import { Button } from '@/components/button';
@@ -6,6 +6,7 @@ import { TREAT, TRICK_COLOR } from '@/components/game/colors';
 import { ProgressBar } from '@/components/journey-parts';
 import type { OpenPostcard } from '@/components/pet-adventures';
 import { PlaceIcon } from '@/components/place-icon';
+import { PressableScale } from '@/components/pressable-scale';
 import { PreviewCard } from '@/components/preview-card';
 import { TrickIcon } from '@/components/trick-icon';
 import { MilestoneList, shortSteps } from '@/components/world-parts';
@@ -83,20 +84,20 @@ export function TricksPreview({
             const known = knows.has(trick.id);
             const next = learning?.trick.id === trick.id;
             return (
-              <Pressable
+              <PressableScale
                 key={trick.id}
                 disabled={!known}
                 onPress={() => onShowOff(trick.id)}
                 accessibilityRole="button"
                 accessibilityLabel={known ? `Ask for ${trick.name}` : `${trick.name}, ${next ? 'learning' : 'locked'}`}
-                style={({ pressed }) => [
+                pressedScale={0.92}
+                style={[
                   styles.disc,
                   known
                     ? { backgroundColor: withAlpha(TRICK_COLOR, 0.18) }
                     : next
                       ? { borderWidth: 2, borderColor: TREAT.face, backgroundColor: withAlpha(TREAT.face, 0.12) }
                       : { backgroundColor: withAlpha(theme.colors.onSurface, 0.05) },
-                  pressed && styles.pressed,
                 ]}>
                 <View style={!known && !next && styles.faint}>
                   <TrickIcon
@@ -110,7 +111,7 @@ export function TricksPreview({
                     <Icon source="lock" size={9} color={theme.colors.onSurfaceVariant} />
                   </View>
                 ) : null}
-              </Pressable>
+              </PressableScale>
             );
           })}
         </View>
@@ -131,17 +132,14 @@ const ago = (iso: string) => {
 function PlaceTile({ place, onPress }: { place: Place; onPress: () => void }) {
   const [top, bottom] = SKIES[place.stop.sky];
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Postcard from ${place.stop.name}`}
-      style={({ pressed }) => [
-        styles.tile,
-        { experimental_backgroundImage: `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)` },
-        pressed && styles.pressed,
-      ]}>
+      pressedScale={0.92}
+      style={[styles.tile, { experimental_backgroundImage: `linear-gradient(180deg, ${top} 0%, ${bottom} 100%)` }]}>
       <PlaceIcon emoji={place.stop.emoji} size={28} color="#FFFFFF" />
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -222,18 +220,19 @@ const LOOK_GROUPS: { title: string; slots: string[] }[] = [
 function LookChip({ choice, label, onPress }: { choice: Choice; label: string; onPress: () => void }) {
   const theme = useAppTheme();
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${label}. Customize`}
-      style={({ pressed }) => [glass(theme, 'small'), styles.chip, pressed && styles.pressed]}>
+      pressedScale={0.95}
+      style={[glass(theme, 'small'), styles.chip]}>
       {choice.color ? (
         <View style={[styles.swatch, { backgroundColor: choice.color }]} />
       ) : (
         <Text style={styles.chipEmoji}>{choice.emoji ?? '✨'}</Text>
       )}
       <Text variant="labelMedium">{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -373,7 +372,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.6 },
   tiles: { flexDirection: 'row', gap: 8 },
   tile: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', gap: 8 },

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Card, Text } from 'react-native-paper';
 
+import { Appear } from '@/components/appear';
 import { Button } from '@/components/button';
 import { JourneyScene } from '@/components/journey-scene';
 import type { Profile } from '@/lib/api';
@@ -50,24 +51,27 @@ export function JourneyIntroCard({ profile }: { profile: Profile }) {
   }
 
   return (
-    <Card mode="contained" style={glassCard(theme)}>
-      <View style={styles.scene}>
-        <JourneyScene people={[profile]} stop={route.stops[0]!} greeting="Let's go on a journey!" height={140} />
-      </View>
-      <Card.Content style={styles.text}>
-        <Text variant="titleMedium">Go on a journey</Text>
-        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-          Walk a real route like Hadrian&apos;s Wall or the Camino with your daily steps, and collect a postcard
-          at every stop.
-        </Text>
-      </Card.Content>
-      <Card.Actions>
-        <Button onPress={dismiss}>Not now</Button>
-        <Button mode="contained" onPress={open}>
-          Choose a route
-        </Button>
-      </Card.Actions>
-    </Card>
+    // Rises in when Today loads, and fades away when it's dismissed or opened.
+    <Appear exits>
+      <Card mode="contained" style={glassCard(theme)}>
+        <View style={styles.scene}>
+          <JourneyScene people={[profile]} stop={route.stops[0]!} greeting="Let's go on a journey!" height={140} />
+        </View>
+        <Card.Content style={styles.text}>
+          <Text variant="titleMedium">Go on a journey</Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            Walk a real route like Hadrian&apos;s Wall or the Camino with your daily steps, and collect a postcard
+            at every stop.
+          </Text>
+        </Card.Content>
+        <Card.Actions>
+          <Button onPress={dismiss}>Not now</Button>
+          <Button mode="contained" onPress={open}>
+            Choose a route
+          </Button>
+        </Card.Actions>
+      </Card>
+    </Appear>
   );
 }
 

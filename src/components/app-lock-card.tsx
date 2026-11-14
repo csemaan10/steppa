@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Card, HelperText, List, Switch, useTheme } from 'react-native-paper';
 
+import { Collapsible } from '@/components/collapsible';
 import { useAppLock } from '@/providers/app-lock-provider';
 import { glassCard } from '@/theme';
 
@@ -9,6 +10,9 @@ export function AppLockCard() {
   const { enabled, setEnabled } = useAppLock();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The last error, kept while its line folds away.
+  const [shown, setShown] = useState(error);
+  if (error && error !== shown) setShown(error);
 
   async function toggle(on: boolean) {
     setBusy(true);
@@ -26,11 +30,11 @@ export function AppLockCard() {
         onPress={() => toggle(!enabled)}
         disabled={busy}
       />
-      {error ? (
+      <Collapsible expanded={!!error}>
         <HelperText type="error" visible>
-          {error}
+          {shown}
         </HelperText>
-      ) : null}
+      </Collapsible>
     </Card>
   );
 }

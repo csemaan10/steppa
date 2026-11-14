@@ -1,21 +1,31 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { HelperText, SegmentedButtons, Text, TextInput } from 'react-native-paper';
-import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
+import { HelperText, Text, TextInput } from 'react-native-paper';
+import Animated, { useAnimatedKeyboard, useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { ButtonGroup } from '@/components/button-group';
+import { Collapsible } from '@/components/collapsible';
 import { supabase } from '@/lib/supabase';
 import { useAppLock } from '@/providers/app-lock-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { screenBackground, useAppTheme } from '@/theme';
+import { enter, leave } from '@/theme/motion';
 
 type Mode = 'sign-in' | 'sign-up';
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
+/**
+ * Signing in or up. The name and the form rise in on open; switching between signing in and creating
+ * an account folds the extra fields open or shut (pushing the rest along rather than popping in), and
+ * the biometric and password panels crossfade. Folds rather than layout transitions, because the
+ * keyboard moves everything every frame and a layout transition would trail behind it.
+ */
 export default function SignInScreen() {
   const theme = useAppTheme();
+  const reduceMotion = useReducedMotion();
   const { session } = useAuth();
   const { locked, signInWithBiometrics, forget, clearLock } = useAppLock();
   const [mode, setMode] = useState<Mode>('sign-in');
@@ -25,6 +35,9 @@ export default function SignInScreen() {
   const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  // The last message, kept while its line folds away.
+  const [shownMessage, setShownMessage] = useState(message);
+  if (message && message !== shownMessage) setShownMessage(message);
   const [usePassword, setUsePassword] = useState(false);
   const showBiometric = locked && !usePassword;
 
@@ -96,42 +109,44 @@ export default function SignInScreen() {
     <SafeAreaView style={[styles.flex, screenBackground(theme)]}>
       <Animated.View style={[styles.flex, keyboardPadding]}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <View style={styles.hero}>
+          <Animated.View entering={enter(0, reduceMotion)} style={styles.hero}>
             <Text variant="displaySmall" style={{ color: theme.colors.primary }}>
               Steppa
             </Text>
             <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant }}>
               Walk more, together.
             </Text>
-          </View>
+          </Animated.View>
 
           {showBiometric ? (
-            <>
+            <Animated.View key="biometric" entering={enter(1, reduceMotion)} exiting={leave(reduceMotion)} style={styles.panel}>
               <Text variant="bodyLarge" style={styles.center}>
                 Welcome back{session?.user.email ? `, ${session.user.email}` : ''}
               </Text>
-              <Button mode="contained" icon="fingerprint" onPress={biometricSignIn} loading={busy} disabled={busy}>
-                Sign in with biometrics
-              </Button>
-              {message ? (
-                <HelperText type="error" visible style={styles.center}>
-                  {message.text}
-                </HelperText>
-              ) : null}
+              <View>
+                <Button mode="contained" icon="fingerprint" onPress={biometricSignIn} loading={busy} disabled={busy}>
+                  Sign in with biometrics
+                </Button>
+                <Collapsible expanded={!!message} style={styles.foldBelow}>
+                  <HelperText type="error" visible style={styles.center}>
+                    {shownMessage?.text}
+                  </HelperText>
+                </Collapsible>
+              </View>
               <Button mode="outlined" icon="form-textbox-password" onPress={switchToPassword} disabled={busy}>
                 Use password
               </Button>
               <Button onPress={forget} disabled={busy}>
                 Use a different account
               </Button>
-            </>
+            </Animated.View>
           ) : (
-            <>
+            <Animated.View key="password" entering={enter(1, reduceMotion)} exiting={leave(reduceMotion)} style={styles.panel}>
               {locked ? null : (
-                <SegmentedButtons
+                <ButtonGroup<Mode>
                   value={mode}
-                  onValueChange={(v) => setMode(v as Mode)}
-                  buttons={[
+                  onChange={setMode}
+                  options={[
                     { value: 'sign-in', label: 'Sign in' },
                     { value: 'sign-up', label: 'Create account' },
                   ]}
@@ -147,17 +162,19 @@ export default function SignInScreen() {
                 autoComplete="email"
                 keyboardType="email-address"
               />
-              <TextInput
-                mode="outlined"
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
-              />
+              {/* Each fold sits in a group with the field above it and keeps its gap on the inside,
+                  so the gap opens and shuts with it. */}
+              <View>
+                <TextInput
+                  mode="outlined"
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
+                />
 
-              {mode === 'sign-up' ? (
-                <>
+                <Collapsible expanded={mode === 'sign-up'} style={styles.foldGroup}>
                   <View>
                     <TextInput
                       mode="outlined"
@@ -178,31 +195,33 @@ export default function SignInScreen() {
                     onChangeText={setDisplayName}
                     maxLength={40}
                   />
-                </>
-              ) : null}
+                </Collapsible>
 
-              {message ? (
-                <HelperText type={message.error ? 'error' : 'info'} visible>
-                  {message.text}
-                </HelperText>
-              ) : null}
+                <Collapsible expanded={!!message} style={styles.foldBelow}>
+                  <HelperText type={shownMessage?.error ? 'error' : 'info'} visible>
+                    {shownMessage?.text}
+                  </HelperText>
+                </Collapsible>
+              </View>
 
-              <Button mode="contained" onPress={submit} loading={busy} disabled={busy}>
-                {mode === 'sign-in' ? 'Sign in' : 'Create account'}
-              </Button>
-              {mode === 'sign-up' ? (
-                // App Store guideline 1.2: users agree to content rules before they can post in chat.
-                <Text variant="bodySmall" style={[styles.center, { color: theme.colors.onSurfaceVariant }]}>
-                  By creating an account you agree not to post abusive, hateful, or explicit content. Such
-                  content is removed and accounts that post it may be banned.
-                </Text>
-              ) : null}
+              <View>
+                <Button mode="contained" onPress={submit} loading={busy} disabled={busy}>
+                  {mode === 'sign-in' ? 'Sign in' : 'Create account'}
+                </Button>
+                <Collapsible expanded={mode === 'sign-up'} style={styles.foldBelow}>
+                  {/* App Store guideline 1.2: users agree to content rules before they can post in chat. */}
+                  <Text variant="bodySmall" style={[styles.center, { color: theme.colors.onSurfaceVariant }]}>
+                    By creating an account you agree not to post abusive, hateful, or explicit content. Such
+                    content is removed and accounts that post it may be banned.
+                  </Text>
+                </Collapsible>
+              </View>
               {locked ? (
                 <Button mode="outlined" icon="fingerprint" onPress={switchToBiometric} disabled={busy}>
                   Use biometrics instead
                 </Button>
               ) : null}
-            </>
+            </Animated.View>
           )}
         </ScrollView>
       </Animated.View>
@@ -215,4 +234,8 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   container: { padding: 24, gap: 16, flexGrow: 1, justifyContent: 'center' },
   hero: { alignItems: 'center', marginBottom: 16, gap: 4 },
+  panel: { gap: 16 },
+  // A fold's gap to what's above it, inside the fold so it opens and shuts with it.
+  foldBelow: { paddingTop: 16 },
+  foldGroup: { paddingTop: 16, gap: 16 },
 });

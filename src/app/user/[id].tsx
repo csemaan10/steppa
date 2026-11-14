@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Appbar, Card, Divider, Text } from 'react-native-paper';
 
+import { Appear } from '@/components/appear';
 import { ProfileCharacter } from '@/components/character/profile-character';
 import { GlassBackAction } from '@/components/glass-action';
 import { PetProfileCard } from '@/components/pet-profile-card';
@@ -80,25 +81,30 @@ export default function UserScreen() {
         <Appbar.Content title={self ? 'You' : them.display_name} />
       </Appbar.Header>
 
+      {/* The profile's blocks rise in top to bottom once it has loaded. */}
       <ScrollView contentContainerStyle={styles.content}>
-        <ProfileCharacter profile={them} />
+        <Appear>
+          <ProfileCharacter profile={them} />
+        </Appear>
 
         {self ? (
-          <View style={styles.self}>
+          <Appear index={1} style={styles.self}>
             <Text variant="headlineSmall">{them.display_name}</Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
               @{them.username} · how your groups see you
             </Text>
-          </View>
+          </Appear>
         ) : null}
 
         {/* Only pets: a row left from testing the dropped worlds has nothing to draw. */}
         {theirPet && WORLDS[theirPet.world.kind] ? (
-          <PetProfileCard status={theirPet} owner={self ? null : them.display_name} />
+          <Appear index={1}>
+            <PetProfileCard status={theirPet} owner={self ? null : them.display_name} />
+          </Appear>
         ) : null}
 
         {self ? null : (
-          <View style={styles.versus}>
+          <Appear index={2} style={styles.versus}>
             <View style={styles.person}>
               <UserAvatar name={me.display_name} color={me.avatar_color} icon={me.avatar_icon} size={64} />
               <Text variant="titleSmall">You</Text>
@@ -126,56 +132,62 @@ export default function UserScreen() {
                 @{them.username}
               </Text>
             </View>
-          </View>
+          </Appear>
         )}
 
-        <TrophyCase stats={theirStats} />
+        <Appear index={3}>
+          <TrophyCase stats={theirStats} />
+        </Appear>
 
         {self ? null : (
-          <Card mode="contained" style={glassCard(theme)}>
-            <Card.Content>
-              {rows.map((row, i) => (
-                <View key={row.label}>
-                  {i > 0 ? <Divider /> : null}
-                  <View style={styles.compareRow}>
-                    <Text
-                      variant="titleMedium"
-                      style={[styles.value, row.mine > row.theirs && { color: theme.colors.primary }]}>
-                      {formatSteps(row.mine)}
-                    </Text>
-                    <Text variant="labelMedium" style={[styles.metric, { color: theme.colors.onSurfaceVariant }]}>
-                      {row.label}
-                    </Text>
-                    <Text
-                      variant="titleMedium"
-                      style={[
-                        styles.value,
-                        styles.valueRight,
-                        row.theirs > row.mine && { color: theme.colors.tertiary },
-                      ]}>
-                      {formatSteps(row.theirs)}
-                    </Text>
+          <Appear index={4}>
+            <Card mode="contained" style={glassCard(theme)}>
+              <Card.Content>
+                {rows.map((row, i) => (
+                  <View key={row.label}>
+                    {i > 0 ? <Divider /> : null}
+                    <View style={styles.compareRow}>
+                      <Text
+                        variant="titleMedium"
+                        style={[styles.value, row.mine > row.theirs && { color: theme.colors.primary }]}>
+                        {formatSteps(row.mine)}
+                      </Text>
+                      <Text variant="labelMedium" style={[styles.metric, { color: theme.colors.onSurfaceVariant }]}>
+                        {row.label}
+                      </Text>
+                      <Text
+                        variant="titleMedium"
+                        style={[
+                          styles.value,
+                          styles.valueRight,
+                          row.theirs > row.mine && { color: theme.colors.tertiary },
+                        ]}>
+                        {formatSteps(row.theirs)}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              ))}
-            </Card.Content>
-          </Card>
+                ))}
+              </Card.Content>
+            </Card>
+          </Appear>
         )}
 
-        <Card mode="contained" style={glassCard(theme)}>
-          <Card.Title title="Last 7 days" />
-          <Card.Content>
-            <WeekChart
-              series={[
-                { name: 'You', color: theme.colors.primary, data: myHistory.slice(-7) },
-                ...(self
-                  ? []
-                  : [{ name: them.display_name, color: theme.colors.tertiary, data: theirHistory.slice(-7) }]),
-              ]}
-              goal={self ? me.daily_goal : undefined}
-            />
-          </Card.Content>
-        </Card>
+        <Appear index={5}>
+          <Card mode="contained" style={glassCard(theme)}>
+            <Card.Title title="Last 7 days" />
+            <Card.Content>
+              <WeekChart
+                series={[
+                  { name: 'You', color: theme.colors.primary, data: myHistory.slice(-7) },
+                  ...(self
+                    ? []
+                    : [{ name: them.display_name, color: theme.colors.tertiary, data: theirHistory.slice(-7) }]),
+                ]}
+                goal={self ? me.daily_goal : undefined}
+              />
+            </Card.Content>
+          </Card>
+        </Appear>
       </ScrollView>
     </View>
   );

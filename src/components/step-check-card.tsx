@@ -3,10 +3,15 @@ import { StyleSheet, View } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
 
 import { Button } from '@/components/button';
+import { Collapsible } from '@/components/collapsible';
+import { SwapText } from '@/components/swap-text';
 import { diagnoseToday, type DiagnosticLine } from '@/lib/health';
 import { glassCard } from '@/theme';
 
-/** Reads today's steps several ways and shows the results, for tracking down wrong step counts. */
+/**
+ * Reads today's steps several ways and shows the results, for tracking down wrong step counts. The
+ * results open above the button, and on a re-run each changed figure crossfades in place.
+ */
 export function StepCheckCard() {
   const theme = useTheme();
   const [lines, setLines] = useState<DiagnosticLine[] | null>(null);
@@ -31,20 +36,18 @@ export function StepCheckCard() {
         titleVariant="titleMedium"
       />
       <Card.Content style={styles.content}>
-        {lines ? (
-          <View style={styles.lines}>
-            {lines.map((line) => (
-              <View key={line.label} style={styles.line}>
-                <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {line.label}
-                </Text>
-                <Text variant="bodyMedium" selectable>
-                  {line.value}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
+        <Collapsible expanded={!!lines} style={styles.lines}>
+          {lines?.map((line) => (
+            <View key={line.label} style={styles.line}>
+              <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                {line.label}
+              </Text>
+              <SwapText variant="bodyMedium" selectable>
+                {line.value}
+              </SwapText>
+            </View>
+          ))}
+        </Collapsible>
         <Button mode="contained-tonal" icon="stethoscope" onPress={run} loading={running} disabled={running}>
           {lines ? 'Run again' : 'Run step check'}
         </Button>
@@ -54,7 +57,8 @@ export function StepCheckCard() {
 }
 
 const styles = StyleSheet.create({
-  content: { gap: 12, paddingBottom: 16 },
-  lines: { gap: 10 },
+  content: { paddingBottom: 16 },
+  // Its gap to the button is inside the fold, so it opens with it.
+  lines: { gap: 10, paddingBottom: 12 },
   line: { gap: 2 },
 });

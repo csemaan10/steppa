@@ -3,6 +3,7 @@ import { Card, Divider, Icon, ProgressBar, Text } from 'react-native-paper';
 
 import { ProgressRing } from '@/components/progress-ring';
 import { StreakFlame, flameTier } from '@/components/streak-flame';
+import { SwapText } from '@/components/swap-text';
 import { summarize, type DaySteps, type ProfileStats } from '@/lib/api';
 import { formatSteps } from '@/lib/dates';
 import { KCAL_PER_STEP, KM_PER_STEP, STEPS_PER_MINUTE } from '@/lib/estimates';
@@ -17,7 +18,7 @@ type OverviewProps = { history: DaySteps[]; previous: DaySteps[]; goal: number }
 
 /**
  * Today up top (ring + big number), then the last 30 days below it: total with trend,
- * three key metrics, and one actionable insight.
+ * three key metrics, and one actionable insight. Today's figures crossfade when a sync brings new steps.
  */
 export function StepsOverviewCard({ history, previous, goal }: OverviewProps) {
   const theme = useAppTheme();
@@ -55,20 +56,20 @@ export function StepsOverviewCard({ history, previous, goal }: OverviewProps) {
             color={theme.colors.primary}
             overflowColor={theme.colors.accent}
             trackColor={ringTrack(theme)}>
-            <Text variant="titleMedium" style={styles.bold}>
-              {Math.round(ratio * 100)}%
-            </Text>
+            <SwapText variant="titleMedium" style={styles.bold}>
+              {`${Math.round(ratio * 100)}%`}
+            </SwapText>
           </ProgressRing>
           <View style={styles.flex}>
             <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
               Today
             </Text>
-            <Text variant="displaySmall" numberOfLines={1} adjustsFontSizeToFit style={styles.bold}>
+            <SwapText variant="displaySmall" numberOfLines={1} adjustsFontSizeToFit style={styles.bold}>
               {formatSteps(today)}
-            </Text>
-            <Text variant="bodyMedium" style={{ color: today >= goal ? theme.colors.primary : theme.colors.onSurface }}>
+            </SwapText>
+            <SwapText variant="bodyMedium" style={{ color: today >= goal ? theme.colors.primary : theme.colors.onSurface }}>
               {today >= goal ? `Goal hit, +${formatSteps(today - goal)}` : `${formatSteps(goal - today)} to go`}
-            </Text>
+            </SwapText>
             {usual > 0 ? (
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                 Usual day: {formatSteps(usual)}
@@ -186,9 +187,9 @@ export function StreakCard({ current, longest }: { current: number; longest: num
         <View style={styles.streakRow}>
           <StreakFlame streak={current} width={34} />
           <View style={styles.flex}>
-            <Text variant="titleMedium" style={styles.bold}>
+            <SwapText variant="titleMedium" style={styles.bold}>
               {current === 0 ? 'No streak yet' : `${current}-day streak`}
-            </Text>
+            </SwapText>
             <Text variant="bodySmall" numberOfLines={2} style={{ color: theme.colors.onSurfaceVariant }}>
               {supporting}
             </Text>

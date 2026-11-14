@@ -84,8 +84,10 @@ function StepsWidget({ v, c, size }: { v: WidgetView; c: WidgetColors; size: Siz
   if (!v.ready) return <Message c={c} size={size} uri="steppa://" title="Steps today" body="Open Steppa to sync your steps." />;
   const number = hexColor(v.over ? c.overText : c.primary);
   const wide = size.width >= 220 && size.width > size.height * 1.4;
-  // Inside the padding: 12 a side when small, 16 beside the details.
-  const ring = Math.max(48, Math.min(wide ? size.height - 32 : Math.min(size.width, size.height) - 24, 150));
+  // Inside the padding: 12 a side when small, 16 beside the details. It grows with the widget, with
+  // no upper limit: a cap here left the ring the same size however big the widget was made, which
+  // showed on big widgets, tablets, and phones set to a smaller display size (more dp per cell).
+  const ring = Math.max(48, wide ? size.height - 32 : Math.min(size.width, size.height) - 24);
   const percent = `${Math.round(v.progress * 100)}%`;
 
   // The ring, with the count (or, beside the details, the percentage) in the middle.
@@ -99,7 +101,7 @@ function StepsWidget({ v, c, size }: { v: WidgetView; c: WidgetColors; size: Siz
           style={{ fontSize: Math.round(ring * (wide ? 0.2 : 0.19)), fontWeight: '700', color: number, adjustsFontSizeToFit: true }}
         />
         {!wide && ring >= 96 ? (
-          <TextWidget text={`of ${formatSteps(v.goal)}`} maxLines={1} style={{ fontSize: 12, color: hexColor(c.muted) }} />
+          <TextWidget text={`of ${formatSteps(v.goal)}`} maxLines={1} style={{ fontSize: Math.max(12, Math.round(ring * 0.075)), color: hexColor(c.muted) }} />
         ) : null}
       </FlexWidget>
     </OverlapWidget>

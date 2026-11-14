@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { Card, HelperText, useTheme } from 'react-native-paper';
 
 import { Button } from '@/components/button';
+import { Collapsible } from '@/components/collapsible';
 import { deleteMyAccount, importStepHistory } from '@/lib/api';
 import { healthSourceName, isHealthAvailable, requestHealthPermission, requestHistoryPermission } from '@/lib/health';
 import { useAppLock } from '@/providers/app-lock-provider';
@@ -14,6 +15,9 @@ export function AccountCard({ userId }: { userId: string }) {
   const { signOut, forget, setEnabled } = useAppLock();
   const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
+  // The last notice, kept while its line folds away.
+  const [shown, setShown] = useState(notice);
+  if (notice && notice !== shown) setShown(notice);
 
   async function importHistory() {
     setImporting(true);
@@ -61,14 +65,17 @@ export function AccountCard({ userId }: { userId: string }) {
     <Card mode="contained" style={glassCard(theme)}>
       <Card.Title title="Account" titleVariant="titleMedium" />
       <Card.Content style={styles.content}>
-        <Button mode="contained-tonal" icon="history" onPress={importHistory} loading={importing} disabled={importing}>
-          {importing ? 'Importing the last year…' : 'Import step history'}
-        </Button>
-        {notice ? (
-          <HelperText type={notice.error ? 'error' : 'info'} visible style={styles.notice}>
-            {notice.text}
-          </HelperText>
-        ) : null}
+        <View>
+          <Button mode="contained-tonal" icon="history" onPress={importHistory} loading={importing} disabled={importing}>
+            {importing ? 'Importing the last year…' : 'Import step history'}
+          </Button>
+          {/* The result opens under the button, so the buttons below slide down rather than jump. */}
+          <Collapsible expanded={!!notice} style={styles.noticeBox}>
+            <HelperText type={shown?.error ? 'error' : 'info'} visible style={styles.notice}>
+              {shown?.text}
+            </HelperText>
+          </Collapsible>
+        </View>
         <Button mode="outlined" icon="logout" onPress={signOut}>
           Sign out
         </Button>
@@ -82,5 +89,6 @@ export function AccountCard({ userId }: { userId: string }) {
 
 const styles = StyleSheet.create({
   content: { gap: 10, paddingBottom: 16 },
-  notice: { paddingHorizontal: 0, marginTop: -4 },
+  noticeBox: { paddingTop: 6 },
+  notice: { paddingHorizontal: 0 },
 });

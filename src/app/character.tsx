@@ -4,19 +4,18 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, HelperText, Text } from 'react-native-paper';
 import Animated, {
   interpolate,
-  ReduceMotion,
   useAnimatedRef,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import { CharacterEditor, type SectionKey } from '@/components/character/character-editor';
+import { Collapsible } from '@/components/collapsible';
 import { useExpandTransition } from '@/components/expand-transition';
 import { GlassBackAction } from '@/components/glass-action';
 import { getProfile, updateProfile } from '@/lib/api';
@@ -50,6 +49,9 @@ export default function CharacterScreen() {
   // Usually handed over by the Settings card; fetched if the screen was opened some other way.
   const [look, setLook] = useState<CharacterLook | undefined>(() => peekLook(userId));
   const [error, setError] = useState<string | null>(null);
+  // The last error, kept while its line folds away.
+  const [shownError, setShownError] = useState(error);
+  if (error && error !== shownError) setShownError(error);
   useEffect(() => {
     if (look) return;
     let live = true;
@@ -83,7 +85,9 @@ export default function CharacterScreen() {
     transform: [{ scale: interpolate(scrollY.value, [0, shrinkBy], [1, MIN_SCALE], 'clamp') }],
   }));
 
-  // A quick, subtle pop on the character whenever something changes.
+  // A quick, subtle pop on the character whenever something changes: straight up on the press
+  // spring, back on the release one. Springs, so picks in quick succession carry on from wherever
+  // the last pop had got to.
   const pop = useSharedValue(1);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
 
@@ -94,12 +98,7 @@ export default function CharacterScreen() {
     setLook(next);
     rememberLook(userId, next);
     setError(null);
-    pop.set(
-      withSequence(
-        withTiming(1.05, { duration: 90, reduceMotion: ReduceMotion.System }),
-        withSpring(1, motion.release)
-      )
-    );
+    pop.set(withSequence(withSpring(1.05, motion.press), withSpring(1, motion.release)));
     // Saved right away; rolled back if the server rejects it.
     updateProfile(userId, { podium_character: next }).catch((e) => {
       setLook(previous);
@@ -148,14 +147,17 @@ export default function CharacterScreen() {
                 styles.content,
                 { paddingTop: contentTop, paddingBottom: insets.bottom + 24 },
               ]}>
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                How you appear on podiums and in trophy cabinets. Changes save as you go.
-              </Text>
-              {error ? (
-                <HelperText type="error" visible>
-                  {error}
-                </HelperText>
-              ) : null}
+              <View>
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                  How you appear on podiums and in trophy cabinets. Changes save as you go.
+                </Text>
+                {/* Folds open under the intro, pushing the options down rather than jumping them. */}
+                <Collapsible expanded={!!error} style={styles.error}>
+                  <HelperText type="error" visible>
+                    {shownError}
+                  </HelperText>
+                </Collapsible>
+              </View>
               {look ? (
                 <View onLayout={(e) => (editorY.current = e.nativeEvent.layout.y)}>
                   <CharacterEditor
@@ -193,6 +195,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { paddingHorizontal: 16, gap: 12 },
   loading: { marginTop: 24 },
+  error: { paddingTop: 12 },
   stage: {
     position: 'absolute',
     left: 16,

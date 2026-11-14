@@ -4,6 +4,7 @@ import { Linking } from 'react-native';
 import { Card, List, Switch, useTheme } from 'react-native-paper';
 
 import { Button } from '@/components/button';
+import { Collapsible } from '@/components/collapsible';
 import { updateProfile, type Profile } from '@/lib/api';
 import { askForPush, pushPermission, type PushPermission } from '@/lib/notifications';
 import { isPetPushEnabled, setPetPushEnabled, syncPetPushSetting } from '@/lib/pet-milestones';
@@ -77,11 +78,12 @@ export function NotificationsCard({ profile }: { profile: Profile }) {
         right={() => <Switch value={pet} onValueChange={togglePet} />}
         onPress={() => togglePet(!pet)}
       />
-      {blocked ? (
+      {/* Opens under the switches when it's needed, so the card grows rather than jumps. */}
+      <Collapsible expanded={blocked}>
         <Card.Actions>
           <Button onPress={() => Linking.openSettings()}>Open settings</Button>
         </Card.Actions>
-      ) : null}
+      </Collapsible>
     </Card>
   );
 }

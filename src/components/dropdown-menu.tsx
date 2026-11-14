@@ -1,17 +1,16 @@
 import { useEffect, useEffectEvent, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { BackHandler, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon, Portal, Text } from 'react-native-paper';
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { usePressed } from '@/hooks/use-pressed';
 import { useAppTheme, withAlpha } from '@/theme';
+import { motion } from '@/theme/motion';
 
 /** Between the button and the menu, and the menu and the screen's edge. */
 const GAP = 6;
 const MARGIN = 16;
-const OPEN = { duration: 220, easing: Easing.out(Easing.cubic) };
-const CLOSE = { duration: 140, easing: Easing.in(Easing.quad) };
 
 type Spot = { x: number; top: number; bottom: number; width: number };
 
@@ -19,6 +18,9 @@ type Spot = { x: number; top: number; bottom: number; width: number };
  * A Material 3 Expressive dropdown: rounded groups of items on the surface colour, split by small
  * gaps rather than dividers, unfolding from the button that opens it (or up from it, when there's no
  * room below). It matches the button's width, and a tap outside or Back closes it.
+ *
+ * The unfold is a spring (so reopening mid-close turns around from where it is) and the fade is a
+ * timing, quicker out than in. With reduced motion only the fade plays.
  */
 export function DropdownMenu({
   open,
@@ -40,19 +42,27 @@ export function DropdownMenu({
   // Stays mounted while it folds away.
   const [mounted, setMounted] = useState(open);
   if (open && !mounted) setMounted(true);
+  // The unfold (spring) and the fade (timing); it unmounts once the fade is out.
   const shown = useSharedValue(0);
+  const fade = useSharedValue(0);
 
   useEffect(() => {
     if (open) {
       anchorRef.current?.measureInWindow((x, y, width, h) => setSpot({ x, top: y, bottom: y + h, width }));
+      // Reopened while still folding away: it's laid out already, so turn it around now.
+      if (fade.get() > 0) {
+        shown.set(withSpring(1, motion.spatial));
+        fade.set(withTiming(1, motion.fade));
+      }
       return;
     }
-    shown.set(
-      withTiming(0, CLOSE, (done) => {
+    shown.set(withSpring(0, motion.spatial));
+    fade.set(
+      withTiming(0, motion.fadeOut, (done) => {
         if (done) scheduleOnRN(setMounted, false);
       })
     );
-  }, [open, shown]);
+  }, [open, shown, fade]);
 
   const dismiss = useEffectEvent(onDismiss);
   useEffect(() => {
@@ -69,7 +79,7 @@ export function DropdownMenu({
   const top = spot ? (below ? spot.bottom + GAP : Math.max(MARGIN, spot.top - GAP - height)) : 0;
 
   const panel = useAnimatedStyle(() => ({
-    opacity: interpolate(shown.value, [0, 0.6], [0, 1], 'clamp'),
+    opacity: fade.value,
     transform: [
       { translateY: (1 - shown.value) * (below ? -8 : 8) },
       { scaleY: 0.9 + 0.1 * shown.value },
@@ -87,7 +97,10 @@ export function DropdownMenu({
             onLayout={(e) => {
               // Unfolds once its height is known, so it can open upward if it has to.
               setHeight(e.nativeEvent.layout.height);
-              if (open) shown.set(withTiming(1, OPEN));
+              if (open) {
+                shown.set(withSpring(1, motion.spatial));
+                fade.set(withTiming(1, motion.fade));
+              }
             }}
             style={[
               styles.panel,

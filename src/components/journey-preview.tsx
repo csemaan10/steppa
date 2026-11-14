@@ -1,15 +1,17 @@
 import { router } from 'expo-router';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Card, Icon, Text } from 'react-native-paper';
-import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { Button } from '@/components/button';
 import { FlagIcon } from '@/components/flag-icon';
 import { PlaceIcon } from '@/components/place-icon';
+import { TapCard } from '@/components/tap-card';
 import { mapHeightFor, RouteMap } from '@/components/route-map';
 import type { CurrentJourney, Profile } from '@/lib/api';
 import { formatKm, getRoute, journeyDay, progressOn, ROUTES } from '@/lib/journeys';
 import { glassCard, useAppTheme } from '@/theme';
+import { enter } from '@/theme/motion';
 
 /** The route the "start a journey" card draws as a teaser. */
 const FEATURED = getRoute('toronto-ottawa')!;
@@ -31,7 +33,7 @@ export function JourneyPreview({ current, profile }: Props) {
   const unseen = Math.max(0, progress.reached - journey.postcards_seen);
 
   return (
-    <Card mode="contained" style={glassCard(theme)} onPress={() => router.push('/journey')}>
+    <TapCard mode="contained" style={glassCard(theme)} onPress={() => router.push('/journey')}>
       <View style={styles.header}>
         <View style={[styles.flag, { backgroundColor: theme.colors.primaryContainer }]}>
           <FlagIcon flag={route.flag} size={30} />
@@ -92,7 +94,7 @@ export function JourneyPreview({ current, profile }: Props) {
           </View>
         ) : null}
       </View>
-    </Card>
+    </TapCard>
   );
 }
 
@@ -114,9 +116,10 @@ function NewPostcards({ count }: { count: number }) {
 function StartCard() {
   const theme = useAppTheme();
   const { width } = useWindowDimensions();
+  const reduceMotion = useReducedMotion();
 
   return (
-    <Card mode="contained" style={glassCard(theme)} onPress={() => router.push('/journey')}>
+    <TapCard mode="contained" style={glassCard(theme)} onPress={() => router.push('/journey')}>
       <View style={[styles.map, styles.startMap]}>
         {/* Preview: no traveller, so the whole route draws itself in. */}
         <RouteMap
@@ -129,7 +132,7 @@ function StartCard() {
       <Card.Content style={styles.start}>
         <View style={styles.flags}>
           {ROUTES.map((r, i) => (
-            <Animated.View key={r.key} entering={ZoomIn.delay(200 + i * 90).springify().damping(10)}>
+            <Animated.View key={r.key} entering={enter(i, reduceMotion)}>
               <FlagIcon flag={r.flag} size={30} />
             </Animated.View>
           ))}
@@ -143,7 +146,7 @@ function StartCard() {
           Choose a route
         </Button>
       </Card.Content>
-    </Card>
+    </TapCard>
   );
 }
 

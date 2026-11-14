@@ -9,6 +9,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { ActivityIndicator, Text } from 'react-native-paper';
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -30,6 +31,7 @@ import {
 } from '@/lib/recap';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, useAppTheme } from '@/theme';
+import { layoutMove, motion } from '@/theme/motion';
 
 /**
  * Morning recap: yesterday's final podium in each group whose results are out, one page per group.
@@ -125,16 +127,7 @@ export default function RecapScreen() {
         <View style={styles.footer}>
           <View style={styles.dots}>
             {pages.length > 1
-              ? pages.map((g, i) => (
-                  <View
-                    key={g.group.id}
-                    style={[
-                      styles.dot,
-                      { backgroundColor: i === page ? theme.colors.primary : theme.colors.outlineVariant },
-                      i === page && styles.dotActive,
-                    ]}
-                  />
-                ))
+              ? pages.map((g, i) => <PageDot key={g.group.id} active={i === page} />)
               : null}
           </View>
           <Button mode="contained" onPress={next} contentStyle={styles.buttonContent}>
@@ -144,6 +137,22 @@ export default function RecapScreen() {
       ) : null}
     </View>
   );
+}
+
+/**
+ * A page dot: the current one stretches into a pill. The stretch is a layout animation, so its
+ * neighbours slide aside with it rather than jumping, and the colour fades across alongside.
+ */
+function PageDot({ active }: { active: boolean }) {
+  const theme = useAppTheme();
+  const on = useSharedValue(active ? 1 : 0);
+  useEffect(() => {
+    on.set(withTiming(active ? 1 : 0, motion.fade));
+  }, [on, active]);
+  const off = theme.colors.outlineVariant;
+  const lit = theme.colors.primary;
+  const colour = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(on.value, [0, 1], [off, lit]) }));
+  return <Animated.View layout={layoutMove} style={[styles.dot, active && styles.dotActive, colour]} />;
 }
 
 type PageProps = { recap: GroupRecap; userId: string; width: number; height: number; active: boolean };

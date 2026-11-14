@@ -6,6 +6,7 @@ import { Alert, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, Vie
 import { ActivityIndicator, Appbar, Card, Text } from 'react-native-paper';
 import Animated from 'react-native-reanimated';
 
+import { Appear } from '@/components/appear';
 import { Button } from '@/components/button';
 import { FlagIcon } from '@/components/flag-icon';
 import { useTabBarSpace } from '@/components/floating-tab-bar';
@@ -533,93 +534,109 @@ function PetHome({
 
   return (
     <>
-      <Card mode="contained" style={[glassCard(theme), styles.sceneCard, { width: cardWidth }]}>
-        <View style={styles.scene}>
-          <WorldScene
-            art={art}
-            width={sceneWidth}
-            animate={animate}
-            version={sceneKey}
-            play={play}
-            guestPlay={guestPlay}
-            guestName={friend?.name}
-            radius={18}
-          />
-          {where ? (
-            <PlaceBadge icon={<FlagIcon flag={where.route.flag} size={20} />} label={where.stop.name} />
-          ) : company.out ? (
-            <PlaceBadge
-              icon={<PlaceIcon emoji="🏡" size={18} color={theme.colors.onSurface} />}
-              label={`${company.out.owner}'s yard`}
+      {/* The page's blocks rise in one after another the first time it's shown, and slide up to close
+          the gap when the bonus card is put away. */}
+      <Appear style={styles.sceneCard}>
+        <Card mode="contained" style={[glassCard(theme), { width: cardWidth }]}>
+          <View style={styles.scene}>
+            <WorldScene
+              art={art}
+              width={sceneWidth}
+              animate={animate}
+              version={sceneKey}
+              play={play}
+              guestPlay={guestPlay}
+              guestName={friend?.name}
+              radius={18}
             />
-          ) : (
-            <StageBadge def={def} level={level} />
-          )}
-        </View>
-        <View ref={lineRef} collapsable={false}>
-          <Text variant="bodyMedium" style={[styles.line, muted]}>
-            {sceneLine(name, mood, today, goal, away, company)}
-          </Text>
-        </View>
-        <View style={styles.buttons}>
-          <View style={styles.actions}>
-            <Button mode="contained-tonal" icon="hand-heart" onPress={play.stroke} style={styles.action}>
-              Pet
-            </Button>
-            <Button mode="contained-tonal" icon="tennis-ball" onPress={() => play.play(toy)} style={styles.action}>
-              Play
-            </Button>
+            {where ? (
+              <PlaceBadge icon={<FlagIcon flag={where.route.flag} size={20} />} label={where.stop.name} />
+            ) : company.out ? (
+              <PlaceBadge
+                icon={<PlaceIcon emoji="🏡" size={18} color={theme.colors.onSurface} />}
+                label={`${company.out.owner}'s yard`}
+              />
+            ) : (
+              <StageBadge def={def} level={level} />
+            )}
           </View>
-          {treats ? (
-            <TrickMenu fed={fed} onShowOff={(trick) => play.showOff(trick)} onShop={() => openShop('tricks')} />
-          ) : null}
-        </View>
-      </Card>
+          <View ref={lineRef} collapsable={false}>
+            <Text variant="bodyMedium" style={[styles.line, muted]}>
+              {sceneLine(name, mood, today, goal, away, company)}
+            </Text>
+          </View>
+          <View style={styles.buttons}>
+            <View style={styles.actions}>
+              <Button mode="contained-tonal" icon="hand-heart" onPress={play.stroke} style={styles.action}>
+                Pet
+              </Button>
+              <Button mode="contained-tonal" icon="tennis-ball" onPress={() => play.play(toy)} style={styles.action}>
+                Play
+              </Button>
+            </View>
+            {treats ? (
+              <TrickMenu fed={fed} onShowOff={(trick) => play.showOff(trick)} onShop={() => openShop('tricks')} />
+            ) : null}
+          </View>
+        </Card>
+      </Appear>
 
       {bonuses.length && seenBonuses !== bonuses ? (
-        <NewTreatsCard bonuses={bonuses} name={name} onDone={() => setSeenBonuses(bonuses)} />
+        <Appear index={1} exits>
+          <NewTreatsCard bonuses={bonuses} name={name} onDone={() => setSeenBonuses(bonuses)} />
+        </Appear>
       ) : null}
 
       {treats && available !== null ? (
         <>
-          <TricksPreview
-            name={name}
-            fed={fed}
-            onShowOff={(trick) => play.showOff(trick)}
-            onShop={() => openShop('tricks')}
-          />
-          <AdventuresPreview
-            name={name}
-            adventures={adventures}
-            away={away}
-            pages={passportPages(adventures)}
-            onOpen={setPostcard}
-            onShop={() => openShop('trips')}
-            onPassport={() => router.push('/passport')}
-          />
+          <Appear index={2}>
+            <TricksPreview
+              name={name}
+              fed={fed}
+              onShowOff={(trick) => play.showOff(trick)}
+              onShop={() => openShop('tricks')}
+            />
+          </Appear>
+          <Appear index={3}>
+            <AdventuresPreview
+              name={name}
+              adventures={adventures}
+              away={away}
+              pages={passportPages(adventures)}
+              onOpen={setPostcard}
+              onShop={() => openShop('trips')}
+              onPassport={() => router.push('/passport')}
+            />
+          </Appear>
         </>
       ) : null}
-      <LooksPreview
-        def={def}
-        level={level}
-        saved={saved}
-        name={name}
-        onCustomize={() => router.push({ pathname: '/shop', params: { tab: 'looks' } })}
-      />
-      <MilestonesPreview
-        def={def}
-        level={level}
-        steps={steps}
-        since={since}
-        next={next}
-        days={days ? aboutDays(days) : null}
-        expanded={milestonesOpen}
-        onToggle={() => setMilestonesOpen(!milestonesOpen)}
-      />
+      <Appear index={4}>
+        <LooksPreview
+          def={def}
+          level={level}
+          saved={saved}
+          name={name}
+          onCustomize={() => router.push({ pathname: '/shop', params: { tab: 'looks' } })}
+        />
+      </Appear>
+      <Appear index={5}>
+        <MilestonesPreview
+          def={def}
+          level={level}
+          steps={steps}
+          since={since}
+          next={next}
+          days={days ? aboutDays(days) : null}
+          expanded={milestonesOpen}
+          onToggle={() => setMilestonesOpen(!milestonesOpen)}
+        />
+      </Appear>
 
-      <Button mode="contained" icon="storefront-outline" onPress={() => openShop()}>
-        Shop
-      </Button>
+      <Appear index={5}>
+        <Button mode="contained" icon="storefront-outline" onPress={() => openShop()}>
+          Shop
+        </Button>
+      </Appear>
 
       <PetPostcardModal
         open={postcard}

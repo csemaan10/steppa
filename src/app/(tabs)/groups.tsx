@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import {
   Appbar,
   Avatar,
@@ -10,8 +10,10 @@ import {
   Text,
   TextInput,
 } from 'react-native-paper';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Appear } from '@/components/appear';
 import { Button } from '@/components/button';
 import { FabMenu } from '@/components/fab-menu';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
@@ -20,6 +22,7 @@ import { useLoader } from '@/hooks/use-loader';
 import { createGroup, getLeaderboard, getMyGroupsWithLatestMessage, joinGroup } from '@/lib/api';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader, useAppTheme } from '@/theme';
+import { enter, layoutMove, leave } from '@/theme/motion';
 
 type DialogKind = 'create' | 'join' | null;
 
@@ -28,6 +31,7 @@ export default function GroupsScreen() {
   const userId = useUserId();
   const tabBarSpace = useTabBarSpace();
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const { data: groups, loading, error, reload } = useLoader(async () => {
     // One request for the groups and their unread markers, then each group's board in parallel.
     const list = await getMyGroupsWithLatestMessage(userId);
@@ -86,32 +90,38 @@ export default function GroupsScreen() {
         <Appbar.Content title="Groups" />
       </Appbar.Header>
 
-      <FlatList
+      {/* The cards rise in top to bottom when the list first loads (the tab stays mounted, so only
+          once); a group joined or left later rises in or fades out, and the cards around it slide.
+          Few enough cards that animating each one's layout stays cheap. */}
+      <Animated.FlatList
         data={groups ?? []}
         keyExtractor={(g) => g.group.id}
+        itemLayoutAnimation={layoutMove}
         contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace + 64 }]}
         refreshControl={
           <RefreshControl refreshing={refreshing || (loading && !groups)} onRefresh={pullToRefresh} />
         }
         ListEmptyComponent={
           groups || error ? (
-            <View style={styles.empty}>
+            <Appear exits style={styles.empty}>
               <Avatar.Icon icon="account-group-outline" size={72} />
               <Text variant="titleMedium">{error ?? 'No groups yet'}</Text>
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
                 Create a group or join one with an invite code.
               </Text>
-            </View>
+            </Appear>
           ) : null
         }
-        renderItem={({ item }) => (
-          <GroupPreview
-            group={item.group}
-            rows={item.rows}
-            userId={userId}
-            latestMessageId={item.latestMessageId}
-            showOwner
-          />
+        renderItem={({ item, index }) => (
+          <Animated.View entering={enter(index, reduceMotion)} exiting={leave(reduceMotion)}>
+            <GroupPreview
+              group={item.group}
+              rows={item.rows}
+              userId={userId}
+              latestMessageId={item.latestMessageId}
+              showOwner
+            />
+          </Animated.View>
         )}
       />
 

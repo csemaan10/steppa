@@ -1,14 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, IconButton, Text, useTheme } from 'react-native-paper';
-import Animated, { Easing, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
+import { SwapText } from '@/components/swap-text';
+import { usePressed } from '@/hooks/use-pressed';
 import { activeAverage, getMonthSteps, type DaySteps } from '@/lib/api';
 import { addDays, formatSteps, toDayKey } from '@/lib/dates';
 import { glassCard } from '@/theme';
+import { motion } from '@/theme/motion';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const EASE = Easing.bezier(0.2, 0, 0, 1);
 
 function shortSteps(steps: number): string {
   if (steps >= 10000) return `${Math.round(steps / 1000)}k`;
@@ -27,9 +36,14 @@ function emptyMonth(year: number, month: number): DaySteps[] {
 
 type Props = { userId: string; goal: number };
 
-/** Day-by-day steps for a month: a heat strip when collapsed, a calendar when expanded. */
+/**
+ * Day-by-day steps for a month: a heat strip when collapsed, a calendar when expanded. Opening and
+ * closing grow the card on a spring while the two views crossfade; stepping to another month fades
+ * its days in with a slight rise, and the title and totals crossfade.
+ */
 export function MonthCard({ userId, goal }: Props) {
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
   const now = new Date();
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [expanded, setExpanded] = useState(false);
@@ -70,24 +84,46 @@ export function MonthCard({ userId, goal }: Props) {
   const selectedDay = days.find((d) => d.day === selected);
 
   const measured = heights.strip > 0 && heights.grid > 0;
-  const bodyStyle = useAnimatedStyle(() => ({
-    height: withTiming(expanded ? heights.grid : heights.strip, { duration: 320, easing: EASE }),
-  }));
+  // The body's height and the grid's slide spring from wherever they are, so a quick second tap
+  // turns them round; the two views crossfade, the leaving one faster.
+  const height = useSharedValue(0);
+  const open = useSharedValue(expanded ? 1 : 0);
+  const gridFade = useSharedValue(expanded ? 1 : 0);
+  useEffect(() => {
+    if (!measured) return;
+    const target = expanded ? heights.grid : heights.strip;
+    // The first measurement just sets the size; after that, opening, closing and a month with
+    // more or fewer weeks all spring there.
+    if (height.get() === 0) height.set(target);
+    else height.set(withSpring(target, expanded ? motion.expand : motion.collapse));
+  }, [height, expanded, measured, heights.grid, heights.strip]);
+  useEffect(() => {
+    open.set(withSpring(expanded ? 1 : 0, expanded ? motion.expand : motion.collapse));
+    gridFade.set(withTiming(expanded ? 1 : 0, expanded ? motion.fade : motion.fadeOut));
+  }, [open, gridFade, expanded]);
+
+  const bodyStyle = useAnimatedStyle(() => ({ height: height.value }));
   const gridStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(expanded ? 1 : 0, { duration: expanded ? 280 : 140 }),
-    transform: [{ translateY: withTiming(expanded ? 0 : -8, { duration: 320, easing: EASE }) }],
+    opacity: gridFade.value,
+    transform: [{ translateY: reduceMotion ? 0 : (1 - open.value) * -8 }],
   }));
-  const stripStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(expanded ? 0 : 1, { duration: expanded ? 120 : 260 }),
-  }));
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: withTiming(expanded ? '180deg' : '0deg', { duration: 320, easing: EASE }) }],
-  }));
+  const stripStyle = useAnimatedStyle(() => ({ opacity: 1 - gridFade.value }));
+  const chevronStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${open.value * 180}deg` }] }));
+
+  // Another month's days fade in with a slight rise. Started on the tap itself, so the old month is
+  // already fading as the new one renders, and it never shows at full strength in between.
+  const arrive = useSharedValue(1);
+  const rise = useSharedValue(0);
+  const daysStyle = useAnimatedStyle(() => ({ opacity: arrive.value, transform: [{ translateY: rise.value }] }));
 
   function shift(delta: number) {
     const d = new Date(cursor.year, cursor.month + delta, 1);
     setCursor({ year: d.getFullYear(), month: d.getMonth() });
     setSelected(null);
+    arrive.set(0);
+    arrive.set(withTiming(1, motion.fade));
+    rise.set(reduceMotion ? 0 : 6);
+    rise.set(withSpring(0, motion.smooth));
   }
 
   function cellColors(day: DaySteps) {
@@ -105,28 +141,29 @@ export function MonthCard({ userId, goal }: Props) {
     <Card mode="contained" style={glassCard(theme)}>
       <Pressable onPress={() => setExpanded((e) => !e)} accessibilityRole="button" accessibilityState={{ expanded }}>
         <View style={styles.header}>
-          <IconButton icon="chevron-left" size={20} onPress={() => shift(-1)} accessibilityLabel="Previous month" />
+          <DipIconButton icon="chevron-left" size={20} onPress={() => shift(-1)} accessibilityLabel="Previous month" />
           <View style={styles.headerText}>
-            <Text variant="titleMedium">{title}</Text>
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              {formatSteps(total)} steps · avg {formatSteps(average)} · {goalDays} goal days
-            </Text>
+            <SwapText variant="titleMedium" numberOfLines={1} style={styles.centered}>
+              {title}
+            </SwapText>
+            <SwapText variant="bodySmall" numberOfLines={1} style={[styles.centered, { color: theme.colors.onSurfaceVariant }]}>
+              {`${formatSteps(total)} steps · avg ${formatSteps(average)} · ${goalDays} goal days`}
+            </SwapText>
           </View>
-          <IconButton
+          <DipIconButton
             icon="chevron-right"
             size={20}
             disabled={isCurrentMonth}
             onPress={() => shift(1)}
             accessibilityLabel="Next month"
           />
-          <Animated.View style={chevronStyle}>
-            <IconButton
-              icon="chevron-down"
-              size={22}
-              onPress={() => setExpanded((e) => !e)}
-              accessibilityLabel={expanded ? 'Collapse' : 'Expand'}
-            />
-          </Animated.View>
+          <DipIconButton
+            icon="chevron-down"
+            size={22}
+            iconStyle={chevronStyle}
+            onPress={() => setExpanded((e) => !e)}
+            accessibilityLabel={expanded ? 'Collapse' : 'Expand'}
+          />
         </View>
       </Pressable>
 
@@ -139,7 +176,7 @@ export function MonthCard({ userId, goal }: Props) {
             const h = e.nativeEvent.layout.height;
             setHeights((prev) => (prev.strip === h ? prev : { ...prev, strip: h }));
           }}>
-          <View style={styles.strip}>
+          <Animated.View style={[styles.strip, daysStyle]}>
             {days.map((day) => {
               const c = cellColors(day);
               return (
@@ -153,7 +190,7 @@ export function MonthCard({ userId, goal }: Props) {
                 />
               );
             })}
-          </View>
+          </Animated.View>
         </Animated.View>
 
         <Animated.View
@@ -163,7 +200,7 @@ export function MonthCard({ userId, goal }: Props) {
             const h = e.nativeEvent.layout.height;
             setHeights((prev) => (prev.grid === h ? prev : { ...prev, grid: h }));
           }}>
-          <View style={styles.grid}>
+          <Animated.View style={[styles.grid, daysStyle]}>
             {WEEKDAYS.map((w, i) => (
               <Text key={i} variant="labelSmall" style={[styles.weekday, { color: theme.colors.onSurfaceVariant }]}>
                 {w}
@@ -208,7 +245,7 @@ export function MonthCard({ userId, goal }: Props) {
                 </Pressable>
               );
             })}
-          </View>
+          </Animated.View>
           <Text
             variant="bodyMedium"
             numberOfLines={1}
@@ -232,9 +269,28 @@ export function MonthCard({ userId, goal }: Props) {
   );
 }
 
+type DipProps = ComponentProps<typeof IconButton> & { iconStyle?: ComponentProps<typeof Animated.View>['style'] };
+
+/**
+ * Paper's icon button with the app's press: it dips on touch-down and springs back on release.
+ * `iconStyle` animates the button inside the dip, e.g. to turn the chevron.
+ */
+function DipIconButton({ iconStyle, ...props }: DipProps) {
+  const press = usePressed();
+  const dip = useAnimatedStyle(() => ({ transform: [{ scale: interpolate(press.pressed.value, [0, 1], [1, 0.92]) }] }));
+  return (
+    <Animated.View style={dip}>
+      <Animated.View style={iconStyle}>
+        <IconButton {...props} onPressIn={press.onPressIn} onPressOut={press.onPressOut} />
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
-  headerText: { flex: 1, alignItems: 'center' },
+  headerText: { flex: 1 },
+  centered: { textAlign: 'center' },
   body: { overflow: 'hidden', marginHorizontal: 16, marginBottom: 16 },
   layer: { position: 'absolute', top: 0, left: 0, right: 0 },
   strip: { flexDirection: 'row', gap: 2, height: 28 },

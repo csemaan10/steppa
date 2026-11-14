@@ -1,10 +1,11 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View, type ViewToken } from 'react-native';
-import { Card, Text, useTheme } from 'react-native-paper';
+import { Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CharacterCanvas } from '@/components/character/character-canvas';
 import { CAT_X, DOG_X, HORSE_X } from '@/components/character/rig';
+import { TapCard } from '@/components/tap-card';
 import type { LeaderboardRow } from '@/lib/api';
 import { DOGS, hashString, isSmallPet, normalizeLook, type CharacterLook, type Pet } from '@/lib/character';
 import { glassCard } from '@/theme';
@@ -125,7 +126,8 @@ const Shelf = memo(function Shelf({ row, isMe, animate, onPressUser }: ShelfProp
   const twoCats = look.pets.filter(isSmallPet).length > 1;
 
   return (
-    <Card
+    // Dips on touch-down, like the other cards that open something.
+    <TapCard
       mode="contained"
       // Yours is picked out by a primary rim; a solid fill would stop it reading as glass.
       style={[glassCard(theme), isMe && { borderColor: theme.colors.primary }]}
@@ -171,7 +173,7 @@ const Shelf = memo(function Shelf({ row, isMe, animate, onPressUser }: ShelfProp
           )}
         </View>
       </View>
-    </Card>
+    </TapCard>
   );
 });
 

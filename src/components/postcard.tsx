@@ -19,6 +19,7 @@ import { gameMotion, riseIn } from '@/components/game/game-motion';
 import { FlagIcon } from '@/components/flag-icon';
 import { JourneyScene, type Person } from '@/components/journey-scene';
 import { PlaceIcon } from '@/components/place-icon';
+import { PressableScale } from '@/components/pressable-scale';
 import { hashString } from '@/lib/character';
 import { formatKm, SKIES, type Route, type Sky, type Stop } from '@/lib/journeys';
 import type { TimeOfDay } from '@/lib/scene-art';
@@ -306,17 +307,18 @@ export function PostcardThumb({ stop, kmAway, index, onPress }: ThumbProps) {
 
   return (
     <Animated.View entering={riseIn(index * 60)} style={styles.thumbWrap}>
-      <Pressable
+      {/* Dips on touch-down and springs back, rather than snapping to a smaller size while held. */}
+      <PressableScale
         disabled={locked}
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={locked ? `${stop.name}, ${formatKm(kmAway)} km away` : `Postcard from ${stop.name}`}
-        style={({ pressed }) => [
+        pressedScale={0.97}
+        style={[
           styles.thumb,
           locked
             ? { borderColor: theme.colors.outlineVariant, backgroundColor: withAlpha(theme.colors.surfaceVariant, 0.5) }
             : styles.thumbPaper,
-          pressed && styles.pressed,
         ]}>
         {locked ? (
           <View style={styles.locked}>
@@ -336,7 +338,7 @@ export function PostcardThumb({ stop, kmAway, index, onPress }: ThumbProps) {
             </Text>
           </View>
         )}
-      </Pressable>
+      </PressableScale>
     </Animated.View>
   );
 }
@@ -521,7 +523,6 @@ const styles = StyleSheet.create({
     padding: 3,
     boxShadow: '0 3px 8px rgba(0, 0, 0, 0.18)',
   },
-  pressed: { transform: [{ scale: 0.97 }] },
   thumbArt: { flex: 1, borderRadius: 7, overflow: 'hidden' },
   thumbName: {
     position: 'absolute',

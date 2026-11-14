@@ -4,6 +4,7 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Appbar, Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Appear } from '@/components/appear';
 import { Button } from '@/components/button';
 import { useCookieFlights } from '@/components/game/cookie-flights';
 import { useGameToast } from '@/components/game/game-toast';
@@ -170,16 +171,19 @@ function Playdate({
         {treats ? <TreatCounter count={available} toNext={treats.toNext} targetRef={counterRef} /> : null}
       </Appbar.Header>
       <View style={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
-        <PlaydateScene date={date} mine={mine} theirs={theirs} width={sceneWidth} time={timeOfDay()} mouthRef={mouthRef} />
-        <View style={styles.names}>
+        {/* The scene, the names and the buttons arrive one after another. */}
+        <Appear>
+          <PlaydateScene date={date} mine={mine} theirs={theirs} width={sceneWidth} time={timeOfDay()} mouthRef={mouthRef} />
+        </Appear>
+        <Appear index={1} style={styles.names}>
           <Text variant="titleLarge" style={styles.bold}>
             {myName} & {theirName}
           </Text>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             A playdate at the park with {friend}
           </Text>
-        </View>
-        <View style={[styles.actions, { width: sceneWidth }]}>
+        </Appear>
+        <Appear index={2} style={[styles.actions, { width: sceneWidth }]}>
           <Button mode="contained-tonal" icon="tennis-ball" compact onPress={date.play} style={styles.action}>
             Play
           </Button>
@@ -196,7 +200,7 @@ function Playdate({
               {given ? 'Treat given today' : 'Give a treat'}
             </Button>
           ) : null}
-        </View>
+        </Appear>
       </View>
       {flights}
       {toast}

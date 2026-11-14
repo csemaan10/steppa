@@ -10,11 +10,11 @@ import Animated, {
   withDelay,
   withRepeat,
   withTiming,
-  ZoomIn,
   type SharedValue,
 } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
+import { popIn } from '@/components/game/game-motion';
 import { UserAvatar } from '@/components/user-avatar';
 import { isStop, latLng, type Route } from '@/lib/journeys';
 import { GEOGRAPHY, type LatLng } from '@/lib/map-geography';
@@ -366,7 +366,8 @@ function MapCanvas({ geo, route, km, width, height, traveller, detailed, delay }
         <Animated.View style={[styles.marker, markerStyle]} pointerEvents="none">
           <Animated.View style={[styles.pulse, { backgroundColor: theme.colors.primary }, pulseStyle]} />
           <Animated.View
-            entering={ZoomIn.delay(delay).springify().damping(12)}
+            // Pops in once as the line starts drawing, then holds still rather than wobbling.
+            entering={popIn(delay)}
             style={[styles.avatarRing, { borderColor: theme.colors.surface }]}>
             <UserAvatar name={traveller.name} color={traveller.color} icon={traveller.icon} size={MARKER - 4} />
           </Animated.View>

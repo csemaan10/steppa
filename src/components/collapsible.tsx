@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { motion } from '@/theme/motion';
 
@@ -18,7 +18,9 @@ type Props = {
  * A body that grows open and folds shut on an Expressive spring, pushing what's below along with it.
  * The content is laid out once at full size inside a clip that animates its height, so it never
  * re-lays out mid-animation. It's only built while open (and while folding shut), so closed sections
- * cost nothing.
+ * cost nothing. Rows inside that come and go while it's open (an option that only shows with
+ * another) can animate in and out themselves; when the whole body opens or folds, the fold is the
+ * animation, so theirs are skipped.
  */
 export function Collapsible({ expanded, style, children }: Props) {
   // Kept for the length of the fold after closing, so it can animate shut before it goes.
@@ -50,7 +52,9 @@ export function Collapsible({ expanded, style, children }: Props) {
   return (
     <Animated.View style={[styles.clip, clipStyle]}>
       <View style={[styles.content, style]} onLayout={(e) => setContentHeight(e.nativeEvent.layout.height)}>
-        {children}
+        <LayoutAnimationConfig skipEntering skipExiting>
+          {children}
+        </LayoutAnimationConfig>
       </View>
     </Animated.View>
   );

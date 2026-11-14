@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
+  interpolate,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
@@ -52,15 +53,17 @@ export function ProgressRing({
 
   const lap1 = useDerivedValue(() => Math.min(Math.max(value.value, 0), 1));
   const lap2 = useDerivedValue(() => Math.min(Math.max(value.value - 1, 0), 1));
-  const over = progress > 1;
+  // Past the goal the ring glows. It brightens as the arc sweeps past the goal mark, rather than
+  // switching on before the ring gets there.
+  const glow = useAnimatedStyle(() => ({ opacity: interpolate(value.value, [1, 1.08], [0, 1], 'clamp') }));
 
   return (
-    <View
-      style={[
-        { width: size, height: size },
-        // RN's boxShadow supports coloured glows on both platforms.
-        over && { borderRadius: size / 2, boxShadow: `0 0 28px 2px ${overflowColor}88` },
-      ]}>
+    <View style={{ width: size, height: size }}>
+      {/* RN's boxShadow supports coloured glows on both platforms. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { borderRadius: size / 2, boxShadow: `0 0 28px 2px ${overflowColor}88` }, glow]}
+      />
       {style === 'classic' ? (
         <>
           <View

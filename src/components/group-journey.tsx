@@ -2,9 +2,10 @@ import 'expo-sqlite/localStorage/install';
 import { useEffect, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ActivityIndicator, Card, Text } from 'react-native-paper';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { LayoutAnimationConfig, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Appear } from '@/components/appear';
 import { TrophyIcon } from '@/components/award-icons';
 import { Button } from '@/components/button';
 import { FlagIcon } from '@/components/flag-icon';
@@ -39,6 +40,7 @@ import {
   type Stop,
 } from '@/lib/journeys';
 import { glassCard, useAppTheme, withAlpha } from '@/theme';
+import { enter, layoutMove } from '@/theme/motion';
 
 type Props = {
   group: Group;
@@ -189,27 +191,32 @@ export function GroupJourney({ group, userId, members, active }: Props) {
 
         {status && finished ? (
           <>
-            <Card mode="contained" style={glassCard(theme)}>
-              <Card.Content style={styles.finished}>
-                <TrophyIcon size={68} />
-                <Text variant="headlineSmall" style={[styles.bold, styles.centerText]}>
-                  {group.name} made it to {status.route.stops[status.route.stops.length - 1]!.name}!
-                </Text>
-                <Text variant="bodyMedium" style={[styles.centerText, { color: theme.colors.onSurfaceVariant }]}>
-                  {formatKm(status.route.totalKm)} km together in{' '}
-                  {journeyDay(status.journey.started_on, new Date(`${status.journey.completed_on}T12:00:00`))} days.
-                </Text>
-              </Card.Content>
-            </Card>
-            <JourneyScene
-              people={people}
-              you={userId}
-              stop={status.route.stops[status.route.stops.length - 1]!}
-              motion={(i) => groupPose(people[i]!.id, "finish")}
-              greeting="We made it!"
-              height={230}
-              animate={active}
-            />
+            <Appear>
+              <Card mode="contained" style={glassCard(theme)}>
+                <Card.Content style={styles.finished}>
+                  <TrophyIcon size={68} />
+                  <Text variant="headlineSmall" style={[styles.bold, styles.centerText]}>
+                    {group.name} made it to {status.route.stops[status.route.stops.length - 1]!.name}!
+                  </Text>
+                  <Text variant="bodyMedium" style={[styles.centerText, { color: theme.colors.onSurfaceVariant }]}>
+                    {formatKm(status.route.totalKm)} km together in{' '}
+                    {journeyDay(status.journey.started_on, new Date(`${status.journey.completed_on}T12:00:00`))} days.
+                  </Text>
+                </Card.Content>
+              </Card>
+            </Appear>
+            <Appear index={1}>
+              <JourneyScene
+                people={people}
+                you={userId}
+                stop={status.route.stops[status.route.stops.length - 1]!}
+                motion={(i) => groupPose(people[i]!.id, "finish")}
+                greeting="We made it!"
+                height={230}
+                animate={active}
+              />
+            </Appear>
+            {/* Its thumbnails rise in by themselves. */}
             <PostcardCollection
               route={status.route}
               progress={progressOn(status.route, status.steps)}
@@ -283,7 +290,8 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
 
   return (
     <>
-      <Animated.View entering={FadeInDown.springify().damping(18)} style={styles.hero}>
+      {/* The tab's main blocks rise in top to bottom once it loads. */}
+      <Appear style={styles.hero}>
         <FlagIcon flag={route.flag} size={44} />
         <View style={styles.flex}>
           <Text variant="titleMedium" style={styles.bold}>
@@ -293,44 +301,50 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
             Day {journeyDay(journey.started_on)} · {formatSteps(steps)} steps together
           </Text>
         </View>
-      </Animated.View>
+      </Appear>
 
-      <JourneyScene
-        people={people}
-        you={userId}
-        stop={sceneStop}
-        greeting={greeting}
-        motion={(i) => groupPose(people[i]!.id, sceneStop.name)}
-        height={230}
-        animate={active}
-      />
+      <Appear index={1}>
+        <JourneyScene
+          people={people}
+          you={userId}
+          stop={sceneStop}
+          greeting={greeting}
+          motion={(i) => groupPose(people[i]!.id, sceneStop.name)}
+          height={230}
+          animate={active}
+        />
+      </Appear>
 
-      <RouteMap
-        route={route}
-        km={progress.km}
-        height={mapHeightFor(route, width - 32, 220, 380)}
-        traveller={{ name: group.name, color: group.color, icon: group.icon }}
-        detailed
-      />
+      <Appear index={2}>
+        <RouteMap
+          route={route}
+          km={progress.km}
+          height={mapHeightFor(route, width - 32, 220, 380)}
+          traveller={{ name: group.name, color: group.color, icon: group.icon }}
+          detailed
+        />
+      </Appear>
 
-      <Card mode="contained" style={glassCard(theme)}>
-        <Card.Content style={styles.progressCard}>
-          <View style={styles.kmRow}>
-            <Text variant="displaySmall" style={[styles.bold, { color: theme.colors.primary }]}>
-              {formatKm(progress.km)}
+      <Appear index={3}>
+        <Card mode="contained" style={glassCard(theme)}>
+          <Card.Content style={styles.progressCard}>
+            <View style={styles.kmRow}>
+              <Text variant="displaySmall" style={[styles.bold, { color: theme.colors.primary }]}>
+                {formatKm(progress.km)}
+              </Text>
+              <Text variant="titleMedium" style={muted}>
+                of {formatKm(route.totalKm)} km
+              </Text>
+            </View>
+            <ProgressBar fraction={progress.fraction} />
+            <Text variant="bodySmall" style={muted}>
+              {Math.floor(progress.fraction * 100)}% of the way · {progress.reached} of {route.stops.length} stops
             </Text>
-            <Text variant="titleMedium" style={muted}>
-              of {formatKm(route.totalKm)} km
-            </Text>
-          </View>
-          <ProgressBar fraction={progress.fraction} />
-          <Text variant="bodySmall" style={muted}>
-            {Math.floor(progress.fraction * 100)}% of the way · {progress.reached} of {route.stops.length} stops
-          </Text>
-        </Card.Content>
-      </Card>
+          </Card.Content>
+        </Card>
+      </Appear>
 
-      <View style={styles.tiles}>
+      <Appear index={4} style={styles.tiles}>
         {next ? (
           <Card mode="contained" style={[glassCard(theme), styles.flex]}>
             <Card.Content style={styles.tile}>
@@ -362,53 +376,62 @@ function Underway({ status, group, people, members, userId, groupDaily, active, 
             </Text>
           </Card.Content>
         </Card>
-      </View>
+      </Appear>
 
-      <View style={styles.section}>
+      <Appear index={5} style={styles.section}>
         <SectionHeader title="Carrying the group" note={`${status.members.length} walking`} />
         <Card mode="contained" style={glassCard(theme)}>
+          {/* Walkers shown by "Show all" rise in; the ones there from the start arrive with the card. */}
           <Card.Content style={styles.walkers}>
-            {shownWalkers.map((m) => (
-              <Walker
-                key={m.user_id}
-                rank={status.members.indexOf(m) + 1}
-                steps={m.steps}
-                groupSteps={steps}
-                top={top}
-                row={names.get(m.user_id)}
-                mine={m.user_id === userId}
-              />
-            ))}
-            {/* Folded away: you still show, after a gap, if you're further down. */}
-            {me && !expanded && myRank > COLLAPSED_WALKERS ? (
-              <>
-                <View style={styles.gap}>
-                  {[0, 1, 2].map((i) => (
-                    <View key={i} style={[styles.dot, { backgroundColor: theme.colors.outlineVariant }]} />
-                  ))}
-                </View>
-                <Walker rank={myRank} steps={me.steps} groupSteps={steps} top={top} row={names.get(userId)} mine />
-              </>
-            ) : null}
-            {foldable ? (
-              <Button
-                icon={expanded ? 'chevron-up' : 'chevron-down'}
-                compact
-                onPress={() => setExpanded(!expanded)}
-                style={styles.showAll}>
-                {expanded ? 'Show less' : `Show all ${status.members.length}`}
-              </Button>
-            ) : null}
+            <LayoutAnimationConfig skipEntering>
+              {shownWalkers.map((m) => (
+                <Walker
+                  key={m.user_id}
+                  rank={status.members.indexOf(m) + 1}
+                  steps={m.steps}
+                  groupSteps={steps}
+                  top={top}
+                  row={names.get(m.user_id)}
+                  mine={m.user_id === userId}
+                />
+              ))}
+              {/* Folded away: you still show, after a gap, if you're further down. */}
+              {me && !expanded && myRank > COLLAPSED_WALKERS ? (
+                <>
+                  <Animated.View layout={layoutMove} style={styles.gap}>
+                    {[0, 1, 2].map((i) => (
+                      <View key={i} style={[styles.dot, { backgroundColor: theme.colors.outlineVariant }]} />
+                    ))}
+                  </Animated.View>
+                  <Walker rank={myRank} steps={me.steps} groupSteps={steps} top={top} row={names.get(userId)} mine />
+                </>
+              ) : null}
+              {foldable ? (
+                <Animated.View layout={layoutMove} style={styles.showAll}>
+                  <Button
+                    icon={expanded ? 'chevron-up' : 'chevron-down'}
+                    compact
+                    onPress={() => setExpanded(!expanded)}>
+                    {expanded ? 'Show less' : `Show all ${status.members.length}`}
+                  </Button>
+                </Animated.View>
+              ) : null}
+            </LayoutAnimationConfig>
           </Card.Content>
         </Card>
-      </View>
+      </Appear>
 
-      <PostcardCollection route={route} progress={progress} onOpen={onOpenPostcard} />
+      {/* Slides along when the walkers card above grows or shrinks. Its thumbnails rise in by themselves. */}
+      <Animated.View layout={layoutMove}>
+        <PostcardCollection route={route} progress={progress} onOpen={onOpenPostcard} />
+      </Animated.View>
 
       {onEnd ? (
-        <Button icon="flag-off-outline" textColor={theme.colors.error} onPress={onEnd} style={styles.endButton}>
-          End group journey
-        </Button>
+        <Animated.View layout={layoutMove} style={styles.endButton}>
+          <Button icon="flag-off-outline" textColor={theme.colors.error} onPress={onEnd}>
+            End group journey
+          </Button>
+        </Animated.View>
       ) : null}
     </>
   );
@@ -429,11 +452,12 @@ type WalkerProps = {
 function Walker({ rank, steps, groupSteps, top, row, mine }: WalkerProps) {
   const theme = useAppTheme();
   const muted = { color: theme.colors.onSurfaceVariant };
+  const reduceMotion = useReducedMotion();
   const share = groupSteps ? Math.round((steps / groupSteps) * 100) : 0;
   const meter = top ? steps / top : 0;
 
   return (
-    <Animated.View entering={FadeIn.duration(160)} style={styles.walker}>
+    <Animated.View entering={enter(0, reduceMotion)} layout={layoutMove} style={styles.walker}>
       <Text variant="labelLarge" style={[styles.rank, muted]}>
         {rank}
       </Text>
@@ -490,7 +514,7 @@ function RouteChoice({ title, groupDaily, canStart, ownerName, busy, onStart }: 
         {canStart ? 'Pick one to start today.' : `${ownerName ?? 'The group owner'} can start one.`}
       </Text>
       {GROUP_ROUTES.map((route, i) => (
-        <Animated.View key={route.key} entering={FadeInDown.delay(i * 120).springify().damping(18)}>
+        <Appear key={route.key} index={i + 1}>
           <Card mode="contained" style={glassCard(theme)}>
             <View style={styles.pickerMap}>
               <RouteMap
@@ -526,7 +550,7 @@ function RouteChoice({ title, groupDaily, canStart, ownerName, busy, onStart }: 
               ) : null}
             </Card.Content>
           </Card>
-        </Animated.View>
+        </Appear>
       ))}
     </View>
   );

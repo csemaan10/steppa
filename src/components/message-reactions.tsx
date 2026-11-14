@@ -1,17 +1,15 @@
 import { Alert, Pressable, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import Animated, {
-  Keyframe,
   LinearTransition,
   useAnimatedStyle,
-  useSharedValue,
-  withSequence,
+  useReducedMotion,
   withSpring,
   withTiming,
-  ZoomIn,
-  ZoomOut,
+  type EntryExitAnimationFunction,
 } from 'react-native-reanimated';
 
+import { usePressed } from '@/hooks/use-pressed';
 import type { Reaction, ReactionKey } from '@/lib/api';
 import { useAppTheme } from '@/theme';
 import { motion } from '@/theme/motion';
@@ -38,21 +36,50 @@ export const REACTION_EMOJI: Record<ReactionKey, string> = {
 export const REACTION_KEYS = Object.keys(REACTION_EMOJI) as ReactionKey[];
 
 // The app's quick Expressive springs: settled in about a fifth of a second, with only a hint of bounce.
-const { release, spatial } = motion;
-const CHIP_IN = ZoomIn.springify()
-  .stiffness(release.stiffness!)
-  .damping(release.damping!)
-  .energyThreshold(release.energyThreshold!);
-const CHIP_OUT = ZoomOut.duration(140);
+const { spatial } = motion;
 const CHIP_MOVE = LinearTransition.springify()
   .stiffness(spatial.stiffness!)
   .damping(spatial.damping!)
   .energyThreshold(spatial.energyThreshold!);
-// The new count rolls up into place.
-const COUNT_IN = new Keyframe({
-  0: { opacity: 0, transform: [{ translateY: 6 }] },
-  100: { opacity: 1, transform: [{ translateY: 0 }] },
-}).duration(180);
+
+/** A new reaction: fades in as it grows from half size on the quick release spring. With reduced motion it only fades. */
+function chipIn(reduceMotion: boolean): EntryExitAnimationFunction {
+  const from = reduceMotion ? 1 : 0.5;
+  const { fade, release } = motion;
+  return () => {
+    'worklet';
+    return {
+      initialValues: { opacity: 0, transform: [{ scale: from }] },
+      animations: { opacity: withTiming(1, fade), transform: [{ scale: withSpring(1, release) }] },
+    };
+  };
+}
+
+/** A reaction taken back: shrinks as it fades, quicker than it came. */
+function chipOut(reduceMotion: boolean): EntryExitAnimationFunction {
+  const to = reduceMotion ? 1 : 0.5;
+  const { fadeOut, press } = motion;
+  return () => {
+    'worklet';
+    return {
+      initialValues: { opacity: 1, transform: [{ scale: 1 }] },
+      animations: { opacity: withTiming(0, fadeOut), transform: [{ scale: withSpring(to, press) }] },
+    };
+  };
+}
+
+/** The new count rolls up into place (just fades with reduced motion). */
+function countIn(reduceMotion: boolean): EntryExitAnimationFunction {
+  const rise = reduceMotion ? 0 : 6;
+  const { fade, smooth } = motion;
+  return () => {
+    'worklet';
+    return {
+      initialValues: { opacity: 0, transform: [{ translateY: rise }] },
+      animations: { opacity: withTiming(1, fade), transform: [{ translateY: withSpring(0, smooth) }] },
+    };
+  };
+}
 
 type Props = {
   reactions: Reaction[];
@@ -89,21 +116,20 @@ type ChipProps = { emoji: string; selected: boolean; names: string[]; onPress: (
 
 function Chip({ emoji, selected, names, onPress }: ChipProps) {
   const theme = useAppTheme();
-  const scale = useSharedValue(1);
-  const bounce = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const reduceMotion = useReducedMotion();
+  // Dips on touch-down like the app's small buttons, and settles back as the toggle lands.
+  const press = usePressed();
+  const dip = useAnimatedStyle(() => ({ transform: [{ scale: 1 - press.pressed.value * 0.08 }] }));
   const count = names.length;
 
-  function press() {
-    scale.set(withSequence(withTiming(1.2, { duration: 70 }), withSpring(1, motion.release)));
-    onPress();
-  }
-
   return (
-    // Bounce lives on an inner view so its transform doesn't fight the entering zoom.
-    <Animated.View entering={CHIP_IN} exiting={CHIP_OUT} layout={CHIP_MOVE}>
-      <Animated.View style={bounce}>
+    // The dip lives on an inner view so its transform doesn't fight the entering grow.
+    <Animated.View entering={chipIn(reduceMotion)} exiting={chipOut(reduceMotion)} layout={CHIP_MOVE}>
+      <Animated.View style={dip}>
         <Pressable
-        onPress={press}
+        onPress={onPress}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
         onLongPress={() => Alert.alert(emoji, names.join('\n'))}
         accessibilityRole="button"
         accessibilityState={{ selected }}
@@ -120,7 +146,7 @@ function Chip({ emoji, selected, names, onPress }: ChipProps) {
           // Keyed by count so each change remounts and replays the roll.
           <Animated.Text
             key={count}
-            entering={COUNT_IN}
+            entering={countIn(reduceMotion)}
             style={[
               theme.fonts.labelSmall,
               { color: selected ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant },

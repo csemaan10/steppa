@@ -1,9 +1,11 @@
 import { useEffect, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Icon, Text, useTheme } from 'react-native-paper';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { Collapsible } from '@/components/collapsible';
+import { PressableScale } from '@/components/pressable-scale';
+import { SwapText } from '@/components/swap-text';
 import { motion } from '@/theme/motion';
 
 type Props = {
@@ -18,12 +20,15 @@ type Props = {
   children: ReactNode;
 };
 
-/** A tappable header that shows or hides its options, for keeping long settings cards short. */
+/**
+ * A tappable header that shows or hides its options, for keeping long settings cards short. The
+ * header dips while held, and the summary crossfades when a pick inside changes it.
+ */
 export function CollapsibleSection({ title, summary, accessory, expanded, onToggle, onLayout, children }: Props) {
   const theme = useTheme();
   return (
     <View style={[styles.box, { borderColor: theme.colors.outlineVariant }]} onLayout={onLayout}>
-      <Pressable
+      <PressableScale
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
@@ -35,12 +40,14 @@ export function CollapsibleSection({ title, summary, accessory, expanded, onTogg
         <View style={styles.spacer} />
         {accessory}
         {summary ? (
-          <Text variant="bodyMedium" numberOfLines={1} style={[styles.summary, { color: theme.colors.onSurfaceVariant }]}>
-            {summary}
-          </Text>
+          <View style={styles.summary}>
+            <SwapText variant="bodyMedium" numberOfLines={1} style={[styles.summaryText, { color: theme.colors.onSurfaceVariant }]}>
+              {summary}
+            </SwapText>
+          </View>
         ) : null}
         <Chevron expanded={expanded} color={theme.colors.onSurfaceVariant} />
-      </Pressable>
+      </PressableScale>
       <Collapsible expanded={expanded} style={styles.body}>
         {children}
       </Collapsible>
@@ -67,6 +74,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 12 },
   title: { flexShrink: 0 },
   spacer: { flex: 1 },
-  summary: { flexShrink: 1, textAlign: 'right' },
+  summary: { flexShrink: 1 },
+  summaryText: { textAlign: 'right' },
   body: { gap: 14, paddingHorizontal: 14, paddingBottom: 14 },
 });

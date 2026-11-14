@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { Card, List, Switch, useTheme } from 'react-native-paper';
 
 import { Button } from '@/components/button';
+import { Collapsible } from '@/components/collapsible';
 import { isBackgroundSyncEnabled, setBackgroundSyncEnabled } from '@/lib/background-sync';
 import { backgroundAccess, healthSourceName, openHealthSettings, requestBackgroundAccess } from '@/lib/health';
 import { glassCard } from '@/theme';
@@ -56,11 +57,12 @@ export function BackgroundSyncCard() {
         onPress={() => toggle(!enabled)}
         disabled={busy}
       />
-      {needsPermission && Platform.OS === 'android' ? (
+      {/* Opens under the switch when it's needed, so the card grows rather than jumps. */}
+      <Collapsible expanded={needsPermission && Platform.OS === 'android'}>
         <Card.Actions>
           <Button onPress={openHealthSettings}>Open {healthSourceName}</Button>
         </Card.Actions>
-      ) : null}
+      </Collapsible>
     </Card>
   );
 }

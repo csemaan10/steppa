@@ -7,8 +7,9 @@ import {
   Snackbar,
   Text,
 } from 'react-native-paper';
-import { useReducedMotion } from 'react-native-reanimated';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 
+import { Appear } from '@/components/appear';
 import { Button } from '@/components/button';
 import { CharacterIntroCard, characterIntroSeen } from '@/components/character/character-intro-card';
 import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
@@ -55,6 +56,7 @@ import { updateWidgets } from '@/lib/widgets';
 import { readWidgetState } from '@/lib/widgets/data';
 import { useUserId } from '@/providers/auth-provider';
 import { glassCard, ringTrack, screenBackground, transparentHeader, useAppTheme } from '@/theme';
+import { layoutMove } from '@/theme/motion';
 
 /** How often the Today tab re-reads the health store while it's on screen. */
 const RESYNC_MS = 60_000;
@@ -213,6 +215,7 @@ export default function TodayScreen() {
         <Appbar.Content title="Today" />
         <GlassAction
           icon="sync"
+          spinning={loading}
           disabled={loading}
           onPress={reload}
           accessibilityLabel={`Sync with ${healthSourceName}`}
@@ -223,30 +226,34 @@ export default function TodayScreen() {
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: tabBarSpace }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} />}>
+        {/* Everything below the ring arrives once the first load lands, in a quick top-to-bottom stagger,
+            and slides along when a card above it comes or goes. */}
         {health === 'unavailable' || health === 'denied' ? (
-          <Card mode="contained" style={{ backgroundColor: theme.colors.errorContainer }}>
-            <Card.Title
-              title={health === 'unavailable' ? `${healthSourceName} unavailable` : 'Permission needed'}
-              titleStyle={{ color: theme.colors.onErrorContainer }}
-            />
-            <Card.Content>
-              <Text style={{ color: theme.colors.onErrorContainer }}>
-                {health === 'unavailable'
-                  ? Platform.OS === 'android'
-                    ? 'Install or update Health Connect from the Play Store to sync your steps.'
-                    : 'Step syncing requires the iOS or Android app.'
-                  : `Allow Steppa to read steps in ${healthSourceName}.`}
-              </Text>
-            </Card.Content>
-            {Platform.OS !== 'web' ? (
-              <Card.Actions>
-                <Button onPress={openHealthSettings}>Open settings</Button>
-                <Button mode="contained" onPress={reload}>
-                  Try again
-                </Button>
-              </Card.Actions>
-            ) : null}
-          </Card>
+          <Appear exits>
+            <Card mode="contained" style={{ backgroundColor: theme.colors.errorContainer }}>
+              <Card.Title
+                title={health === 'unavailable' ? `${healthSourceName} unavailable` : 'Permission needed'}
+                titleStyle={{ color: theme.colors.onErrorContainer }}
+              />
+              <Card.Content>
+                <Text style={{ color: theme.colors.onErrorContainer }}>
+                  {health === 'unavailable'
+                    ? Platform.OS === 'android'
+                      ? 'Install or update Health Connect from the Play Store to sync your steps.'
+                      : 'Step syncing requires the iOS or Android app.'
+                    : `Allow Steppa to read steps in ${healthSourceName}.`}
+                </Text>
+              </Card.Content>
+              {Platform.OS !== 'web' ? (
+                <Card.Actions>
+                  <Button onPress={openHealthSettings}>Open settings</Button>
+                  <Button mode="contained" onPress={reload}>
+                    Try again
+                  </Button>
+                </Card.Actions>
+              ) : null}
+            </Card>
+          </Appear>
         ) : null}
 
         {data ? <CharacterIntroCard profile={data.profile} onDone={() => setCharacterIntroDone(true)} /> : null}
@@ -257,7 +264,7 @@ export default function TodayScreen() {
           <PetIntroCard profile={data.profile} />
         ) : null}
 
-        <View style={styles.hero}>
+        <Animated.View layout={layoutMove} style={styles.hero}>
             {/* Sized so the streak card still fits on screen below the insight tiles. */}
             <ProgressRing
               progress={ratio}
@@ -268,10 +275,10 @@ export default function TodayScreen() {
               trackColor={ringTrack(theme)}>
               <RingCount steps={stats?.today ?? 0} goal={goal} />
             </ProgressRing>
-        </View>
+        </Animated.View>
 
         {data && stats ? (
-          <View style={styles.grid}>
+          <Appear index={1} style={styles.grid}>
             {/* Every tile below covers the same window: today and the 6 days before it. */}
             <SectionHeader title="Last 7 days" note={weekRange} />
             <View style={styles.row}>
@@ -317,13 +324,17 @@ export default function TodayScreen() {
                 />
               </InsightTile>
             </View>
-          </View>
+          </Appear>
         ) : null}
 
-        {data ? <StreakCard current={data.lifetime.current_streak} longest={data.lifetime.longest_streak} /> : null}
+        {data ? (
+          <Appear index={2}>
+            <StreakCard current={data.lifetime.current_streak} longest={data.lifetime.longest_streak} />
+          </Appear>
+        ) : null}
 
         {data ? (
-          <View style={styles.section}>
+          <Appear index={3} style={styles.section}>
             <SectionHeader
               title="Your groups"
               note={data.groupCount ? `${data.groupCount} ${data.groupCount === 1 ? 'group' : 'groups'}` : undefined}
@@ -353,14 +364,14 @@ export default function TodayScreen() {
                 </Card.Content>
               </Card>
             )}
-          </View>
+          </Appear>
         ) : null}
 
         {data && data.journey !== undefined ? (
-          <View style={styles.section}>
+          <Appear index={4} style={styles.section}>
             <SectionHeader title="Your journey" />
             <JourneyPreview current={data.journey} profile={data.profile} />
-          </View>
+          </Appear>
         ) : null}
       </ScrollView>
 
