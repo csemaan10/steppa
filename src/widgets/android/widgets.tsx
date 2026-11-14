@@ -214,6 +214,18 @@ function PetWidget({ v, c, size, petted }: { v: WidgetView; c: WidgetColors; siz
 }
 
 /**
+ * Whether a phone is turned sideways right now. A widget's size is read for the phone's orientation
+ * at the moment it's drawn, and sideways a square widget measures wide and short, so it got the wide
+ * layout. A redraw while the phone is sideways (a step sync behind a landscape video, say) left it
+ * that way on the upright home screen. Phones only: tablets often keep their home screen sideways.
+ */
+export function phoneSideways(info: Pick<WidgetInfo, 'screenInfo'>): boolean {
+  const screen = info.screenInfo;
+  if (!screen) return false;
+  return screen.screenWidthDp > screen.screenHeightDp && Math.min(screen.screenWidthDp, screen.screenHeightDp) < 600;
+}
+
+/**
  * One widget, in both the light and the dark scheme (Android picks by the phone's setting). A
  * `moment` overrides what's saved: a frame of the ring filling, or the pet being played with.
  */

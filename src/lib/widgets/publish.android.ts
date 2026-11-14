@@ -1,7 +1,7 @@
-import { requestWidgetUpdate } from 'react-native-android-widget';
+import { getWidgetInfo, requestWidgetUpdate } from 'react-native-android-widget';
 
 import { readWidgetState, widgetView } from '@/lib/widgets/data';
-import { renderAndroidWidget, type Moment } from '@/widgets/android/widgets';
+import { phoneSideways, renderAndroidWidget, type Moment } from '@/widgets/android/widgets';
 
 /** The ring's last drawn share of the goal, so the next update can fill from there. */
 const DRAWN_KEY = 'steppa:widget-ring';
@@ -24,10 +24,17 @@ function saveDrawn(progress: number, steps: number): void {
   } catch {}
 }
 
-function draw(widgetName: 'Steps' | 'Pet', moment?: Moment): Promise<void> {
-  return requestWidgetUpdate({ widgetName, renderWidget: (info) => renderAndroidWidget(widgetName, info, moment) }).catch((e) =>
-    console.warn('Could not update the widget', widgetName, e)
-  );
+async function draw(widgetName: 'Steps' | 'Pet', moment?: Moment): Promise<void> {
+  try {
+    // Not while the phone is sideways (a sync behind a landscape video): the widgets would be drawn
+    // at their sideways size, wide and short, and keep that look on the upright home screen. They
+    // keep their last picture until the next update with the phone upright.
+    const widgets = await getWidgetInfo(widgetName);
+    if (widgets.length === 0 || widgets.some(phoneSideways)) return;
+    await requestWidgetUpdate({ widgetName, renderWidget: (info) => renderAndroidWidget(widgetName, info, moment) });
+  } catch (e) {
+    console.warn('Could not update the widget', widgetName, e);
+  }
 }
 
 /** Bumped by each refresh, so an older fill stops when a newer one starts. */
