@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, Platform, useWindowDimensions, type View } from 'react-native';
+import { AppState, BackHandler, Platform, useWindowDimensions, type View } from 'react-native';
 import {
   interpolate,
   useAnimatedStyle,
@@ -62,9 +62,11 @@ export function openCharacterFrom(card: View | null) {
  * turns around from wherever the screen has got to. With reduced motion the screen stays full size
  * and only fades in and out over the backdrop.
  *
- * Once open, the screen uses plain static styles rather than the animated ones. Animated values can
- * be dropped while the app is paused (e.g. by the system share sheet), which snapped the screen back
- * to its invisible start state while it still covered the tabs and swallowed their touches.
+ * The animated styles stay on for as long as the screen is open. It used to swap them for static
+ * full-screen styles once it had opened (to guard against a Reanimated bug, fixed in the version the
+ * app now uses, that dropped animated values while the app was paused), but on Android that swap
+ * could race the spring's last frames and leave the screen stuck part-way open. As a backstop, the
+ * screen is pinned fully open whenever the app comes back to the foreground.
  */
 export function useExpandTransition(originY?: string, originHeight?: string) {
   const navigation = useNavigation();
@@ -87,7 +89,17 @@ export function useExpandTransition(originY?: string, originHeight?: string) {
     const timer = setTimeout(() => {
       if (!closing.current) setPhase('open');
     }, OPEN_MS);
-    return () => clearTimeout(timer);
+    // Back from the background (a share sheet, another app): fully open, whatever the animation was
+    // doing when the app was paused.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || closing.current) return;
+      progress.set(1);
+      shown.set(1);
+    });
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
   }, [progress, shown]);
 
   const close = useCallback(() => {
@@ -146,13 +158,13 @@ export function useExpandTransition(originY?: string, originHeight?: string) {
     };
   });
 
-  const open = phase === 'open';
+  // iOS never animates (a native push does the work), so it gets plain full-screen styles.
   const full = { position: 'absolute', top: 0, left: 0, width, height } as const;
 
   return {
-    backdropStyle: open ? { opacity: EXPAND ? BACKDROP_OPACITY : 0 } : animatedBackdropStyle,
-    containerStyle: open ? { ...full, overflow: 'hidden' as const } : animatedContainerStyle,
-    contentStyle: open ? full : animatedContentStyle,
+    backdropStyle: EXPAND ? animatedBackdropStyle : { opacity: 0 },
+    containerStyle: EXPAND ? animatedContainerStyle : { ...full, overflow: 'hidden' as const },
+    contentStyle: EXPAND ? animatedContentStyle : full,
     /** Pass to the screen's root `pointerEvents` so a closing screen never blocks the tabs under it. */
     pointerEvents: phase === 'closing' ? ('none' as const) : ('auto' as const),
     close,
