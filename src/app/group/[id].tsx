@@ -13,6 +13,7 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
@@ -28,7 +29,6 @@ import { TrophyCabinet } from '@/components/trophy-cabinet';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { Podium } from '@/components/podium';
 import { PrimaryTabs } from '@/components/primary-tabs';
-import { SwapText } from '@/components/swap-text';
 import { TapCard } from '@/components/tap-card';
 import { useLoader } from '@/hooks/use-loader';
 import {
@@ -46,7 +46,7 @@ import { getLastRead } from '@/lib/chat-read';
 import { formatSteps } from '@/lib/dates';
 import { useUserId } from '@/providers/auth-provider';
 import { liftedCard, screenBackground, transparentHeader, useAppTheme } from '@/theme';
-import { enter, layoutMove, leave, motion } from '@/theme/motion';
+import { enter, layoutMove, motion } from '@/theme/motion';
 
 type GroupView = 'board' | 'chat' | 'journey' | 'trophies';
 /** The tabs in page order, left to right. */
@@ -166,6 +166,9 @@ export default function GroupScreen() {
   const [refreshing, setRefreshing] = useState(false);
   // Once the period has been switched, the leaderboard's rows stop staggering in.
   const [switched, setSwitched] = useState(false);
+  // A new period's board fades in from faint, as one piece (see the list below).
+  const boardOpacity = useSharedValue(1);
+  const boardFade = useAnimatedStyle(() => ({ opacity: boardOpacity.value }));
   // The podium's characters pause once it's scrolled out of view (it's the bottom of the list header).
   const podiumBottom = useRef(Infinity);
   const [podiumInView, setPodiumInView] = useState(true);
@@ -237,6 +240,15 @@ export default function GroupScreen() {
   const unreadChat = view !== 'chat' && latestOther > lastRead;
   // The period the shown data is for; `period` flips on tap, before the new data arrives.
   const shownPeriod = cached ? period : (board?.period ?? period);
+  // When the board on screen changes period, it fades in from faint (not on first load, which has
+  // its own entrance). Opacity on one view: cheap however long the list.
+  const lastShown = useRef(shownPeriod);
+  useEffect(() => {
+    if (lastShown.current === shownPeriod) return;
+    lastShown.current = shownPeriod;
+    boardOpacity.set(0.35);
+    boardOpacity.set(withTiming(1, motion.fade));
+  }, [shownPeriod, boardOpacity]);
   // Per-day averages only make sense for multi-day periods.
   const singleDay = shownPeriod === 'today' || shownPeriod === 'yesterday';
 
@@ -376,13 +388,14 @@ export default function GroupScreen() {
                 <View style={styles.pager}>
                   <Animated.View style={[styles.pages, { width: pageWidth * VIEWS.length }, pagesStyle]}>
                     <View style={{ width: pageWidth }}>
-                      {/* Rows slide to their new places when the order changes (a period switch, someone
-                          overtaking), and ones that join or leave the list rise in or fade out. The group's
-                          list is short, so animating each row's layout stays cheap. */}
+                      {/* Nothing animates per row: with a big group, a layout spring, entrance and number
+                          crossfade on every row at once (a period switch re-sorts them all) dropped frames
+                          on Android, worst on 120 Hz Pixels. A new period fades the whole board in instead,
+                          one cheap animation however many people there are. */}
                       <Animated.FlatList
                         data={data?.leaderboard.slice(3) ?? []}
                         keyExtractor={(row) => row.user_id}
-                        itemLayoutAnimation={layoutMove}
+                        style={boardFade}
                         // Room at the end for the floating period switch, so the last row scrolls clear of it.
                         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + FLOAT_GAP + FLOATING_HEIGHT + 16 }]}
                         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
@@ -427,12 +440,11 @@ export default function GroupScreen() {
                         renderItem={({ item, index }) => {
                           const isMe = item.user_id === userId;
                           return (
-                            // The first load arrives in a quick stagger under the podium; after a period
-                            // switch, rows new to the list just rise in.
+                            // The first load brings the rows on screen in under the podium in a quick
+                            // stagger; the rest, below the fold, just appear.
                             <Animated.View
-                              entering={enter(switched ? 0 : index + 1, reduceMotion)}
-                              exiting={leave(reduceMotion)}
-                            >
+                              entering={!switched && index < STAGGERED_ROWS ? enter(index + 1, reduceMotion) : undefined}>
+
                               <TapCard
                                 mode="contained"
                                 style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
@@ -452,7 +464,7 @@ export default function GroupScreen() {
                                     <PlayerBadges row={item} />
                                   </View>
                                   <View style={styles.right}>
-                                    <SwapText variant="titleMedium">{formatSteps(item.total_steps)}</SwapText>
+                                    <Text variant="titleMedium">{formatSteps(item.total_steps)}</Text>
                                     {!singleDay ? (
                                       <Text
                                         variant="labelSmall"
@@ -545,6 +557,8 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: 'week', label: '7 days' },
   { value: 'month', label: '30 days' },
 ];
+/** How many rows under the podium stagger in on first load: about a screenful. */
+const STAGGERED_ROWS = 6;
 /** Space between the floating period switch and the bottom of the screen. */
 const FLOAT_GAP = 12;
 
