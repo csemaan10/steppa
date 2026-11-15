@@ -20,6 +20,7 @@ import { TAB_BAR_OFFSET, useTabBarSpace } from '@/components/floating-tab-bar';
 import { GroupPreview } from '@/components/group-preview';
 import { useLoader } from '@/hooks/use-loader';
 import { createGroup, getLeaderboard, getMyGroupsWithLatestMessage, joinGroup } from '@/lib/api';
+import { attempt } from '@/lib/attempt';
 import { useUserId } from '@/providers/auth-provider';
 import { screenBackground, transparentHeader, useAppTheme } from '@/theme';
 import { enter, layoutMove, leave } from '@/theme/motion';
@@ -68,18 +69,14 @@ export default function GroupsScreen() {
   async function submit() {
     setBusy(true);
     setDialogError(null);
-    try {
-      const groupId =
-        dialog === 'create'
-          ? (await createGroup(userId, name, description)).id
-          : await joinGroup(code);
+    const joined = await attempt(() =>
+      dialog === 'create' ? createGroup(userId, name, description).then((g) => g.id) : joinGroup(code)
+    );
+    if (joined.ok) {
       closeDialog();
-      router.push({ pathname: '/group/[id]', params: { id: groupId } });
-    } catch (e) {
-      setDialogError(e instanceof Error ? e.message : 'Something went wrong');
-    } finally {
-      setBusy(false);
-    }
+      router.push({ pathname: '/group/[id]', params: { id: joined.value } });
+    } else setDialogError(joined.message ?? 'Something went wrong');
+    setBusy(false);
   }
 
   const canSubmit = dialog === 'create' ? name.trim().length > 0 : code.trim().length === 6;

@@ -1,6 +1,6 @@
 import { BlurTargetView } from 'expo-blur';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, RefreshControl, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Appbar, Menu, Text } from 'react-native-paper';
@@ -29,7 +29,7 @@ import { TrophyCabinet } from '@/components/trophy-cabinet';
 import { PlayerBadges, RankDelta } from '@/components/player-badges';
 import { Podium } from '@/components/podium';
 import { PrimaryTabs } from '@/components/primary-tabs';
-import { TapCard } from '@/components/tap-card';
+import { PressableScale } from '@/components/pressable-scale';
 import { useLoader } from '@/hooks/use-loader';
 import {
   activeAverage,
@@ -192,39 +192,71 @@ export default function GroupScreen() {
   useEffect(() => {
     boardCache.set(id, boards);
   }, [id, boards]);
-  const {
-    data: board,
-    error: boardError,
-    reload: reloadBoard,
-  } = useLoader(async () => {
-    const leaderboard = await getLeaderboard(id, period);
-    setBoards((b) => ({ ...b, [period]: leaderboard }));
-    return { period, leaderboard };
-  }, `${id}:${period}`);
+  // The board on screen is fetched fresh on focus and whenever the period changes, since today's
+  // steps keep coming in. Fetched directly rather than through useLoader, whose loading flag and new
+  // result re-rendered the whole page twice more on every switch (with every row, the podium, and the
+  // chat, journey and trophy pages kept beside it). A refresh that finds the same standings keeps the
+  // old rows, so nothing re-renders at all.
+  const [boardError, setBoardError] = useState<string | null>(null);
+  const loadBoard = useCallback(
+    async (which: Period) => {
+      try {
+        const rows = await getLeaderboard(id, which);
+        setBoards((b) => (sameStandings(b[which], rows) ? b : { ...b, [which]: rows }));
+        setBoardError(null);
+      } catch (e) {
+        setBoardError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [id]
+  );
+  useFocusEffect(
+    useCallback(() => {
+      loadBoard(period);
+    }, [loadBoard, period])
+  );
 
   // The other periods load in the background once today is in, all at once, so a tap on any of them
-  // shows straight away instead of waiting on the server (7 and 30 days took a noticeable beat). Each
-  // is fetched fresh once per visit.
+  // shows straight away instead of waiting on the server. They land together, in one render rather
+  // than one each. Each is fetched fresh once per visit.
   const hasToday = !!boards.today;
   useEffect(() => {
     if (!hasToday) return;
     let cancelled = false;
-    for (const other of ['yesterday', 'week', 'month'] as const) {
-      getLeaderboard(id, other)
-        .then((leaderboard) => {
-          if (!cancelled) setBoards((b) => ({ ...b, [other]: leaderboard }));
-        })
-        .catch(() => {});
-    }
+    Promise.all(
+      (['yesterday', 'week', 'month'] as const).map((which) =>
+        getLeaderboard(id, which).then(
+          (rows) => [which, rows] as const,
+          () => null
+        )
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      setBoards((b) => {
+        let next = b;
+        for (const result of results) {
+          if (result && !sameStandings(b[result[0]], result[1])) next = { ...next, [result[0]]: result[1] };
+        }
+        return next;
+      });
+    });
     return () => {
       cancelled = true;
     };
   }, [id, hasToday]);
 
-  // A period not loaded yet keeps showing the last one until it arrives.
+  // The period the board on screen is for: the chosen one once it's loaded, until then the last one
+  // shown (a period not loaded yet keeps showing the last board until it arrives).
   const cached = boards[period];
-  const leaderboard = cached ?? board?.leaderboard;
+  const [lastShown, setLastShown] = useState(period);
+  if (cached && lastShown !== period) setLastShown(period);
+  const shownPeriod = cached ? period : lastShown;
+  const leaderboard = boards[shownPeriod];
   const data = info && leaderboard ? { ...info, leaderboard } : undefined;
+  // Who's in the group, for the chat, journey and trophy pages. Those only use names, characters
+  // and medals, which don't change with the period, so they get today's rows: a period switch
+  // doesn't re-render them.
+  const roster = boards.today ?? leaderboard;
   const error = infoError ?? boardError;
 
   // Unread dot on the Chat tab: someone else posted after the newest message seen on this device.
@@ -240,14 +272,12 @@ export default function GroupScreen() {
   const onChatRead = useCallback((messageId: number) => setLastRead((n) => Math.max(n, messageId)), []);
   const latestOther = Math.max(data?.latestMessageId ?? 0, liveLatest);
   const unreadChat = view !== 'chat' && latestOther > lastRead;
-  // The period the shown data is for; `period` flips on tap, before the new data arrives.
-  const shownPeriod = cached ? period : (board?.period ?? period);
   // When the board on screen changes period, it fades in from faint (not on first load, which has
   // its own entrance). Opacity on one view: cheap however long the list.
-  const lastShown = useRef(shownPeriod);
+  const fadedFor = useRef(shownPeriod);
   useEffect(() => {
-    if (lastShown.current === shownPeriod) return;
-    lastShown.current = shownPeriod;
+    if (fadedFor.current === shownPeriod) return;
+    fadedFor.current = shownPeriod;
     boardOpacity.set(0.35);
     boardOpacity.set(withTiming(1, motion.fade));
   }, [shownPeriod, boardOpacity]);
@@ -255,16 +285,28 @@ export default function GroupScreen() {
   const singleDay = shownPeriod === 'today' || shownPeriod === 'yesterday';
 
   const isOwner = data?.group.owner_id === userId;
-  const members = new Map((data?.leaderboard ?? []).map((r) => [r.user_id, r]));
+  const members = useMemo(() => new Map((roster ?? []).map((r) => [r.user_id, r])), [roster]);
+  // The rows under the podium, and how each is drawn; both kept stable so rows only re-render when
+  // their own data does.
+  const boardRows = useMemo(() => leaderboard?.slice(3) ?? [], [leaderboard]);
+  const renderRow = useCallback(
+    ({ item, index }: { item: LeaderboardRow; index: number }) => (
+      <BoardRow
+        row={item}
+        isMe={item.user_id === userId}
+        showAverage={!singleDay}
+        stagger={!switched && index < STAGGERED_ROWS ? index + 1 : null}
+        onPress={openUser}
+      />
+    ),
+    [userId, singleDay, switched]
+  );
 
-  function openUser(memberId: string) {
-    router.push({ pathname: '/user/[id]', params: { id: memberId } });
-  }
 
   // Only pull-to-refresh shows the spinner; period switches reload quietly.
   async function refresh() {
     setRefreshing(true);
-    await Promise.all([reloadInfo(), reloadBoard()]);
+    await Promise.all([reloadInfo(), loadBoard(period)]);
     setRefreshing(false);
   }
 
@@ -287,7 +329,7 @@ export default function GroupScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await (isOwner ? deleteGroup(id) : leaveGroup(id, userId));
+              await leaveOrDelete(isOwner, id, userId);
               router.back();
             } catch (e) {
               Alert.alert('Error', e instanceof Error ? e.message : String(e));
@@ -395,7 +437,7 @@ export default function GroupScreen() {
                           on Android, worst on 120 Hz Pixels. A new period fades the whole board in instead,
                           one cheap animation however many people there are. */}
                       <Animated.FlatList
-                        data={data?.leaderboard.slice(3) ?? []}
+                        data={boardRows}
                         keyExtractor={(row) => row.user_id}
                         // Room at the end for the floating period switch, so the last row scrolls clear of it.
                         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + FLOAT_GAP + FLOATING_HEIGHT + 16 }]}
@@ -427,7 +469,12 @@ export default function GroupScreen() {
                             {data?.leaderboard.length ? (
                               <Animated.View layout={layoutMove}>
                                 <Podium
-                                  replayKey={`${shownPeriod}:${data.leaderboard.map((r) => r.user_id).join()}`}
+                                  // Replays when the people on it change, not on every period switch: three
+                                  // Skia characters restarting their entrances was the costliest part of one.
+                                  replayKey={data.leaderboard
+                                    .slice(0, 3)
+                                    .map((r) => r.user_id)
+                                    .join()}
                                   animate={activeView === 'board' && podiumInView}
                                   rows={data.leaderboard}
                                   userId={userId}
@@ -438,52 +485,7 @@ export default function GroupScreen() {
                             ) : null}
                           </View>
                         }
-                        renderItem={({ item, index }) => {
-                          const isMe = item.user_id === userId;
-                          return (
-                            // The first load brings the rows on screen in under the podium in a quick
-                            // stagger; the rest, below the fold, just appear.
-                            <Animated.View
-                              entering={!switched && index < STAGGERED_ROWS ? enter(index + 1, reduceMotion) : undefined}>
-
-                              <TapCard
-                                mode="contained"
-                                style={[liftedCard(theme), isMe && { backgroundColor: theme.colors.primaryContainer }]}
-                                onPress={() => openUser(item.user_id)}
-                              >
-                                <View style={styles.row}>
-                                  <Text variant="titleMedium" style={styles.rank}>
-                                    {item.rank}
-                                  </Text>
-                                  <UserAvatar name={item.display_name} color={item.avatar_color} icon={item.avatar_icon} />
-                                  <View style={styles.nameColumn}>
-                                    <View style={styles.nameLine}>
-                                      <Text variant="titleSmall" numberOfLines={1} style={styles.nameText}>
-                                        {isMe ? `${item.display_name} (you)` : item.display_name}
-                                      </Text>
-                                    </View>
-                                    <PlayerBadges row={item} />
-                                  </View>
-                                  <View style={styles.right}>
-                                    <Text variant="titleMedium">{formatSteps(item.total_steps)}</Text>
-                                    {!singleDay ? (
-                                      <Text
-                                        variant="labelSmall"
-                                        style={{
-                                          color: theme.colors.onSurfaceVariant,
-                                        }}
-                                      >
-                                        avg {formatSteps(activeAverage(item.total_steps, item.active_days))}
-                                        /day
-                                      </Text>
-                                    ) : null}
-                                    <RankDelta rank={item.rank} prevRank={item.prev_rank} />
-                                  </View>
-                                </View>
-                              </TapCard>
-                            </Animated.View>
-                          );
-                        }}
+                        renderItem={renderRow}
                       />
                     </Animated.View>
                     <View style={{ width: pageWidth }}>
@@ -502,7 +504,7 @@ export default function GroupScreen() {
                         <GroupJourney
                           group={data.group}
                           userId={userId}
-                          members={data.leaderboard}
+                          members={roster ?? data.leaderboard}
                           active={activeView === 'journey'}
                         />
                       ) : null}
@@ -510,7 +512,7 @@ export default function GroupScreen() {
                     <View style={{ width: pageWidth }}>
                       {visited.has('trophies') ? (
                         <TrophyCabinet
-                          rows={data?.leaderboard ?? []}
+                          rows={roster ?? []}
                           userId={userId}
                           onPressUser={openUser}
                           active={activeView === 'trophies'}
@@ -548,6 +550,76 @@ export default function GroupScreen() {
   );
 }
 
+/**
+ * Leaves the group, or deletes it for its owner. Its own function because a conditional inside the
+ * screen's try block made the React Compiler skip the whole screen, leaving it unoptimised.
+ */
+function leaveOrDelete(isOwner: boolean, groupId: string, userId: string): Promise<unknown> {
+  return isOwner ? deleteGroup(groupId) : leaveGroup(groupId, userId);
+}
+
+/** Opens a member's profile. */
+function openUser(memberId: string) {
+  router.push({ pathname: '/user/[id]', params: { id: memberId } });
+}
+
+/** Whether two fetches of a board have the same standings, so the newer needn't re-render anything. */
+function sameStandings(a: LeaderboardRow[] | undefined, b: LeaderboardRow[]): boolean {
+  return !!a && a.length === b.length && JSON.stringify(a) === JSON.stringify(b);
+}
+
+type BoardRowProps = {
+  row: LeaderboardRow;
+  isMe: boolean;
+  showAverage: boolean;
+  /** Its place in the first load's stagger, or null to just appear. */
+  stagger: number | null;
+  onPress: (userId: string) => void;
+};
+
+/**
+ * One person under the podium. A light pressable card (the same look and press dip as a Paper card,
+ * at a fraction of the cost to build), memoised so a re-render of the page passes over rows whose
+ * data hasn't changed.
+ */
+const BoardRow = memo(function BoardRow({ row, isMe, showAverage, stagger, onPress }: BoardRowProps) {
+  const theme = useAppTheme();
+  const reduceMotion = useReducedMotion();
+  return (
+    <Animated.View entering={stagger !== null ? enter(stagger, reduceMotion) : undefined}>
+      <PressableScale
+        onPress={() => onPress(row.user_id)}
+        accessibilityRole="button"
+        accessibilityLabel={`${row.rank}: ${row.display_name}, ${formatSteps(row.total_steps)} steps`}
+        style={[liftedCard(theme), styles.card, isMe && { backgroundColor: theme.colors.primaryContainer }]}>
+        <View style={styles.row}>
+          <Text variant="titleMedium" style={styles.rank}>
+            {row.rank}
+          </Text>
+          <UserAvatar name={row.display_name} color={row.avatar_color} icon={row.avatar_icon} />
+          <View style={styles.nameColumn}>
+            <View style={styles.nameLine}>
+              <Text variant="titleSmall" numberOfLines={1} style={styles.nameText}>
+                {isMe ? `${row.display_name} (you)` : row.display_name}
+              </Text>
+            </View>
+            <PlayerBadges row={row} />
+          </View>
+          <View style={styles.right}>
+            <Text variant="titleMedium">{formatSteps(row.total_steps)}</Text>
+            {showAverage ? (
+              <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                avg {formatSteps(activeAverage(row.total_steps, row.active_days))}/day
+              </Text>
+            ) : null}
+            <RankDelta rank={row.rank} prevRank={row.prev_rank} />
+          </View>
+        </View>
+      </PressableScale>
+    </Animated.View>
+  );
+});
+
 /** Each group's leaderboards by period, kept for the session so reopening a group shows them at once. */
 const boardCache = new Map<string, Partial<Record<Period, LeaderboardRow[]>>>();
 
@@ -578,6 +650,7 @@ const styles = StyleSheet.create({
   titleText: { flexShrink: 1 },
   content: { padding: 16, paddingTop: 8, gap: 10 },
   header: { gap: 12, marginBottom: 12 },
+  card: { overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
   rank: { width: 24, textAlign: 'center', fontWeight: '700' },
   nameColumn: { flex: 1, gap: 2 },

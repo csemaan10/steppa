@@ -140,9 +140,9 @@ export function GroupJourney({ group, userId, members, active }: Props) {
               await reload();
             } catch (e) {
               fail(e);
-            } finally {
-              setBusy(false);
             }
+            // Not in a finally, which the React Compiler can't handle yet (it skipped this component).
+            setBusy(false);
           },
         },
       ]

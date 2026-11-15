@@ -40,6 +40,7 @@ import {
   type Reaction,
   type ReactionKey,
 } from '@/lib/api';
+import { attempt } from '@/lib/attempt';
 import { markRead } from '@/lib/chat-read';
 import { addDays, startOfDay, toDayKey } from '@/lib/dates';
 import { enter, layoutMove, leave, motion } from '@/theme/motion';
@@ -356,35 +357,36 @@ export function GroupChat({ groupId, userId, members, onRead, active = true }: P
     if (!body) return;
     setSending(true);
     setError(null);
-    try {
-      if (editing) {
-        const message = body === editing.body ? editing : await editMessage(editing.id, body);
+    if (editing) {
+      const original = editing;
+      const saved = await attempt(() => (body === original.body ? Promise.resolve(original) : editMessage(original.id, body)));
+      if (saved.ok) {
+        const message = saved.value;
         setMessages((list) => list.map((m) => (m.id === message.id ? message : m)));
         setEditing(null);
         setDraft('');
-      } else {
-        // The send icon flies off like a paper plane, then grows back in place once it's gone. Both
-        // start from wherever they are, so a quick second send just sends it off again.
-        if (!reduceMotion) {
-          fly.set(
-            withSpring(1, motion.spatial, (done) => {
-              if (!done) return;
-              fly.set(0);
-              pop.set(0.5);
-              pop.set(withSpring(1, motion.release));
-            })
-          );
-        }
-        const message = await sendMessage(groupId, userId, body);
-        setDraft('');
-        markFresh(message.id);
-        setMessages((list) => addMessage(list, message));
+      } else setError(saved.message ?? 'Could not save');
+    } else {
+      // The send icon flies off like a paper plane, then grows back in place once it's gone. Both
+      // start from wherever they are, so a quick second send just sends it off again.
+      if (!reduceMotion) {
+        fly.set(
+          withSpring(1, motion.spatial, (done) => {
+            if (!done) return;
+            fly.set(0);
+            pop.set(0.5);
+            pop.set(withSpring(1, motion.release));
+          })
+        );
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : editing ? 'Could not save' : 'Could not send');
-    } finally {
-      setSending(false);
+      const sent = await attempt(() => sendMessage(groupId, userId, body));
+      if (sent.ok) {
+        setDraft('');
+        markFresh(sent.value.id);
+        setMessages((list) => addMessage(list, sent.value));
+      } else setError(sent.message ?? 'Could not send');
     }
+    setSending(false);
   }
 
   return (
