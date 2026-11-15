@@ -478,14 +478,15 @@ export default function GroupScreen() {
                                 <Text style={{ color: theme.colors.error }}>{error}</Text>
                               </Appear>
                             ) : null}
-                            {data?.leaderboard.length ? (
+                            {/* With the rows, not the group's details (a separate fetch): it only needs the standings. */}
+                            {leaderboard?.length ? (
                               <Animated.View layout={layoutMove}>
                                 {/* Its rise and entrances play once, when the group opens. A period switch
                                     just changes who's standing there: three Skia characters replaying their
                                     entrances was the costliest part of a switch. */}
                                 <Podium
                                   animate={activeView === 'board' && podiumInView}
-                                  rows={data.leaderboard}
+                                  rows={leaderboard}
                                   userId={userId}
                                   showAverage={!singleDay}
                                   onPressUser={openUser}
