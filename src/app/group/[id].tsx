@@ -166,7 +166,9 @@ export default function GroupScreen() {
   const [refreshing, setRefreshing] = useState(false);
   // Once the period has been switched, the leaderboard's rows stop staggering in.
   const [switched, setSwitched] = useState(false);
-  // A new period's board fades in from faint, as one piece (see the list below).
+  // A new period's board fades in from faint, as one piece. On the leaderboard's page view rather than
+  // the list itself: the list re-renders as its rows arrive mid-fade, and on Android that could leave
+  // it stuck partway faded.
   const boardOpacity = useSharedValue(1);
   const boardFade = useAnimatedStyle(() => ({ opacity: boardOpacity.value }));
   // The podium's characters pause once it's scrolled out of view (it's the bottom of the list header).
@@ -387,7 +389,7 @@ export default function GroupScreen() {
               <GestureDetector gesture={swipe}>
                 <View style={styles.pager}>
                   <Animated.View style={[styles.pages, { width: pageWidth * VIEWS.length }, pagesStyle]}>
-                    <View style={{ width: pageWidth }}>
+                    <Animated.View style={[{ width: pageWidth }, boardFade]}>
                       {/* Nothing animates per row: with a big group, a layout spring, entrance and number
                           crossfade on every row at once (a period switch re-sorts them all) dropped frames
                           on Android, worst on 120 Hz Pixels. A new period fades the whole board in instead,
@@ -395,7 +397,6 @@ export default function GroupScreen() {
                       <Animated.FlatList
                         data={data?.leaderboard.slice(3) ?? []}
                         keyExtractor={(row) => row.user_id}
-                        style={boardFade}
                         // Room at the end for the floating period switch, so the last row scrolls clear of it.
                         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + FLOAT_GAP + FLOATING_HEIGHT + 16 }]}
                         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
@@ -484,7 +485,7 @@ export default function GroupScreen() {
                           );
                         }}
                       />
-                    </View>
+                    </Animated.View>
                     <View style={{ width: pageWidth }}>
                       {visited.has('chat') ? (
                         <GroupChat
