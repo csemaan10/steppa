@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import Animated, {
@@ -50,7 +50,11 @@ type Props = {
   replayKey?: string;
 };
 
-/** Animated top-3 podium. Change `replayKey` to replay the rise; the characters stay put. */
+/**
+ * Animated top-3 podium. The rise (and each character's entrance) plays when it mounts and again
+ * whenever `replayKey` changes. New people on it (e.g. switching Today / 7 days) just take their
+ * places: the spots are kept by place, so their characters are redrawn rather than rebuilt.
+ */
 export function Podium({ rows, userId, showAverage, onPressUser, animate = true, replayKey }: Props) {
   const top = rows.slice(0, 3);
   // Visual order: 2nd, 1st, 3rd.
@@ -60,7 +64,7 @@ export function Podium({ rows, userId, showAverage, onPressUser, animate = true,
     <View style={styles.podium}>
       {order.map((place) => (
         <PodiumSpot
-          key={top[place]!.user_id}
+          key={place}
           row={top[place]!}
           place={place}
           showAverage={showAverage}
@@ -100,10 +104,20 @@ function PodiumSpot({ row, place, showAverage, isMe, animate, replayKey, onPress
   // Over the other spots while the entrance's effects cross them (see bringToFront).
   const [z, setZ] = useState(0);
 
-  // Rise from the floor on mount and whenever replayKey changes (e.g. switching Today / 7 days).
-  // With an entrance the block rises empty, then they make their entrance and go straight into
-  // their own move.
+  // Rise from the floor on mount and whenever replayKey changes. With an entrance the block rises
+  // empty, then they make their entrance and go straight into their own move. Someone new taking the
+  // spot (with another entrance) doesn't replay it: they're simply there, the rise finishing if it
+  // was still going.
+  const playedFor = useRef<{ key: string | undefined } | null>(null);
   useEffect(() => {
+    if (playedFor.current && playedFor.current.key === replayKey) {
+      height.set(withSpring(HEIGHTS[place]!, motion.smooth));
+      reveal.set(withTiming(1, motion.fade));
+      // Shown standing (the clock is negative, and they're hidden, until an entrance has started).
+      if (entrance) clock.set(ENTRANCE_SECONDS[entrance]);
+      return;
+    }
+    playedFor.current = { key: replayKey };
     // With reduced motion the blocks are simply there and the podium fades in.
     height.set(reduceMotion ? HEIGHTS[place]! : 0);
     reveal.set(0);

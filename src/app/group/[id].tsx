@@ -193,15 +193,20 @@ export default function GroupScreen() {
     boardCache.set(id, boards);
   }, [id, boards]);
   // The board on screen is fetched fresh on focus and whenever the period changes, since today's
-  // steps keep coming in. Fetched directly rather than through useLoader, whose loading flag and new
+  // steps keep coming in, unless it was fetched in the last FRESH_MS. Fetched directly rather than through useLoader, whose loading flag and new
   // result re-rendered the whole page twice more on every switch (with every row, the podium, and the
   // chat, journey and trophy pages kept beside it). A refresh that finds the same standings keeps the
   // old rows, so nothing re-renders at all.
   const [boardError, setBoardError] = useState<string | null>(null);
+  // When each period's board was last fetched on this visit. Switching to one that's just been fetched
+  // (the background load below) doesn't fetch it again: with a big group, the fresh rows re-rendered
+  // the whole board a moment after the switch, right while it was fading in, as a second stutter.
+  const fetchedAt = useRef<Partial<Record<Period, number>>>({});
   const loadBoard = useCallback(
     async (which: Period) => {
       try {
         const rows = await getLeaderboard(id, which);
+        fetchedAt.current[which] = Date.now();
         setBoards((b) => (sameStandings(b[which], rows) ? b : { ...b, [which]: rows }));
         setBoardError(null);
       } catch (e) {
@@ -212,7 +217,7 @@ export default function GroupScreen() {
   );
   useFocusEffect(
     useCallback(() => {
-      loadBoard(period);
+      if (Date.now() - (fetchedAt.current[period] ?? 0) > FRESH_MS) loadBoard(period);
     }, [loadBoard, period])
   );
 
@@ -232,6 +237,9 @@ export default function GroupScreen() {
       )
     ).then((results) => {
       if (cancelled) return;
+      for (const result of results) {
+        if (result) fetchedAt.current[result[0]] = Date.now();
+      }
       setBoards((b) => {
         let next = b;
         for (const result of results) {
@@ -439,6 +447,10 @@ export default function GroupScreen() {
                       <Animated.FlatList
                         data={boardRows}
                         keyExtractor={(row) => row.user_id}
+                        // A period switch re-renders every row FlatList keeps drawn, and by default it
+                        // keeps about ten screens of them (every row of a 50-person group). Three
+                        // screens is plenty of lead for a fling and halves the work of a switch.
+                        windowSize={5}
                         // Room at the end for the floating period switch, so the last row scrolls clear of it.
                         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + FLOAT_GAP + FLOATING_HEIGHT + 16 }]}
                         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
@@ -468,13 +480,10 @@ export default function GroupScreen() {
                             ) : null}
                             {data?.leaderboard.length ? (
                               <Animated.View layout={layoutMove}>
+                                {/* Its rise and entrances play once, when the group opens. A period switch
+                                    just changes who's standing there: three Skia characters replaying their
+                                    entrances was the costliest part of a switch. */}
                                 <Podium
-                                  // Replays when the people on it change, not on every period switch: three
-                                  // Skia characters restarting their entrances was the costliest part of one.
-                                  replayKey={data.leaderboard
-                                    .slice(0, 3)
-                                    .map((r) => r.user_id)
-                                    .join()}
                                   animate={activeView === 'board' && podiumInView}
                                   rows={data.leaderboard}
                                   userId={userId}
@@ -630,6 +639,8 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: 'week', label: '7 days' },
   { value: 'month', label: '30 days' },
 ];
+/** How long a fetched board counts as fresh, so switching back to it doesn't fetch it again. */
+const FRESH_MS = 60_000;
 /** How many rows under the podium stagger in on first load: about a screenful. */
 const STAGGERED_ROWS = 6;
 /** Space between the floating period switch and the bottom of the screen. */
